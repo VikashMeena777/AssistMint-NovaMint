@@ -12,10 +12,13 @@ export default function CampaignsPage() {
             Send targeted WhatsApp promotions to your customer segments.
           </p>
         </div>
-        <button className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 transition-all">
-          <Plus className="h-4 w-4" />
-          New Campaign
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-bold uppercase text-amber-600">Coming Soon</span>
+          <button disabled className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary/50 px-5 text-sm font-semibold text-primary-foreground cursor-not-allowed">
+            <Plus className="h-4 w-4" />
+            New Campaign
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

@@ -85,12 +85,72 @@ export async function GET(req: NextRequest) {
       })
       .eq('payment_id', orderId);
 
+    // Send WhatsApp payment confirmation (fire and forget)
+    sendPaymentConfirmationWhatsApp(orderId, amountPaid).catch((err) =>
+      console.error('[PaymentReturn] WhatsApp confirmation error:', err)
+    );
+
     return renderPage('success', amountPaid, orderId);
   } else if (paymentStatus === 'pending' || paymentStatus === 'active') {
     return renderPage('pending', amountPaid, orderId);
   } else {
     return renderPage('failed', amountPaid, orderId);
   }
+}
+
+// ─── Send WhatsApp Payment Confirmation ─────
+async function sendPaymentConfirmationWhatsApp(cfOrderId: string, amount: string) {
+  // Look up the order and its restaurant
+  const { data: order } = await supabaseAdmin
+    .from('orders')
+    .select('id, order_number, customer_phone, restaurant_id, total')
+    .eq('payment_id', cfOrderId)
+    .single();
+
+  if (!order) return;
+
+  // Get restaurant WhatsApp credentials
+  const { data: restaurant } = await supabaseAdmin
+    .from('restaurants')
+    .select('name, whatsapp_phone_id, whatsapp_token')
+    .eq('id', order.restaurant_id)
+    .single();
+
+  if (!restaurant?.whatsapp_phone_id || !restaurant?.whatsapp_token) return;
+
+  const phone = order.customer_phone;
+  if (!phone) return;
+
+  const totalRupees = amount || `₹${((order.total || 0) / 100).toFixed(0)}`;
+  const msg = `✅ *Payment Received!*\n\n💰 Amount: ${totalRupees}\n📋 Order: #${order.order_number || '—'}\n\nYour order is *confirmed* and being prepared! 🍳\n\nThank you for ordering from *${restaurant.name}*! 🌿`;
+
+  try {
+    await fetch(`https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${restaurant.whatsapp_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'text',
+        text: { body: msg },
+      }),
+    });
+  } catch (err) {
+    console.error('[PaymentReturn] Failed to send WhatsApp confirmation:', err);
+  }
+
+  // Also save to conversations table for dashboard visibility
+  await supabaseAdmin.from('conversations').insert({
+    restaurant_id: order.restaurant_id,
+    customer_phone: phone,
+    role: 'assistant',
+    content: msg,
+    message_type: 'text',
+    metadata: { type: 'payment_confirmation', payment_id: cfOrderId },
+  });
 }
 
 function renderPage(status: 'success' | 'pending' | 'failed' | 'error', amount: string, orderId: string) {

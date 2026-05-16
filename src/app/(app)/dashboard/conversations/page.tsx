@@ -105,6 +105,11 @@ export default function ConversationsPage() {
 
   useEffect(() => {
     if (restaurantId) loadConversations();
+    // Auto-refresh conversations every 15 seconds
+    const interval = setInterval(() => {
+      if (restaurantId) loadConversations();
+    }, 15000);
+    return () => clearInterval(interval);
   }, [restaurantId, loadConversations]);
 
   const loadMessages = async (session: ConversationSession) => {

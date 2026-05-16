@@ -347,8 +347,18 @@ async function sendPaymentChoice(
     return;
   }
 
+  const subtotalRupees = (cart.subtotal / 100).toFixed(0);
+  const deliveryRupees = (cart.delivery_fee / 100).toFixed(0);
+  const taxRupees = (cart.tax / 100).toFixed(0);
   const totalRupees = (cart.total / 100).toFixed(0);
-  const bodyText = `🧾 *Order Summary*\n\n${cart.items.map((i) => `• ${i.item_name} x${i.quantity}`).join('\n')}\n\n*Total: ₹${totalRupees}*\n\nHow would you like to pay?`;
+
+  // Build premium itemized receipt
+  const itemLines = cart.items.map((i) => {
+    const itemTotal = ((i.unit_price * i.quantity) / 100).toFixed(0);
+    return `• ${i.item_name} × ${i.quantity} — ₹${itemTotal}`;
+  }).join('\n');
+
+  const bodyText = `🧾 *Order Summary*\n\n${itemLines}\n\n━━━━━━━━━━━━━━━━\n📦 Subtotal: ₹${subtotalRupees}\n🚗 Delivery: ₹${deliveryRupees}\n📋 Tax (5%): ₹${taxRupees}\n━━━━━━━━━━━━━━━━\n💰 *Total: ₹${totalRupees}*\n\nHow would you like to pay?`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendReplyButtons({

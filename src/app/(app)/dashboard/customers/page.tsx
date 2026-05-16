@@ -124,7 +124,7 @@ export default function CustomersPage() {
                       {c.total_orders || 0} orders
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      ₹{(c.total_spent || 0).toLocaleString("en-IN")} spent
+                      ₹{((c.total_spent || 0) / 100).toLocaleString("en-IN")} spent
                     </p>
                   </div>
                   <button
