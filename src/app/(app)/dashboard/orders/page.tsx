@@ -75,6 +75,11 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (restaurantId) loadOrders();
+    // Auto-refresh orders every 30 seconds
+    const interval = setInterval(() => {
+      if (restaurantId) loadOrders();
+    }, 30000);
+    return () => clearInterval(interval);
   }, [restaurantId, loadOrders]);
 
   const handleStatusUpdate = async (

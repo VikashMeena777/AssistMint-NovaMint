@@ -15,6 +15,9 @@ export const metadata = {
   title: "Dashboard",
 };
 
+// Revalidate dashboard data every 30 seconds
+export const revalidate = 30;
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const {

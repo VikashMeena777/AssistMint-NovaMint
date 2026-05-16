@@ -115,8 +115,77 @@ export async function updateOrderStatus(
     details: { orderId, newStatus: status },
   });
 
+  // Send WhatsApp notification to customer (fire-and-forget)
+  sendOrderStatusWhatsApp(restaurantId, orderId, status).catch(() => {});
+
   revalidatePath('/dashboard/orders');
   return { success: true };
+}
+
+// ─── WhatsApp Order Status Notification ─────
+
+async function sendOrderStatusWhatsApp(
+  restaurantId: string,
+  orderId: string,
+  status: string
+) {
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+
+  // Get order + customer phone
+  const { data: order } = await supabaseAdmin
+    .from('orders')
+    .select('order_number, customer_phone, total')
+    .eq('id', orderId)
+    .single();
+
+  if (!order?.customer_phone) return;
+
+  // Get restaurant WhatsApp creds
+  const { data: restaurant } = await supabaseAdmin
+    .from('restaurants')
+    .select('name, whatsapp_phone_id, whatsapp_token')
+    .eq('id', restaurantId)
+    .single();
+
+  if (!restaurant?.whatsapp_phone_id || !restaurant?.whatsapp_token) return;
+
+  const statusMessages: Record<string, string> = {
+    confirmed: '✅ *Order Confirmed!*\n\nYour order #ORDER has been confirmed. We\'re getting it ready for you!',
+    preparing: '👨‍🍳 *Your order is being prepared!*\n\nOrder #ORDER is now in the kitchen. Hang tight!',
+    ready: '📦 *Order Ready!*\n\nYour order #ORDER is ready for pickup/delivery! 🎉',
+    out_for_delivery: '🚗 *Out for Delivery!*\n\nYour order #ORDER is on its way to you!',
+    delivered: '🎉 *Order Delivered!*\n\nYour order #ORDER has been delivered. Enjoy your meal!\n\nThank you for ordering from *RESTAURANT*! 🌿',
+    cancelled: '❌ *Order Cancelled*\n\nYour order #ORDER has been cancelled. If you have questions, please message us.',
+  };
+
+  let msg = statusMessages[status];
+  if (!msg) return;
+
+  msg = msg.replace(/ORDER/g, order.order_number || orderId);
+  msg = msg.replace(/RESTAURANT/g, restaurant.name || '');
+
+  try {
+    await fetch(`https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${restaurant.whatsapp_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: order.customer_phone,
+        type: 'text',
+        text: { body: msg },
+      }),
+    });
+  } catch {
+    // Silent fail — don't block order update
+  }
 }
 
 // ─── Get Order Stats ────────────────────────
