@@ -39,9 +39,11 @@ export async function createBotPaymentLink(
 
   const totalRupees = totalPaise / 100;
   const cfOrderId = `AM-${orderId.slice(-8)}-${Date.now().toString(36)}`;
+  const cleanPhone = customerPhone.replace(/^\+91/, '').replace(/^\+/, '');
 
   try {
-    const response = await fetch(`${CASHFREE_API_URL}/orders`, {
+    // Use Cashfree Payment Links API — returns a shareable URL
+    const response = await fetch(`${CASHFREE_API_URL}/links`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -50,30 +52,40 @@ export async function createBotPaymentLink(
         'x-client-secret': clientSecret,
       },
       body: JSON.stringify({
-        order_id: cfOrderId,
-        order_amount: totalRupees,
-        order_currency: 'INR',
+        link_id: cfOrderId,
+        link_amount: totalRupees,
+        link_currency: 'INR',
+        link_purpose: `Order from AssistMint`,
+        link_notify: {
+          send_sms: false,
+          send_email: false,
+        },
         customer_details: {
-          customer_id: orderId.slice(-12),
           customer_name: customerName || 'Customer',
-          customer_phone: customerPhone.replace(/^\+/, ''),
+          customer_phone: cleanPhone,
         },
-        order_meta: {
-          return_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamint.in'}/api/payments/return?order_id=${cfOrderId}`,
+        link_meta: {
           notify_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamint.in'}/api/webhooks/cashfree`,
+          return_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamint.in'}/api/payments/return?order_id=${cfOrderId}`,
         },
-        order_note: `Order from AssistMint`,
+        link_expiry_time: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min expiry
       }),
     });
 
     const result = await response.json();
 
     if (!response.ok) {
-      console.error('[BotPayment] Cashfree order creation failed:', result);
-      return null;
+      console.error('[BotPayment] Cashfree link creation failed:', JSON.stringify(result));
+
+      // Fallback: try /orders API and build checkout URL
+      return await createFallbackPaymentSession(
+        clientId, clientSecret, cfOrderId, totalRupees,
+        orderId, cleanPhone, customerName, restaurantId, totalPaise
+      );
     }
 
-    const paymentLink = result.payment_link as string || null;
+    const paymentLink = (result.link_url as string) || null;
+    console.log(`[BotPayment] Created payment link: ${paymentLink}`);
 
     // Save to orders table
     await supabaseAdmin
@@ -98,6 +110,79 @@ export async function createBotPaymentLink(
     return paymentLink;
   } catch (error) {
     console.error('[BotPayment] Error creating payment link:', error);
+    return null;
+  }
+}
+
+/**
+ * Fallback: Create order via /orders API and build checkout URL from session ID
+ */
+async function createFallbackPaymentSession(
+  clientId: string,
+  clientSecret: string,
+  cfOrderId: string,
+  totalRupees: number,
+  orderId: string,
+  customerPhone: string,
+  customerName: string,
+  restaurantId: string,
+  totalPaise: number
+): Promise<string | null> {
+  try {
+    const response = await fetch(`${CASHFREE_API_URL}/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-version': CASHFREE_API_VERSION,
+        'x-client-id': clientId,
+        'x-client-secret': clientSecret,
+      },
+      body: JSON.stringify({
+        order_id: cfOrderId,
+        order_amount: totalRupees,
+        order_currency: 'INR',
+        customer_details: {
+          customer_id: orderId.slice(-12),
+          customer_name: customerName || 'Customer',
+          customer_phone: customerPhone,
+        },
+        order_meta: {
+          return_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamint.in'}/api/payments/return?order_id=${cfOrderId}`,
+          notify_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamint.in'}/api/webhooks/cashfree`,
+        },
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('[BotPayment] Fallback order also failed:', JSON.stringify(result));
+      return null;
+    }
+
+    const sessionId = result.payment_session_id as string;
+    // Build Cashfree hosted checkout URL
+    const env = process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production' ? '' : 'sandbox.';
+    const paymentLink = `https://${env}cashfree.com/pg/view/order/${cfOrderId}?payment_session_id=${sessionId}`;
+
+    // Save records
+    await supabaseAdmin.from('orders').update({
+      payment_id: cfOrderId,
+      payment_status: 'pending',
+      payment_link: paymentLink,
+    }).eq('id', orderId);
+
+    await supabaseAdmin.from('payments').insert({
+      restaurant_id: restaurantId,
+      order_id: orderId,
+      cashfree_order_id: cfOrderId,
+      amount: totalPaise,
+      status: 'pending',
+      payment_link: paymentLink,
+    });
+
+    return paymentLink;
+  } catch (e) {
+    console.error('[BotPayment] Fallback payment failed:', e);
     return null;
   }
 }

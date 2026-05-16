@@ -213,7 +213,7 @@ export default function OrdersPage() {
 
                   <div className="flex items-center gap-3 shrink-0">
                     <p className="text-sm font-semibold">
-                      ₹{(order.total || 0).toLocaleString("en-IN")}
+                      ₹{((order.total || 0) / 100).toLocaleString("en-IN")}
                     </p>
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${STATUS_COLORS[order.status] || "bg-muted text-muted-foreground"}`}
