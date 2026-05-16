@@ -33,10 +33,10 @@ export interface Cart {
   items: CartItem[];
   subtotal: number;
   coupon_code?: string;
-  discount_amount: number;
+  discount: number;
   delivery_fee: number;
-  tax_amount: number;
-  total_amount: number;
+  tax: number;
+  total: number;
 }
 
 // ─── Get or Create Cart ─────────────────────
@@ -51,7 +51,7 @@ export async function getOrCreateCart(
     .select('*')
     .eq('restaurant_id', restaurantId)
     .eq('customer_id', customerId)
-    .eq('is_active', true)
+    .eq('status', 'active')
     .order('created_at', { ascending: false })
     .limit(1)
     .single();
@@ -63,31 +63,47 @@ export async function getOrCreateCart(
       restaurant_id: cart.restaurant_id as string,
       customer_id: cart.customer_id as string,
       items: (cart.items as CartItem[]) || [],
-      subtotal: cart.subtotal as number || 0,
+      subtotal: (cart.subtotal as number) || 0,
       coupon_code: cart.coupon_code as string | undefined,
-      discount_amount: cart.discount_amount as number || 0,
-      delivery_fee: cart.delivery_fee as number || 0,
-      tax_amount: cart.tax_amount as number || 0,
-      total_amount: cart.total_amount as number || 0,
+      discount: (cart.discount as number) || 0,
+      delivery_fee: (cart.delivery_fee as number) || 0,
+      tax: (cart.tax as number) || 0,
+      total: (cart.total as number) || 0,
     };
   }
 
   // Create new cart
-  const { data: newCart } = await supabaseAdmin
+  const { data: newCart, error } = await supabaseAdmin
     .from('cart_sessions')
     .insert({
       restaurant_id: restaurantId,
       customer_id: customerId,
       items: [],
       subtotal: 0,
-      discount_amount: 0,
+      discount: 0,
       delivery_fee: 0,
-      tax_amount: 0,
-      total_amount: 0,
-      is_active: true,
+      tax: 0,
+      total: 0,
+      status: 'active',
     })
     .select()
     .single();
+
+  if (error || !newCart) {
+    console.error('[CartEngine] Failed to create cart:', error?.message);
+    // Return safe fallback
+    return {
+      id: 'temp-cart',
+      restaurant_id: restaurantId,
+      customer_id: customerId,
+      items: [],
+      subtotal: 0,
+      discount: 0,
+      delivery_fee: 0,
+      tax: 0,
+      total: 0,
+    };
+  }
 
   const cart = newCart as Record<string, unknown>;
   return {
@@ -96,10 +112,10 @@ export async function getOrCreateCart(
     customer_id: customerId,
     items: [],
     subtotal: 0,
-    discount_amount: 0,
+    discount: 0,
     delivery_fee: 0,
-    tax_amount: 0,
-    total_amount: 0,
+    tax: 0,
+    total: 0,
   };
 }
 
@@ -218,25 +234,25 @@ async function recalculateAndSave(
   );
 
   // 5% GST on food
-  const taxAmount = Math.round(subtotal * 0.05);
+  const tax = Math.round(subtotal * 0.05);
   const deliveryFee = (cart.delivery_fee as number) || 0;
-  const discountAmount = (cart.discount_amount as number) || 0;
-  const totalAmount = subtotal + taxAmount + deliveryFee - discountAmount;
+  const discount = (cart.discount as number) || 0;
+  const total = subtotal + tax + deliveryFee - discount;
 
   const { data: updated } = await supabaseAdmin
     .from('cart_sessions')
     .update({
       items,
       subtotal,
-      tax_amount: taxAmount,
-      total_amount: totalAmount,
+      tax,
+      total,
       updated_at: new Date().toISOString(),
     })
     .eq('id', cartId)
     .select()
     .single();
 
-  const result = updated as Record<string, unknown>;
+  const result = (updated || cart) as Record<string, unknown>;
   return {
     id: cartId,
     restaurant_id: result.restaurant_id as string,
@@ -244,10 +260,10 @@ async function recalculateAndSave(
     items,
     subtotal,
     coupon_code: result.coupon_code as string | undefined,
-    discount_amount: discountAmount,
+    discount,
     delivery_fee: deliveryFee,
-    tax_amount: taxAmount,
-    total_amount: totalAmount,
+    tax,
+    total,
   };
 }
 
@@ -273,10 +289,10 @@ export function formatCartForWhatsApp(cart: Cart): string {
 
   text += '━━━━━━━━━━━━━━━\n';
   text += `Subtotal: ₹${(cart.subtotal / 100).toFixed(0)}\n`;
-  text += `GST (5%): ₹${(cart.tax_amount / 100).toFixed(0)}\n`;
+  text += `GST (5%): ₹${(cart.tax / 100).toFixed(0)}\n`;
   if (cart.delivery_fee > 0) text += `Delivery: ₹${(cart.delivery_fee / 100).toFixed(0)}\n`;
-  if (cart.discount_amount > 0) text += `Discount: -₹${(cart.discount_amount / 100).toFixed(0)}\n`;
-  text += `\n*Total: ₹${(cart.total_amount / 100).toFixed(0)}*`;
+  if (cart.discount > 0) text += `Discount: -₹${(cart.discount / 100).toFixed(0)}\n`;
+  text += `\n*Total: ₹${(cart.total / 100).toFixed(0)}*`;
 
   return text;
 }
@@ -289,35 +305,36 @@ export async function convertCartToOrder(
   deliveryAddress?: string,
   specialInstructions?: string
 ): Promise<string> {
-  // Generate order number: AM-XXXXXX
-  const orderNumber = `AM-${Date.now().toString(36).toUpperCase().slice(-6)}`;
-
-  const { data: order } = await supabaseAdmin
+  const { data: order, error } = await supabaseAdmin
     .from('orders')
     .insert({
       restaurant_id: cart.restaurant_id,
       customer_id: cart.customer_id,
-      order_number: orderNumber,
-      status: 'placed',
-      order_type: orderType,
       items: cart.items,
       subtotal: cart.subtotal,
-      tax_amount: cart.tax_amount,
+      tax: cart.tax,
       delivery_fee: cart.delivery_fee,
-      discount_amount: cart.discount_amount,
-      total_amount: cart.total_amount,
+      discount: cart.discount,
+      total: cart.total,
       coupon_code: cart.coupon_code,
-      special_instructions: specialInstructions,
-      delivery_address: deliveryAddress,
-      placed_at: new Date().toISOString(),
+      notes: specialInstructions,
+      delivery_address: deliveryAddress ? { raw: deliveryAddress } : null,
+      delivery_type: orderType,
+      status: 'pending',
+      payment_status: 'unpaid',
     })
     .select('id')
     .single();
 
+  if (error) {
+    console.error('[CartEngine] Failed to create order:', error.message);
+    return '';
+  }
+
   // Deactivate the cart
   await supabaseAdmin
     .from('cart_sessions')
-    .update({ is_active: false })
+    .update({ status: 'converted' })
     .eq('id', cart.id);
 
   return (order as Record<string, string>)?.id || '';

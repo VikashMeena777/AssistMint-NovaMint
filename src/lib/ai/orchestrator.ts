@@ -269,14 +269,14 @@ async function executeAction(
       if (cart.items.length === 0) return;
 
       const orderId = await convertCartToOrder(cart);
-      await updateCustomerOrderStats(customerId, cart.total_amount);
+      await updateCustomerOrderStats(customerId, cart.total);
 
       logActivity({
         restaurantId,
         actorType: 'customer',
         actorId: customerId,
         action: ACTIONS.ORDER_PLACED,
-        details: { orderId, totalAmount: cart.total_amount },
+        details: { orderId, totalAmount: cart.total },
       });
       break;
     }
