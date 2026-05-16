@@ -129,10 +129,97 @@ async function handleInteractiveReply(
       break;
 
     default:
-      // Unknown button — treat as text for AI
-      await generateAndSendAIResponse(restaurant, customer, conversation, reply.title);
+      // Handle dynamic IDs: item_uuid, add_uuid
+      if (btnId.startsWith('item_')) {
+        await sendItemDetails(restaurant, customer, conversation, btnId.replace('item_', ''));
+      } else if (btnId.startsWith('add_')) {
+        await handleDirectAddToCart(restaurant, customer, conversation, btnId.replace('add_', ''));
+      } else {
+        await generateAndSendAIResponse(restaurant, customer, conversation, reply.title);
+      }
       break;
   }
+}
+
+// ─── Item Details with Add Button ───────────
+
+async function sendItemDetails(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string },
+  itemId: string
+): Promise<void> {
+  const item = await getMenuItemById(itemId);
+  if (!item) {
+    await sendBotReply(restaurant, customer, conversation, '❌ Sorry, this item is no longer available.');
+    return;
+  }
+
+  const priceRupees = (item.price / 100).toFixed(0);
+  const veg = item.is_veg ? '🟢 Veg' : '🔴 Non-Veg';
+  const star = item.is_bestseller ? ' ⭐ Bestseller' : '';
+  const desc = item.description ? `\n\n${item.description}` : '';
+
+  const bodyText = `*${item.name}*${star}\n${veg} · ₹${priceRupees}${desc}\n\n⏱ Ready in ~${item.prep_time_minutes} mins`;
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText,
+      buttons: [
+        { id: `add_${itemId}`, title: `🛒 Add to Cart` },
+        { id: 'btn_menu', title: '📋 Back to Menu' },
+      ],
+    });
+  }
+  await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+}
+
+// ─── Direct Add to Cart ─────────────────────
+
+async function handleDirectAddToCart(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string },
+  itemId: string
+): Promise<void> {
+  const item = await getMenuItemById(itemId);
+  if (!item) {
+    await sendBotReply(restaurant, customer, conversation, '❌ Sorry, this item is unavailable.');
+    return;
+  }
+
+  const cart = await getOrCreateCart(restaurant.id, customer.id);
+  const cartItem: CartItem = {
+    item_id: item.id,
+    item_name: item.name,
+    quantity: 1,
+    unit_price: item.price,
+  };
+  const updatedCart = await addToCart(cart.id, cartItem);
+
+  const priceRupees = (item.price / 100).toFixed(0);
+  const itemCount = updatedCart.items.reduce((sum, i) => sum + i.quantity, 0);
+  const totalRupees = (updatedCart.total / 100).toFixed(0);
+
+  const bodyText = `✅ *Added to cart!*\n\n${item.name} — ₹${priceRupees}\n\n🛒 Cart: ${itemCount} item${itemCount > 1 ? 's' : ''} · ₹${totalRupees}`;
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText,
+      buttons: [
+        { id: 'btn_menu', title: '📋 Add More' },
+        { id: 'btn_cart', title: '🛒 View Cart' },
+        { id: 'btn_place_order', title: '✅ Checkout' },
+      ],
+    });
+  }
+  await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
 }
 
 // ─── Greeting with Buttons ──────────────────
