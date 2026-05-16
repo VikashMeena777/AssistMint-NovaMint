@@ -115,11 +115,11 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          // ── TIMESTAMP CHECK: Skip messages older than 2 minutes ──
+          // ── TIMESTAMP CHECK: Skip messages older than 30 minutes ──
           // Prevents replaying old messages on server redeploy
           const msgTimestamp = parseInt(message.timestamp as string, 10) * 1000;
           const now = Date.now();
-          const MAX_AGE_MS = 2 * 60 * 1000; // 2 minutes
+          const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
           if (msgTimestamp && (now - msgTimestamp) > MAX_AGE_MS) {
             console.log(`[WhatsApp Webhook] Skipping stale message (${Math.round((now - msgTimestamp) / 1000)}s old): ${msgId}`);
             markProcessed(msgId);
@@ -147,14 +147,43 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── RESPOND 200 IMMEDIATELY ──
-    // Process messages async to prevent WhatsApp timeout retries
-    // WhatsApp retries if no 200 within 20s → causes duplicate processing
-    if (messagesToProcess.length > 0) {
-      // Process in background (don't await)
-      processMessagesAsync(messagesToProcess).catch((err) => {
-        console.error('[WhatsApp Webhook] Background processing error:', err);
-      });
+    // Process messages SYNCHRONOUSLY — Vercel serverless kills background tasks
+    // after response is sent, so we MUST await processing before returning
+    for (const { phoneNumberId, message, whatsappName } of messagesToProcess) {
+      try {
+        // Parse interactive replies
+        let interactiveReply: { type: string; id: string; title: string } | undefined;
+        if (message.type === 'interactive') {
+          const interactive = message.interactive as Record<string, unknown>;
+          if ((interactive as Record<string, unknown>)?.type === 'button_reply') {
+            const btnReply = (interactive as Record<string, Record<string, string>>).button_reply;
+            interactiveReply = {
+              type: 'button',
+              id: btnReply.id,
+              title: btnReply.title,
+            };
+          } else if ((interactive as Record<string, unknown>)?.type === 'list_reply') {
+            const listReply = (interactive as Record<string, Record<string, string>>).list_reply;
+            interactiveReply = {
+              type: 'list',
+              id: listReply.id,
+              title: listReply.title,
+            };
+          }
+        }
+
+        // Route to AI orchestrator
+        await handleIncomingMessage({
+          phoneNumberId,
+          from: message.from as string,
+          messageId: message.id as string,
+          text: (message.text as Record<string, string>)?.body,
+          interactiveReply,
+          whatsappName,
+        });
+      } catch (err) {
+        console.error(`[WhatsApp Webhook] Error processing message ${message.id}:`, err);
+      }
     }
 
     return NextResponse.json({ success: true });
@@ -165,52 +194,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ─── Background Message Processing ──────────
-
-async function processMessagesAsync(
-  messages: Array<{
-    phoneNumberId: string;
-    message: Record<string, unknown>;
-    whatsappName?: string;
-  }>
-) {
-  for (const { phoneNumberId, message, whatsappName } of messages) {
-    try {
-      // Parse interactive replies
-      let interactiveReply: { type: string; id: string; title: string } | undefined;
-      if (message.type === 'interactive') {
-        const interactive = message.interactive as Record<string, unknown>;
-        if ((interactive as Record<string, unknown>)?.type === 'button_reply') {
-          const btnReply = (interactive as Record<string, Record<string, string>>).button_reply;
-          interactiveReply = {
-            type: 'button',
-            id: btnReply.id,
-            title: btnReply.title,
-          };
-        } else if ((interactive as Record<string, unknown>)?.type === 'list_reply') {
-          const listReply = (interactive as Record<string, Record<string, string>>).list_reply;
-          interactiveReply = {
-            type: 'list',
-            id: listReply.id,
-            title: listReply.title,
-          };
-        }
-      }
-
-      // Route to AI orchestrator
-      await handleIncomingMessage({
-        phoneNumberId,
-        from: message.from as string,
-        messageId: message.id as string,
-        text: (message.text as Record<string, string>)?.body,
-        interactiveReply,
-        whatsappName,
-      });
-    } catch (err) {
-      console.error(`[WhatsApp Webhook] Error processing message ${message.id}:`, err);
-    }
-  }
-}
 
 // ─── Status Update Processing ───────────────
 
