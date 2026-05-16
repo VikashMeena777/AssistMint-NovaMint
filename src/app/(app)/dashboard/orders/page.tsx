@@ -215,6 +215,19 @@ export default function OrdersPage() {
                     <p className="text-sm font-semibold">
                       ₹{((order.total || 0) / 100).toLocaleString("en-IN")}
                     </p>
+                    {order.payment_status && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          order.payment_status === "paid"
+                            ? "bg-emerald-500/10 text-emerald-600"
+                            : order.payment_status === "cod_pending"
+                            ? "bg-orange-500/10 text-orange-600"
+                            : "bg-yellow-500/10 text-yellow-600"
+                        }`}
+                      >
+                        {order.payment_status === "paid" ? "💳 Paid" : order.payment_status === "cod_pending" ? "💵 COD" : "⏳ Unpaid"}
+                      </span>
+                    )}
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${STATUS_COLORS[order.status] || "bg-muted text-muted-foreground"}`}
                     >
