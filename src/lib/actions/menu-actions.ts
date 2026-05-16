@@ -39,7 +39,7 @@ export async function getCategories(restaurantId: string) {
     .from('menu_categories')
     .select('*')
     .eq('restaurant_id', restaurantId)
-    .order('sort_order', { ascending: true });
+    .order('display_order', { ascending: true });
 
   if (error) return { error: error.message, data: null };
   return { data, error: null };
@@ -47,7 +47,7 @@ export async function getCategories(restaurantId: string) {
 
 export async function createCategory(
   restaurantId: string,
-  category: { name: string; description?: string; sort_order?: number }
+  category: { name: string; description?: string; display_order?: number }
 ) {
   const { supabase, error: authError } = await verifyOwnership(restaurantId);
   if (authError) return { error: authError };
@@ -58,7 +58,7 @@ export async function createCategory(
       restaurant_id: restaurantId,
       name: category.name,
       description: category.description || null,
-      sort_order: category.sort_order ?? 0,
+      display_order: category.display_order ?? 0,
       is_active: true,
     })
     .select()
@@ -73,7 +73,7 @@ export async function createCategory(
 export async function updateCategory(
   restaurantId: string,
   categoryId: string,
-  updates: { name?: string; description?: string; sort_order?: number; is_active?: boolean }
+  updates: { name?: string; description?: string; display_order?: number; is_active?: boolean }
 ) {
   const { supabase, error: authError } = await verifyOwnership(restaurantId);
   if (authError) return { error: authError };
@@ -114,7 +114,7 @@ export async function getMenuItems(restaurantId: string, categoryId?: string) {
     .from('menu_items')
     .select('*, menu_categories(name)')
     .eq('restaurant_id', restaurantId)
-    .order('sort_order', { ascending: true });
+    .order('display_order', { ascending: true });
 
   if (categoryId) {
     query = query.eq('category_id', categoryId);
@@ -131,16 +131,12 @@ export async function createMenuItem(
     category_id: string;
     name: string;
     description?: string;
-    base_price: number;      // in paise
+    price: number;             // in paise
     image_url?: string;
     is_veg: boolean;
     is_bestseller?: boolean;
-    is_spicy?: boolean;
-    prep_time_min?: number;
-    sort_order?: number;
-    tags?: string[];
-    variants?: Array<{ name: string; price: number }>;
-    addons?: Array<{ name: string; price: number }>;
+    prep_time_minutes?: number;
+    display_order?: number;
   }
 ) {
   const { supabase, error: authError } = await verifyOwnership(restaurantId);
@@ -153,23 +149,19 @@ export async function createMenuItem(
       category_id: item.category_id,
       name: item.name,
       description: item.description || null,
-      base_price: item.base_price,
+      price: item.price,
       image_url: item.image_url || null,
       is_veg: item.is_veg,
       is_bestseller: item.is_bestseller ?? false,
-      is_spicy: item.is_spicy ?? false,
       is_available: true,
-      prep_time_min: item.prep_time_min ?? 15,
-      sort_order: item.sort_order ?? 0,
-      tags: item.tags || [],
-      variants: item.variants || [],
-      addons: item.addons || [],
+      prep_time_minutes: item.prep_time_minutes ?? 15,
+      display_order: item.display_order ?? 0,
     })
     .select()
     .single();
 
   if (error) return { error: error.message };
-  logActivity({ restaurantId, actorType: 'owner', action: ACTIONS.MENU_ITEM_CREATED, details: { name: item.name, price: item.base_price } });
+  logActivity({ restaurantId, actorType: 'owner', action: ACTIONS.MENU_ITEM_CREATED, details: { name: item.name, price: item.price } });
   revalidatePath('/dashboard/menu');
   return { data };
 }
@@ -223,16 +215,15 @@ export async function toggleItemAvailability(
 
 export async function reorderMenuItems(
   restaurantId: string,
-  items: Array<{ id: string; sort_order: number }>
+  items: Array<{ id: string; display_order: number }>
 ) {
   const { supabase, error: authError } = await verifyOwnership(restaurantId);
   if (authError) return { error: authError };
 
-  // Update each item's sort order
   const updates = items.map((item) =>
     supabase
       .from('menu_items')
-      .update({ sort_order: item.sort_order })
+      .update({ display_order: item.display_order })
       .eq('id', item.id)
       .eq('restaurant_id', restaurantId)
   );

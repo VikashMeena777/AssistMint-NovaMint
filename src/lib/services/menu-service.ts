@@ -18,7 +18,7 @@ export interface MenuCategory {
   name: string;
   name_local?: string;
   description?: string;
-  sort_order: number;
+  display_order: number;
   is_active: boolean;
 }
 
@@ -29,13 +29,12 @@ export interface MenuItem {
   name: string;
   name_local?: string;
   description?: string;
-  base_price: number; // in paise
+  price: number; // in paise
   image_url?: string;
   is_veg: boolean;
   is_bestseller: boolean;
   is_available: boolean;
-  prep_time_min: number;
-  spice_level: number;
+  prep_time_minutes: number;
   variants?: MenuVariant[];
   addons?: MenuAddon[];
 }
@@ -78,7 +77,7 @@ export async function getFullMenu(restaurantId: string): Promise<FullMenu | null
     .select('*')
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
-    .order('sort_order');
+    .order('display_order');
 
   if (!categories || categories.length === 0) {
     return { restaurantName: (restaurant as Record<string, string>).name, categories: [] };
@@ -90,7 +89,7 @@ export async function getFullMenu(restaurantId: string): Promise<FullMenu | null
     .select('*')
     .eq('restaurant_id', restaurantId)
     .eq('is_available', true)
-    .order('sort_order');
+    .order('display_order');
 
   // Get variants
   const itemIds = (items || []).map((i: Record<string, unknown>) => i.id as string);
@@ -132,13 +131,12 @@ export async function getFullMenu(restaurantId: string): Promise<FullMenu | null
         name: item.name as string,
         name_local: item.name_local as string | undefined,
         description: item.description as string | undefined,
-        base_price: item.base_price as number,
+        price: item.price as number,
         image_url: item.image_url as string | undefined,
         is_veg: item.is_veg as boolean,
         is_bestseller: item.is_bestseller as boolean,
         is_available: item.is_available as boolean,
-        prep_time_min: item.prep_time_min as number,
-        spice_level: item.spice_level as number,
+        prep_time_minutes: (item.prep_time_minutes as number) || 15,
         variants: variantsByItem.get(item.id as string) || [],
         addons: ((addons || []) as Record<string, unknown>[]).map((a) => ({
           id: a.id as string,
@@ -154,7 +152,7 @@ export async function getFullMenu(restaurantId: string): Promise<FullMenu | null
       name: cat.name as string,
       name_local: cat.name_local as string | undefined,
       description: cat.description as string | undefined,
-      sort_order: cat.sort_order as number,
+      display_order: cat.display_order as number,
       is_active: cat.is_active as boolean,
       items: catItems,
     };
@@ -183,7 +181,7 @@ export function buildMenuContext(menu: FullMenu): string {
     for (const item of category.items) {
       const veg = item.is_veg ? '🟢' : '🔴';
       const best = item.is_bestseller ? ' ⭐ BESTSELLER' : '';
-      const price = `₹${(item.base_price / 100).toFixed(0)}`;
+      const price = `₹${(item.price / 100).toFixed(0)}`;
 
       context += `${veg} ${item.name} — ${price}${best}\n`;
       if (item.description) context += `   ${item.description}\n`;
@@ -193,10 +191,6 @@ export function buildMenuContext(menu: FullMenu): string {
           .map((v) => `${v.name}: ₹${(v.price / 100).toFixed(0)}`)
           .join(', ');
         context += `   Sizes: ${sizes}\n`;
-      }
-
-      if (item.spice_level > 0) {
-        context += `   Spice: ${'🌶️'.repeat(item.spice_level)}\n`;
       }
 
       context += '\n';
@@ -226,12 +220,11 @@ export async function searchMenuItems(
     category_name: (item.menu_categories as Record<string, string>)?.name,
     name: item.name as string,
     description: item.description as string | undefined,
-    base_price: item.base_price as number,
+    price: item.price as number,
     is_veg: item.is_veg as boolean,
     is_bestseller: item.is_bestseller as boolean,
     is_available: item.is_available as boolean,
-    prep_time_min: item.prep_time_min as number,
-    spice_level: item.spice_level as number,
+    prep_time_minutes: (item.prep_time_minutes as number) || 15,
   }));
 }
 
@@ -253,11 +246,10 @@ export async function getMenuItemById(itemId: string): Promise<MenuItem | null> 
     category_name: (item.menu_categories as Record<string, string>)?.name,
     name: item.name as string,
     description: item.description as string | undefined,
-    base_price: item.base_price as number,
+    price: item.price as number,
     is_veg: item.is_veg as boolean,
     is_bestseller: item.is_bestseller as boolean,
     is_available: item.is_available as boolean,
-    prep_time_min: item.prep_time_min as number,
-    spice_level: item.spice_level as number,
+    prep_time_minutes: (item.prep_time_minutes as number) || 15,
   };
 }

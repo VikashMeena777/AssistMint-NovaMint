@@ -181,7 +181,7 @@ export default function OnboardingWizard() {
         const cat = sampleCategories[ci];
         const catResult = await createCategory(restaurantId, {
           name: cat.name,
-          sort_order: ci,
+          display_order: ci,
         });
 
         if (catResult.error) continue;
@@ -194,9 +194,9 @@ export default function OnboardingWizard() {
             category_id: categoryId,
             name: item.name,
             description: item.description,
-            base_price: item.price,
+            price: item.price,
             is_veg: item.is_veg,
-            sort_order: ii,
+            display_order: ii,
           });
         }
       }

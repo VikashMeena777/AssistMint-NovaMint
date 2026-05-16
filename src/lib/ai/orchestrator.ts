@@ -246,7 +246,7 @@ async function executeAction(
         item_id: item.id,
         item_name: item.name,
         quantity: action.quantity || 1,
-        unit_price: item.base_price,
+        unit_price: item.price,
       };
 
       await addToCart(cartId, cartItem);

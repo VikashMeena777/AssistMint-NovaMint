@@ -6,7 +6,6 @@ import {
   Search,
   UtensilsCrossed,
   Leaf,
-  Flame,
   Star,
   Loader2,
   Trash2,
@@ -43,11 +42,10 @@ export default function MenuPage() {
   const [newItem, setNewItem] = useState({
     name: "",
     category_id: "",
-    base_price: "",
+    price: "",
     description: "",
     is_veg: true,
     is_bestseller: false,
-    is_spicy: false,
   });
   const [newCategoryName, setNewCategoryName] = useState("");
 
@@ -91,21 +89,25 @@ export default function MenuPage() {
   };
 
   const handleAddItem = async () => {
-    if (!restaurantId || !newItem.name || !newItem.category_id || !newItem.base_price) {
+    if (!restaurantId || !newItem.name || !newItem.category_id || !newItem.price) {
       toast.error("Fill in name, category, and price.");
       return;
     }
     setSaving(true);
     const result = await createMenuItem(restaurantId, {
-      ...newItem,
-      base_price: Math.round(parseFloat(newItem.base_price) * 100), // Convert to paise
+      category_id: newItem.category_id,
+      name: newItem.name,
+      description: newItem.description || undefined,
+      price: Math.round(parseFloat(newItem.price) * 100), // Convert to paise
+      is_veg: newItem.is_veg,
+      is_bestseller: newItem.is_bestseller,
     });
     setSaving(false);
     if (result.error) {
       toast.error(result.error);
     } else {
       toast.success("Menu item added!");
-      setNewItem({ name: "", category_id: "", base_price: "", description: "", is_veg: true, is_bestseller: false, is_spicy: false });
+      setNewItem({ name: "", category_id: "", price: "", description: "", is_veg: true, is_bestseller: false });
       setShowAddItem(false);
       loadData();
     }
@@ -257,8 +259,8 @@ export default function MenuPage() {
             </select>
             <input
               type="number"
-              value={newItem.base_price}
-              onChange={(e) => setNewItem((p) => ({ ...p, base_price: e.target.value }))}
+              value={newItem.price}
+              onChange={(e) => setNewItem((p) => ({ ...p, price: e.target.value }))}
               placeholder="Price (₹)"
               className="flex h-10 rounded-xl border border-input bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
@@ -279,10 +281,7 @@ export default function MenuPage() {
               <input type="checkbox" checked={newItem.is_bestseller} onChange={(e) => setNewItem((p) => ({ ...p, is_bestseller: e.target.checked }))} className="accent-primary" />
               <Star className="h-3.5 w-3.5 text-amber-500" /> Bestseller
             </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={newItem.is_spicy} onChange={(e) => setNewItem((p) => ({ ...p, is_spicy: e.target.checked }))} className="accent-primary" />
-              <Flame className="h-3.5 w-3.5 text-red-500" /> Spicy
-            </label>
+
           </div>
           <button
             onClick={handleAddItem}
@@ -326,10 +325,10 @@ export default function MenuPage() {
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold truncate">{item.name}</p>
                       {item.is_bestseller && <Star className="h-3 w-3 text-amber-500 shrink-0" />}
-                      {item.is_spicy && <Flame className="h-3 w-3 text-red-500 shrink-0" />}
+
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {item.menu_categories?.name || "Uncategorized"} · ₹{(item.base_price / 100).toFixed(0)}
+                      {item.menu_categories?.name || "Uncategorized"} · ₹{(item.price / 100).toFixed(0)}
                     </p>
                   </div>
                 </div>
