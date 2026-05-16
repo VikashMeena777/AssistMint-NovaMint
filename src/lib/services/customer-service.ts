@@ -33,14 +33,14 @@ export async function getOrCreateCustomer(
   whatsappName?: string
 ): Promise<Customer> {
   // Try to find existing customer
-  const { data: existing } = await supabaseAdmin
+  const { data: existing, error: findError } = await supabaseAdmin
     .from('customers')
     .select('*')
     .eq('restaurant_id', restaurantId)
     .eq('phone', phone)
     .single();
 
-  if (existing) {
+  if (existing && !findError) {
     const c = existing as Record<string, unknown>;
 
     // Update WhatsApp name if changed
@@ -55,9 +55,9 @@ export async function getOrCreateCustomer(
       id: c.id as string,
       restaurant_id: c.restaurant_id as string,
       phone: c.phone as string,
-      name: c.name as string | undefined,
+      name: (c.saved_name as string | undefined) || (c.whatsapp_name as string | undefined),
       whatsapp_name: whatsappName || (c.whatsapp_name as string | undefined),
-      language_preference: (c.language_preference as string) || 'en',
+      language_preference: (c.preferred_language as string) || 'en',
       total_orders: (c.total_orders as number) || 0,
       total_spent: (c.total_spent as number) || 0,
       loyalty_points: (c.loyalty_points as number) || 0,
@@ -67,17 +67,35 @@ export async function getOrCreateCustomer(
   }
 
   // Create new customer
-  const { data: newCustomer } = await supabaseAdmin
+  const { data: newCustomer, error: insertError } = await supabaseAdmin
     .from('customers')
     .insert({
       restaurant_id: restaurantId,
       phone,
       whatsapp_name: whatsappName,
-      name: whatsappName,
-      language_preference: 'en',
+      saved_name: whatsappName,
+      preferred_language: 'en',
     })
     .select()
     .single();
+
+  if (insertError || !newCustomer) {
+    console.error('[CustomerService] Failed to create customer:', insertError?.message);
+    // Return a safe fallback to prevent crash
+    return {
+      id: 'unknown',
+      restaurant_id: restaurantId,
+      phone,
+      name: whatsappName,
+      whatsapp_name: whatsappName,
+      language_preference: 'en',
+      total_orders: 0,
+      total_spent: 0,
+      loyalty_points: 0,
+      loyalty_tier: 'bronze',
+      is_blocked: false,
+    };
+  }
 
   const c = newCustomer as Record<string, unknown>;
   return {

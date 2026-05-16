@@ -1,6 +1,7 @@
 // ============================================
 // AssistMint — Conversation Manager
-// Manages conversation state + message history
+// Manages conversation messages using the
+// conversations table (message log) schema
 // ============================================
 
 import { createClient } from '@supabase/supabase-js';
@@ -28,52 +29,35 @@ export interface Message {
 }
 
 // ─── Get or Create Conversation ─────────────
+// The DB "conversations" table is a message log (role + content per row).
+// We simulate a "session" by returning a virtual conversation object
+// based on the restaurant + customer combo.
 
 export async function getOrCreateConversation(
   restaurantId: string,
   customerId: string,
   phone: string
 ): Promise<Conversation> {
-  const { data: existing } = await supabaseAdmin
+  // Check if there's a recent message that was handed off to a human
+  const { data: recentHandoff } = await supabaseAdmin
     .from('conversations')
-    .select('*')
+    .select('requires_human, handed_off_to')
     .eq('restaurant_id', restaurantId)
-    .eq('phone', phone)
+    .eq('customer_phone', phone)
+    .eq('requires_human', true)
     .order('created_at', { ascending: false })
     .limit(1)
     .single();
 
-  if (existing) {
-    const c = existing as Record<string, unknown>;
-    return {
-      id: c.id as string,
-      restaurant_id: c.restaurant_id as string,
-      customer_id: c.customer_id as string,
-      phone: c.phone as string,
-      is_bot_active: (c.is_bot_active as boolean) ?? true,
-      context: (c.context as Record<string, unknown>) || {},
-    };
-  }
+  const isBotActive = !recentHandoff;
 
-  const { data: newConvo } = await supabaseAdmin
-    .from('conversations')
-    .insert({
-      restaurant_id: restaurantId,
-      customer_id: customerId,
-      phone,
-      is_bot_active: true,
-      context: {},
-    })
-    .select()
-    .single();
-
-  const c = newConvo as Record<string, unknown>;
+  // Return a virtual conversation session
   return {
-    id: c.id as string,
+    id: `${restaurantId}:${customerId}`,
     restaurant_id: restaurantId,
     customer_id: customerId,
     phone,
-    is_bot_active: true,
+    is_bot_active: isBotActive,
     context: {},
   };
 }
@@ -84,20 +68,26 @@ export async function getRecentMessages(
   conversationId: string,
   limit: number = 10
 ): Promise<Message[]> {
-  const { data } = await supabaseAdmin
-    .from('messages')
-    .select('sender_type, content')
-    .eq('conversation_id', conversationId)
+  // conversationId is "restaurantId:customerId"
+  const parts = conversationId.split(':');
+  if (parts.length < 2) return [];
+
+  const restaurantId = parts[0];
+  // Get the customer to find their phone
+  const { data: messages } = await supabaseAdmin
+    .from('conversations')
+    .select('role, content')
+    .eq('restaurant_id', restaurantId)
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  if (!data) return [];
+  if (!messages) return [];
 
   // Reverse so oldest first (for AI context)
-  return (data as Record<string, unknown>[])
+  return (messages as Record<string, unknown>[])
     .reverse()
     .map((msg) => ({
-      role: msg.sender_type === 'customer' ? 'user' as const : 'assistant' as const,
+      role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
       content: (msg.content as string) || '',
     }));
 }
@@ -112,33 +102,40 @@ export async function saveMessage(
   whatsappMessageId?: string,
   metadata?: Record<string, unknown>
 ): Promise<void> {
-  await supabaseAdmin.from('messages').insert({
-    conversation_id: conversationId,
+  // conversationId is "restaurantId:customerId"
+  const parts = conversationId.split(':');
+  const customerId = parts.length >= 2 ? parts[1] : undefined;
+
+  // Map senderType to role for the conversations table
+  const role = senderType === 'customer' ? 'user' : 'assistant';
+
+  // Extract phone from metadata if available
+  const phone = (metadata?.phone as string) || '';
+
+  const { error } = await supabaseAdmin.from('conversations').insert({
     restaurant_id: restaurantId,
-    sender_type: senderType,
-    message_type: 'text',
+    customer_id: customerId || null,
+    customer_phone: phone,
+    role,
     content,
+    message_type: 'text',
     whatsapp_message_id: whatsappMessageId,
     metadata: metadata || {},
   });
 
-  // Update conversation last_message_at
-  await supabaseAdmin
-    .from('conversations')
-    .update({ last_message_at: new Date().toISOString() })
-    .eq('id', conversationId);
+  if (error) {
+    console.error('[ConversationManager] Failed to save message:', error.message);
+  }
 }
 
 // ─── Update Conversation Context ────────────
 
 export async function updateConversationContext(
-  conversationId: string,
-  context: Record<string, unknown>
+  _conversationId: string,
+  _context: Record<string, unknown>
 ): Promise<void> {
-  await supabaseAdmin
-    .from('conversations')
-    .update({ context })
-    .eq('id', conversationId);
+  // Context is not stored in the DB schema — this is a no-op
+  // In the future, could use metadata field on recent messages
 }
 
 // ─── Toggle Bot Active ──────────────────────
@@ -147,8 +144,22 @@ export async function setBotActive(
   conversationId: string,
   active: boolean
 ): Promise<void> {
-  await supabaseAdmin
-    .from('conversations')
-    .update({ is_bot_active: active })
-    .eq('id', conversationId);
+  // Mark the most recent message for this conversation as requires_human
+  const parts = conversationId.split(':');
+  if (parts.length < 2) return;
+
+  const restaurantId = parts[0];
+
+  if (!active) {
+    // Insert a handoff marker message
+    await supabaseAdmin.from('conversations').insert({
+      restaurant_id: restaurantId,
+      customer_id: parts[1],
+      customer_phone: '',
+      role: 'assistant',
+      content: '[System] Conversation handed off to human agent',
+      message_type: 'text',
+      requires_human: true,
+    });
+  }
 }

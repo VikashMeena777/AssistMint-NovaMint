@@ -97,21 +97,23 @@ export async function getFullMenu(restaurantId: string): Promise<FullMenu | null
     ? await supabaseAdmin
         .from('menu_item_variants')
         .select('*')
-        .in('item_id', itemIds)
+        .in('menu_item_id', itemIds)
         .eq('is_available', true)
     : { data: [] };
 
-  // Get addons
-  const { data: addons } = await supabaseAdmin
-    .from('menu_item_addons')
-    .select('*')
-    .eq('restaurant_id', restaurantId)
-    .eq('is_available', true);
+  // Get addons for all items
+  const { data: addons } = itemIds.length > 0
+    ? await supabaseAdmin
+        .from('menu_item_addons')
+        .select('*')
+        .in('menu_item_id', itemIds)
+        .eq('is_available', true)
+    : { data: [] };
 
   // Build structured menu
   const variantsByItem = new Map<string, MenuVariant[]>();
   for (const v of (variants || []) as Record<string, unknown>[]) {
-    const itemId = v.item_id as string;
+    const itemId = v.menu_item_id as string;
     if (!variantsByItem.has(itemId)) variantsByItem.set(itemId, []);
     variantsByItem.get(itemId)!.push({
       id: v.id as string,

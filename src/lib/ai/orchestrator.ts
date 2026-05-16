@@ -49,7 +49,7 @@ export async function handleIncomingMessage(params: {
 
   // Save incoming message
   const incomingText = text || interactiveReply?.title || '(non-text)';
-  await saveMessage(conversation.id, restaurant.id, 'customer', incomingText, messageId);
+  await saveMessage(conversation.id, restaurant.id, 'customer', incomingText, messageId, { phone: from });
 
   // 4. Check if bot is active (might be in human handoff mode)
   if (!conversation.is_bot_active) {
@@ -135,7 +135,7 @@ async function generateAndSendAIResponse(
   }
 
   // Save bot response
-  await saveMessage(conversation.id, restaurant.id, 'bot', reply);
+  await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
 
   // Log activity (fire-and-forget)
   logActivity({
@@ -165,7 +165,7 @@ You are the AI ordering assistant for "${restaurant.name}" on WhatsApp.
 4. If asked about something NOT on the menu, politely redirect.
 5. For complex requests or complaints, suggest typing "agent" for human help.
 6. Minimum order amount: ₹${(restaurant.min_order_amount / 100).toFixed(0)}
-7. Average preparation time: ${restaurant.avg_prep_time_min} minutes
+7. Average preparation time: 20-30 minutes
 8. NEVER make up items that aren't on the menu.
 
 ## CUSTOMER INFO:
@@ -302,7 +302,7 @@ async function sendMenuOverview(
         text: reply,
       });
     }
-    await saveMessage(conversation.id, restaurant.id, 'bot', reply);
+    await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
     return;
   }
 
@@ -320,7 +320,7 @@ async function sendMenuOverview(
       text: reply,
     });
   }
-  await saveMessage(conversation.id, restaurant.id, 'bot', reply);
+  await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
 }
 
 // ─── Cart Summary ───────────────────────────
@@ -346,7 +346,7 @@ async function sendCartSummary(
       text: reply,
     });
   }
-  await saveMessage(conversation.id, restaurant.id, 'bot', reply);
+  await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
 }
 
 // ─── Human Handoff ──────────────────────────
@@ -369,7 +369,7 @@ async function handleHumanHandoff(
       text: reply,
     });
   }
-  await saveMessage(conversation.id, restaurant.id, 'bot', reply);
+  await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
 
   logActivity({
     restaurantId: restaurant.id,
