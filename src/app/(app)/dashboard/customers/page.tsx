@@ -102,10 +102,10 @@ export default function CustomersPage() {
               >
                 <div className="flex items-center gap-4 min-w-0">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary shrink-0">
-                    {(c.name || "?")[0].toUpperCase()}
+                    {(c.saved_name || c.whatsapp_name || "?")[0].toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate">{c.name || "Unknown"}</p>
+                    <p className="text-sm font-semibold truncate">{c.saved_name || c.whatsapp_name || "Unknown"}</p>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Phone className="h-3 w-3" />
                       {c.phone || "—"}

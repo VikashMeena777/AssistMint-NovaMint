@@ -18,19 +18,24 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get('x-webhook-signature') || '';
     const timestamp = req.headers.get('x-webhook-timestamp') || '';
 
-    // Verify webhook signature
+    // Verify webhook signature — ALWAYS required
     const webhookSecret = process.env.CASHFREE_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const payload = timestamp + body;
-      const expectedSignature = crypto
-        .createHmac('sha256', webhookSecret)
-        .update(payload)
-        .digest('base64');
+    if (!webhookSecret) {
+      console.error('[Cashfree Webhook] CRITICAL: CASHFREE_WEBHOOK_SECRET not configured');
+      return NextResponse.json({ message: 'Server misconfigured' }, { status: 200 });
+    }
 
-      if (signature !== expectedSignature) {
-        console.error('[Cashfree Webhook] Signature verification failed');
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-      }
+    const payload = timestamp + body;
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(payload)
+      .digest('base64');
+
+    const sigBuf = Buffer.from(signature);
+    const expectedBuf = Buffer.from(expectedSignature);
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+      console.error('[Cashfree Webhook] Signature verification failed');
+      return NextResponse.json({ message: 'Invalid signature' }, { status: 200 });
     }
 
     const data = JSON.parse(body);
@@ -57,10 +62,11 @@ export async function POST(req: NextRequest) {
         console.log(`[Cashfree Webhook] Unhandled event: ${eventType}`);
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
     console.error('[Cashfree Webhook] Error:', error);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    // Always return 200 to prevent Cashfree retry storms
+    return NextResponse.json({ message: 'Error processed' }, { status: 200 });
   }
 }
 
@@ -89,17 +95,33 @@ interface PaymentData {
 }
 
 async function handlePaymentSuccess(data: PaymentData) {
-  const orderId = data.order.order_id;
+  const cfOrderId = data.order.order_id;
   const amount = data.payment.payment_amount;
   const paymentId = data.payment.cf_payment_id;
   const paymentMethod = data.payment.payment_method.upi
     ? `UPI (${data.payment.payment_method.upi.upi_id})`
     : 'Card';
 
-  console.log(`[Cashfree] Payment SUCCESS: order=${orderId}, amount=₹${amount}`);
+  console.log(`[Cashfree] Payment SUCCESS: cf_order=${cfOrderId}, amount=₹${amount}`);
 
-  // 1. Update order status to 'confirmed' and store payment details
-  const { error } = await supabaseAdmin
+  // Find the payment record by cashfree_order_id
+  const { data: payment } = await supabaseAdmin
+    .from('payments')
+    .select('order_id, restaurant_id')
+    .eq('cashfree_order_id', cfOrderId)
+    .single();
+
+  if (!payment) {
+    console.error(`[Cashfree] No payment record found for cf_order=${cfOrderId}`);
+    return;
+  }
+
+  const p = payment as Record<string, unknown>;
+  const orderId = p.order_id as string;
+  const restaurantId = p.restaurant_id as string;
+
+  // Update order status
+  await supabaseAdmin
     .from('orders')
     .update({
       status: 'confirmed',
@@ -110,22 +132,60 @@ async function handlePaymentSuccess(data: PaymentData) {
     })
     .eq('id', orderId);
 
-  if (error) {
-    console.error(`[Cashfree] Failed to update order ${orderId}:`, error.message);
+  // Update payment record
+  await supabaseAdmin
+    .from('payments')
+    .update({ status: 'completed' })
+    .eq('cashfree_order_id', cfOrderId);
+
+  // Send WhatsApp confirmation to customer
+  try {
+    const { data: order } = await supabaseAdmin
+      .from('orders')
+      .select('customer_id, total')
+      .eq('id', orderId)
+      .single();
+
+    if (order) {
+      const o = order as Record<string, unknown>;
+      const { data: customer } = await supabaseAdmin
+        .from('customers')
+        .select('phone')
+        .eq('id', o.customer_id as string)
+        .single();
+
+      const { data: restaurant } = await supabaseAdmin
+        .from('restaurants')
+        .select('whatsapp_phone_id, whatsapp_token, name')
+        .eq('id', restaurantId)
+        .single();
+
+      if (customer && restaurant) {
+        const c = customer as Record<string, unknown>;
+        const r = restaurant as Record<string, unknown>;
+        if (r.whatsapp_phone_id && r.whatsapp_token) {
+          const { sendTextMessage } = await import('@/lib/whatsapp/client');
+          const totalRupees = ((o.total as number) / 100).toFixed(0);
+          await sendTextMessage({
+            phoneNumberId: r.whatsapp_phone_id as string,
+            accessToken: r.whatsapp_token as string,
+            to: c.phone as string,
+            text: `✅ *Payment Received!*\n\nAmount: ₹${totalRupees}\nMethod: ${paymentMethod}\n\nYour order is confirmed and being prepared! 🎉\n\n— ${r.name}`,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[Cashfree] Failed to send WhatsApp confirmation:', e);
   }
 
-  // 2. Log activity
-  const restaurantId = data.order.order_tags?.restaurant_id;
-  if (restaurantId) {
-    await supabaseAdmin.from('activity_log').insert({
-      restaurant_id: restaurantId,
-      actor_type: 'system',
-      action: 'payment.received',
-      entity_type: 'order',
-      entity_id: orderId,
-      details: { amount, payment_method: paymentMethod, cf_payment_id: paymentId },
-    }).then(() => {});
-  }
+  // Log activity
+  await supabaseAdmin.from('activity_log').insert({
+    restaurant_id: restaurantId,
+    actor_type: 'system',
+    action: 'payment.received',
+    details: { order_id: orderId, amount, payment_method: paymentMethod, cf_payment_id: paymentId },
+  }).then(() => {});
 }
 
 async function handlePaymentFailed(data: PaymentData) {

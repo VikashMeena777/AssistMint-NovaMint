@@ -16,10 +16,21 @@ import { createClient } from "@/lib/supabase/client";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyData = Record<string, any>;
 
+interface ConversationSession {
+  customer_phone: string;
+  customer_id: string | null;
+  customer_name: string;
+  latest_message: string;
+  latest_role: string;
+  latest_time: string;
+  requires_human: boolean;
+  message_count: number;
+}
+
 export default function ConversationsPage() {
-  const [conversations, setConversations] = useState<AnyData[]>([]);
+  const [sessions, setSessions] = useState<ConversationSession[]>([]);
   const [messages, setMessages] = useState<AnyData[]>([]);
-  const [selectedConvo, setSelectedConvo] = useState<AnyData | null>(null);
+  const [selectedSession, setSelectedSession] = useState<ConversationSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
@@ -37,13 +48,58 @@ export default function ConversationsPage() {
     if (!restaurantId) return;
     setLoading(true);
     const supabase = createClient();
-    const { data } = await supabase
+
+    // Get all messages grouped by customer_phone
+    const { data: allMessages } = await supabase
       .from("conversations")
-      .select("*, customers(name, phone)")
+      .select("customer_phone, customer_id, role, content, requires_human, created_at")
       .eq("restaurant_id", restaurantId)
-      .order("last_message_at", { ascending: false })
-      .limit(50);
-    setConversations(data || []);
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (!allMessages || allMessages.length === 0) {
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
+
+    // Get customer info
+    const { data: customers } = await supabase
+      .from("customers")
+      .select("id, phone, saved_name, whatsapp_name")
+      .eq("restaurant_id", restaurantId);
+
+    const customerMap = new Map<string, { name: string; id: string }>();
+    (customers || []).forEach((c: AnyData) => {
+      customerMap.set(c.phone, {
+        name: c.saved_name || c.whatsapp_name || c.phone,
+        id: c.id,
+      });
+    });
+
+    // Group messages by customer_phone into sessions
+    const sessionMap = new Map<string, ConversationSession>();
+    (allMessages as AnyData[]).forEach((msg) => {
+      const phone = msg.customer_phone;
+      if (!phone) return;
+      if (!sessionMap.has(phone)) {
+        const cust = customerMap.get(phone);
+        sessionMap.set(phone, {
+          customer_phone: phone,
+          customer_id: msg.customer_id || cust?.id || null,
+          customer_name: cust?.name || phone,
+          latest_message: msg.content || "",
+          latest_role: msg.role,
+          latest_time: msg.created_at,
+          requires_human: msg.requires_human || false,
+          message_count: 0,
+        });
+      }
+      const session = sessionMap.get(phone)!;
+      session.message_count++;
+    });
+
+    setSessions(Array.from(sessionMap.values()));
     setLoading(false);
   }, [restaurantId]);
 
@@ -51,24 +107,25 @@ export default function ConversationsPage() {
     if (restaurantId) loadConversations();
   }, [restaurantId, loadConversations]);
 
-  const loadMessages = async (convo: AnyData) => {
-    setSelectedConvo(convo);
+  const loadMessages = async (session: ConversationSession) => {
+    setSelectedSession(session);
     setLoadingMessages(true);
     const supabase = createClient();
     const { data } = await supabase
-      .from("messages")
+      .from("conversations")
       .select("*")
-      .eq("conversation_id", convo.id)
+      .eq("restaurant_id", restaurantId!)
+      .eq("customer_phone", session.customer_phone)
       .order("created_at", { ascending: true })
       .limit(100);
     setMessages(data || []);
     setLoadingMessages(false);
   };
 
-  const filtered = conversations.filter((c) => {
+  const filtered = sessions.filter((s) => {
     if (!search) return true;
-    const name = c.customers?.name?.toLowerCase() || "";
-    const phone = c.phone?.toLowerCase() || "";
+    const name = s.customer_name.toLowerCase();
+    const phone = s.customer_phone.toLowerCase();
     return name.includes(search.toLowerCase()) || phone.includes(search.toLowerCase());
   });
 
@@ -122,42 +179,47 @@ export default function ConversationsPage() {
               </div>
             ) : (
               <div className="divide-y divide-border/50">
-                {filtered.map((c) => (
+                {filtered.map((s) => (
                   <button
-                    key={c.id}
-                    onClick={() => loadMessages(c)}
+                    key={s.customer_phone}
+                    onClick={() => loadMessages(s)}
                     className={`flex w-full items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors ${
-                      selectedConvo?.id === c.id ? "bg-primary/5 border-l-2 border-primary" : ""
+                      selectedSession?.customer_phone === s.customer_phone ? "bg-primary/5 border-l-2 border-primary" : ""
                     }`}
                   >
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary shrink-0">
-                      {(c.customers?.name || c.phone || "?")[0].toUpperCase()}
+                      {s.customer_name[0].toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">
-                        {c.customers?.name || c.phone || "Unknown"}
+                        {s.customer_name}
                       </p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        {c.is_bot_active ? (
-                          <>
-                            <Bot className="h-3 w-3" /> AI handling
-                          </>
-                        ) : (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {s.latest_message.substring(0, 40)}
+                        {s.latest_message.length > 40 ? "..." : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        {s.requires_human ? (
                           <>
                             <User className="h-3 w-3" /> Manual
                           </>
+                        ) : (
+                          <>
+                            <Bot className="h-3 w-3" /> AI handling
+                          </>
                         )}
-                        {c.last_message_at && (
-                          <span className="ml-1">
-                            ·{" "}
-                            {new Date(c.last_message_at).toLocaleString("en-IN", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              day: "numeric",
-                              month: "short",
-                            })}
-                          </span>
-                        )}
+                        <span className="ml-1">
+                          ·{" "}
+                          {new Date(s.latest_time).toLocaleString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </span>
+                        <span className="ml-1 rounded-full bg-muted px-1.5 text-[10px]">
+                          {s.message_count}
+                        </span>
                       </p>
                     </div>
                   </button>
@@ -169,26 +231,26 @@ export default function ConversationsPage() {
 
         {/* Chat Panel */}
         <div className="rounded-2xl border border-border/50 bg-card overflow-hidden lg:col-span-2 flex flex-col">
-          {selectedConvo ? (
+          {selectedSession ? (
             <>
               {/* Chat Header */}
               <div className="border-b border-border p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                    {(selectedConvo.customers?.name || "?")[0].toUpperCase()}
+                    {selectedSession.customer_name[0].toUpperCase()}
                   </div>
                   <div>
                     <p className="text-sm font-semibold">
-                      {selectedConvo.customers?.name || "Customer"}
+                      {selectedSession.customer_name}
                     </p>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Phone className="h-3 w-3" />
-                      {selectedConvo.phone}
+                      {selectedSession.customer_phone}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {selectedConvo.is_bot_active ? (
+                  {!selectedSession.requires_human ? (
                     <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-600">
                       <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       AI Active
@@ -216,12 +278,12 @@ export default function ConversationsPage() {
                     <div
                       key={msg.id}
                       className={`flex ${
-                        msg.sender_type === "customer" ? "justify-start" : "justify-end"
+                        msg.role === "user" ? "justify-start" : "justify-end"
                       }`}
                     >
                       <div
                         className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
-                          msg.sender_type === "customer"
+                          msg.role === "user"
                             ? "bg-muted/50 text-foreground rounded-bl-md"
                             : "bg-primary text-primary-foreground rounded-br-md"
                         }`}
@@ -229,12 +291,12 @@ export default function ConversationsPage() {
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                         <p
                           className={`text-[10px] mt-1 ${
-                            msg.sender_type === "customer"
+                            msg.role === "user"
                               ? "text-muted-foreground"
                               : "text-primary-foreground/60"
                           }`}
                         >
-                          {msg.sender_type === "bot" ? "🤖 AI" : msg.sender_type === "agent" ? "👤 Agent" : ""}{" "}
+                          {msg.role === "assistant" ? "🤖 AI" : ""}{" "}
                           {new Date(msg.created_at).toLocaleTimeString("en-IN", {
                             hour: "2-digit",
                             minute: "2-digit",

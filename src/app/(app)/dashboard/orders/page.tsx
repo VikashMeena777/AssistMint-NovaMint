@@ -192,7 +192,7 @@ export default function OrdersPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold">
-                        #{order.order_number} · {order.customers?.name || "Customer"}
+                        #{order.order_number} · {order.customers?.saved_name || order.customers?.whatsapp_name || "Customer"}
                       </p>
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" />

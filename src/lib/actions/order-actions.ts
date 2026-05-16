@@ -23,7 +23,7 @@ export async function getOrders(
   const supabase = await createClient();
   let query = supabase
     .from('orders')
-    .select('*, customers(name, phone)', { count: 'exact' })
+    .select('*, customers(saved_name, whatsapp_name, phone)', { count: 'exact' })
     .eq('restaurant_id', restaurantId)
     .order('created_at', { ascending: false });
 
@@ -49,7 +49,7 @@ export async function getOrder(restaurantId: string, orderId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('orders')
-    .select('*, customers(name, phone, email)')
+    .select('*, customers(saved_name, whatsapp_name, phone, email)')
     .eq('id', orderId)
     .eq('restaurant_id', restaurantId)
     .single();

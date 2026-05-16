@@ -26,7 +26,7 @@ export async function createPaymentLink(
   // Get order details
   const { data: order } = await supabase
     .from('orders')
-    .select('*, customers(name, phone, email)')
+    .select('*, customers(saved_name, whatsapp_name, phone, email)')
     .eq('id', orderId)
     .eq('restaurant_id', restaurantId)
     .single();
@@ -35,7 +35,7 @@ export async function createPaymentLink(
 
   const o = order as Record<string, unknown>;
   const customer = o.customers as Record<string, unknown> | null;
-  const totalAmount = (o.total_amount as number) / 100; // Convert paise to rupees
+  const totalAmount = (o.total as number) / 100; // Convert paise to rupees
 
   // Generate unique order ID for Cashfree
   const cfOrderId = `AM-${(o.order_number as string || orderId).slice(-8)}-${Date.now().toString(36)}`;
@@ -55,7 +55,7 @@ export async function createPaymentLink(
         order_currency: 'INR',
         customer_details: {
           customer_id: o.customer_id as string,
-          customer_name: (customer?.name as string) || 'Customer',
+          customer_name: (customer?.saved_name as string) || (customer?.whatsapp_name as string) || 'Customer',
           customer_phone: (customer?.phone as string) || '',
           customer_email: (customer?.email as string) || undefined,
         },
@@ -231,7 +231,7 @@ export async function sendPaymentLinkToCustomer(
 
   // Import and send
   const { sendTextMessage } = await import('@/lib/whatsapp/client');
-  const totalAmount = ((o.total_amount as number) / 100).toFixed(2);
+  const totalAmount = ((o.total as number) / 100).toFixed(2);
 
   await sendTextMessage({
     phoneNumberId: r.whatsapp_phone_id as string,

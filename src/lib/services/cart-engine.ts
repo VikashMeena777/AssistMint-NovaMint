@@ -303,7 +303,8 @@ export async function convertCartToOrder(
   cart: Cart,
   orderType: 'delivery' | 'pickup' | 'dine_in' = 'delivery',
   deliveryAddress?: string,
-  specialInstructions?: string
+  specialInstructions?: string,
+  paymentMethod: 'cod' | 'online' = 'cod'
 ): Promise<string> {
   const { data: order, error } = await supabaseAdmin
     .from('orders')
@@ -321,7 +322,8 @@ export async function convertCartToOrder(
       delivery_address: deliveryAddress ? { raw: deliveryAddress } : null,
       delivery_type: orderType,
       status: 'pending',
-      payment_status: 'unpaid',
+      payment_status: paymentMethod === 'cod' ? 'cod_pending' : 'pending',
+      payment_method: paymentMethod,
     })
     .select('id')
     .single();

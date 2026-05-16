@@ -28,7 +28,7 @@ export async function getCustomers(
     .order('total_orders', { ascending: false });
 
   if (filters?.search) {
-    query = query.or(`name.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
+    query = query.or(`saved_name.ilike.%${filters.search}%,whatsapp_name.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
   }
   if (filters?.tier && filters.tier !== 'all') {
     query = query.eq('loyalty_tier', filters.tier);

@@ -10,7 +10,8 @@ import { getOrCreateCart, addToCart, removeFromCart, clearCart, formatCartForWha
 import { getOrCreateCustomer, updateCustomerOrderStats } from '@/lib/services/customer-service';
 import { getOrCreateConversation, getRecentMessages, saveMessage, setBotActive } from '@/lib/services/conversation-manager';
 import { getRestaurantByPhoneId, type Restaurant } from '@/lib/services/restaurant-service';
-import { sendTextMessage } from '@/lib/whatsapp/client';
+import { createBotPaymentLink } from '@/lib/services/bot-payment';
+import { sendTextMessage, sendReplyButtons, sendListMessage, type ListSection } from '@/lib/whatsapp/client';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
 
 // ─── Main Orchestrator ──────────────────────
@@ -57,16 +58,20 @@ export async function handleIncomingMessage(params: {
     return; // Human agent is handling
   }
 
-  // 5. Handle interactive button/list replies as text input
+  // 5. Handle interactive button/list replies by ID
   if (interactiveReply) {
-    // Treat the interactive reply title as user text for the AI
-    await generateAndSendAIResponse(restaurant, customer, conversation, interactiveReply.title);
+    await handleInteractiveReply(restaurant, customer, conversation, interactiveReply);
     return;
   }
 
   // 6. Handle special commands
   const lowerText = (text || '').toLowerCase().trim();
-  if (lowerText === 'menu' || lowerText === 'hi' || lowerText === 'hello') {
+
+  if (lowerText === 'hi' || lowerText === 'hello' || lowerText === 'hey') {
+    await sendGreeting(restaurant, customer, conversation);
+    return;
+  }
+  if (lowerText === 'menu') {
     await sendMenuOverview(restaurant, customer, conversation);
     return;
   }
@@ -81,6 +86,273 @@ export async function handleIncomingMessage(params: {
 
   // 7. AI-powered response
   await generateAndSendAIResponse(restaurant, customer, conversation, text || '');
+}
+
+// ─── Interactive Reply Router ───────────────
+
+async function handleInteractiveReply(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string; loyalty_tier: string; total_orders: number },
+  conversation: { id: string; context: Record<string, unknown> },
+  reply: { type: string; id: string; title: string }
+): Promise<void> {
+  const btnId = reply.id;
+
+  switch (btnId) {
+    case 'btn_menu':
+      await sendMenuOverview(restaurant, customer, conversation);
+      break;
+
+    case 'btn_cart':
+      await sendCartSummary(restaurant, customer, conversation);
+      break;
+
+    case 'btn_help':
+      await generateAndSendAIResponse(restaurant, customer, conversation, 'I need help with ordering');
+      break;
+
+    case 'btn_place_order':
+      await sendPaymentChoice(restaurant, customer, conversation);
+      break;
+
+    case 'btn_clear_cart':
+      await clearCart((await getOrCreateCart(restaurant.id, customer.id)).id);
+      await sendBotReply(restaurant, customer, conversation, '🗑 Cart cleared! Browse the menu to add new items.');
+      break;
+
+    case 'btn_cod':
+      await handleCODOrder(restaurant, customer, conversation);
+      break;
+
+    case 'btn_online_pay':
+      await handleOnlinePayOrder(restaurant, customer, conversation);
+      break;
+
+    default:
+      // Unknown button — treat as text for AI
+      await generateAndSendAIResponse(restaurant, customer, conversation, reply.title);
+      break;
+  }
+}
+
+// ─── Greeting with Buttons ──────────────────
+
+async function sendGreeting(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string },
+  conversation: { id: string }
+): Promise<void> {
+  const greeting = customer.name ? `Hi ${customer.name}! 👋` : 'Hi there! 👋';
+  const bodyText = `${greeting}\n\nWelcome to *${restaurant.name}*! 🌿\n\nI'm your AI assistant — I can help you browse our menu, take your order, and more!\n\nWhat would you like to do?`;
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText,
+      buttons: [
+        { id: 'btn_menu', title: '📋 View Menu' },
+        { id: 'btn_cart', title: '🛒 My Cart' },
+        { id: 'btn_help', title: '💬 Help' },
+      ],
+    });
+  }
+
+  await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+}
+
+// ─── Menu Overview (Interactive List) ───────
+
+async function sendMenuOverview(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string },
+  conversation: { id: string }
+): Promise<void> {
+  const menu = await getFullMenu(restaurant.id);
+
+  if (!menu || menu.categories.length === 0) {
+    await sendBotReply(restaurant, customer, conversation,
+      `Welcome to ${restaurant.name}! 🌿\n\nOur menu is being set up. Please check back soon!`);
+    return;
+  }
+
+  // Build interactive list sections from menu categories
+  const sections: ListSection[] = menu.categories.slice(0, 10).map((cat) => ({
+    title: cat.name.substring(0, 24),
+    rows: cat.items.slice(0, 10).map((item) => ({
+      id: `item_${item.id}`,
+      title: item.name.substring(0, 24),
+      description: `₹${(item.price / 100).toFixed(0)}${item.is_veg ? ' 🟢' : ' 🔴'}`,
+    })),
+  }));
+
+  const bodyText = `Here's our menu! 🍽️\n\nTap below to browse categories and items.\nJust tell me what you'd like to order!`;
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    try {
+      await sendListMessage({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        headerText: `${restaurant.name} Menu`,
+        bodyText,
+        footerText: 'Tap an item to learn more',
+        buttonText: '📋 Browse Menu',
+        sections,
+      });
+    } catch (e) {
+      // Fallback to text if list message fails (e.g., too many items)
+      console.warn('[Orchestrator] List message failed, falling back to text:', e);
+      const textMenu = menu.categories
+        .map((c) => `📂 *${c.name}*\n${c.items.map((i) => `  • ${i.name} — ₹${(i.price / 100).toFixed(0)}${i.is_veg ? ' 🟢' : ' 🔴'}`).join('\n')}`)
+        .join('\n\n');
+
+      await sendBotReply(restaurant, customer, conversation,
+        `Here's our menu! 🍽️\n\n${textMenu}\n\nJust tell me what you'd like to order!`);
+      return;
+    }
+  }
+
+  await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+}
+
+// ─── Cart Summary with Buttons ──────────────
+
+async function sendCartSummary(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string }
+): Promise<void> {
+  const cart = await getOrCreateCart(restaurant.id, customer.id);
+  const cartText = formatCartForWhatsApp(cart);
+
+  if (cart.items.length > 0 && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText: cartText,
+      buttons: [
+        { id: 'btn_place_order', title: '✅ Place Order' },
+        { id: 'btn_clear_cart', title: '🗑 Clear Cart' },
+        { id: 'btn_menu', title: '📋 Add More' },
+      ],
+    });
+    await saveMessage(conversation.id, restaurant.id, 'bot', cartText, undefined, { phone: customer.phone });
+  } else {
+    await sendBotReply(restaurant, customer, conversation, cartText);
+  }
+}
+
+// ─── Payment Choice ─────────────────────────
+
+async function sendPaymentChoice(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string }
+): Promise<void> {
+  const cart = await getOrCreateCart(restaurant.id, customer.id);
+
+  if (cart.items.length === 0) {
+    await sendBotReply(restaurant, customer, conversation,
+      '🛒 Your cart is empty! Browse the menu to add items first.');
+    return;
+  }
+
+  const totalRupees = (cart.total / 100).toFixed(0);
+  const bodyText = `🧾 *Order Summary*\n\n${cart.items.map((i) => `• ${i.item_name} x${i.quantity}`).join('\n')}\n\n*Total: ₹${totalRupees}*\n\nHow would you like to pay?`;
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText,
+      buttons: [
+        { id: 'btn_cod', title: '💵 Cash on Delivery' },
+        { id: 'btn_online_pay', title: '💳 Pay Online' },
+      ],
+    });
+  }
+
+  await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+}
+
+// ─── COD Order ──────────────────────────────
+
+async function handleCODOrder(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string },
+  conversation: { id: string }
+): Promise<void> {
+  const cart = await getOrCreateCart(restaurant.id, customer.id);
+  if (cart.items.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty!');
+    return;
+  }
+
+  const orderId = await convertCartToOrder(cart, 'delivery', undefined, undefined, 'cod');
+  await updateCustomerOrderStats(customer.id, cart.total);
+
+  const totalRupees = (cart.total / 100).toFixed(0);
+  const reply = `🎉 *Order Placed!*\n\n💵 Payment: Cash on Delivery\n💰 Amount: ₹${totalRupees}\n\nYour order is being prepared! You'll pay ₹${totalRupees} when it arrives.\n\nThank you for ordering from *${restaurant.name}*! 🌿`;
+
+  await sendBotReply(restaurant, customer, conversation, reply);
+
+  logActivity({
+    restaurantId: restaurant.id,
+    actorType: 'customer',
+    actorId: customer.id,
+    action: ACTIONS.ORDER_PLACED,
+    details: { orderId, totalAmount: cart.total, paymentMethod: 'cod' },
+  });
+}
+
+// ─── Online Payment Order ───────────────────
+
+async function handleOnlinePayOrder(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string },
+  conversation: { id: string }
+): Promise<void> {
+  const cart = await getOrCreateCart(restaurant.id, customer.id);
+  if (cart.items.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty!');
+    return;
+  }
+
+  const orderId = await convertCartToOrder(cart, 'delivery', undefined, undefined, 'online');
+  await updateCustomerOrderStats(customer.id, cart.total);
+
+  const totalRupees = (cart.total / 100).toFixed(0);
+
+  // Generate Cashfree payment link
+  const paymentLink = await createBotPaymentLink(
+    restaurant.id,
+    orderId,
+    customer.phone,
+    customer.name || 'Customer',
+    cart.total
+  );
+
+  let reply: string;
+  if (paymentLink) {
+    reply = `🎉 *Order Placed!*\n\n💳 Payment: Online\n💰 Amount: ₹${totalRupees}\n\n👉 Pay securely here:\n${paymentLink}\n\nYour order will be confirmed once payment is received.\n\nThank you for ordering from *${restaurant.name}*! 🌿`;
+  } else {
+    // Fallback if Cashfree isn't configured
+    reply = `🎉 *Order Placed!*\n\n💰 Amount: ₹${totalRupees}\n\n⚠️ Online payment is being set up. Our team will contact you for payment.\n\nThank you for ordering from *${restaurant.name}*! 🌿`;
+  }
+
+  await sendBotReply(restaurant, customer, conversation, reply);
+
+  logActivity({
+    restaurantId: restaurant.id,
+    actorType: 'customer',
+    actorId: customer.id,
+    action: ACTIONS.ORDER_PLACED,
+    details: { orderId, totalAmount: cart.total, paymentMethod: 'online', paymentLink },
+  });
 }
 
 // ─── AI Response Generation ─────────────────
@@ -125,17 +397,31 @@ async function generateAndSendAIResponse(
   }
 
   // Send reply via WhatsApp
-  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
-    await sendTextMessage({
+  // If actions included add_to_cart, append cart buttons
+  const hasCartAction = actions.some((a) => a.type === 'add_to_cart');
+  const hasPlaceOrder = actions.some((a) => a.type === 'place_order');
+
+  if (hasPlaceOrder) {
+    // Order was placed via AI action — show payment choice
+    await sendPaymentChoice(restaurant, customer, conversation);
+    await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
+  } else if (hasCartAction && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    // Item added — show cart buttons
+    await sendReplyButtons({
       phoneNumberId: restaurant.whatsapp_phone_id,
       accessToken: restaurant.whatsapp_token,
       to: customer.phone,
-      text: reply,
+      bodyText: reply,
+      buttons: [
+        { id: 'btn_cart', title: '🛒 View Cart' },
+        { id: 'btn_menu', title: '📋 Add More' },
+        { id: 'btn_place_order', title: '✅ Checkout' },
+      ],
     });
+    await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
+  } else {
+    await sendBotReply(restaurant, customer, conversation, reply);
   }
-
-  // Save bot response
-  await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
 
   // Log activity (fire-and-forget)
   logActivity({
@@ -265,89 +551,35 @@ async function executeAction(
     }
 
     case 'place_order': {
-      const cart = await getOrCreateCart(restaurantId, customerId);
-      if (cart.items.length === 0) return;
-
-      const orderId = await convertCartToOrder(cart);
-      await updateCustomerOrderStats(customerId, cart.total);
-
-      logActivity({
-        restaurantId,
-        actorType: 'customer',
-        actorId: customerId,
-        action: ACTIONS.ORDER_PLACED,
-        details: { orderId, totalAmount: cart.total },
-      });
+      // Don't place order here — redirect to payment choice
+      // The payment choice flow handles the actual order creation
       break;
     }
   }
 }
 
-// ─── Menu Overview ──────────────────────────
+// ─── Utility: Send Bot Text Reply ───────────
 
-async function sendMenuOverview(
-  restaurant: Restaurant,
-  customer: { id: string; phone: string; name?: string },
-  conversation: { id: string }
-): Promise<void> {
-  const menu = await getFullMenu(restaurant.id);
-
-  if (!menu || menu.categories.length === 0) {
-    const reply = `Welcome to ${restaurant.name}! 🌿\n\nOur menu is being set up. Please check back soon!`;
-    if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
-      await sendTextMessage({
-        phoneNumberId: restaurant.whatsapp_phone_id,
-        accessToken: restaurant.whatsapp_token,
-        to: customer.phone,
-        text: reply,
-      });
-    }
-    await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
-    return;
-  }
-
-  // Send welcome + category list
-  const greeting = customer.name ? `Hi ${customer.name}! 👋` : 'Welcome! 👋';
-  const reply = `${greeting} Welcome to *${restaurant.name}*! 🌿\n\nHere's what we have today:\n\n${menu.categories
-    .map((c, i) => `${i + 1}. 📂 *${c.name}* (${c.items.length} items)`)
-    .join('\n')}\n\nJust tell me what you'd like to order, or type a dish name to search! 😋`;
-
-  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
-    await sendTextMessage({
-      phoneNumberId: restaurant.whatsapp_phone_id,
-      accessToken: restaurant.whatsapp_token,
-      to: customer.phone,
-      text: reply,
-    });
-  }
-  await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
-}
-
-// ─── Cart Summary ───────────────────────────
-
-async function sendCartSummary(
+async function sendBotReply(
   restaurant: Restaurant,
   customer: { id: string; phone: string },
-  conversation: { id: string }
+  conversation: { id: string },
+  text: string
 ): Promise<void> {
-  const cart = await getOrCreateCart(restaurant.id, customer.id);
-  const cartText = formatCartForWhatsApp(cart);
-
-  let reply = cartText;
-  if (cart.items.length > 0) {
-    reply += '\n\nReply "place order" to checkout or keep adding items!';
-  }
-
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendTextMessage({
       phoneNumberId: restaurant.whatsapp_phone_id,
       accessToken: restaurant.whatsapp_token,
       to: customer.phone,
-      text: reply,
+      text,
     });
   }
-  await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
+  await saveMessage(conversation.id, restaurant.id, 'bot', text, undefined, { phone: customer.phone });
 }
+
+// ─── Menu Overview (Text Fallback) ──────────
+
+// (handled in sendMenuOverview above with list message)
 
 // ─── Human Handoff ──────────────────────────
 
@@ -360,16 +592,7 @@ async function handleHumanHandoff(
   await setBotActive(conversation.id, false);
 
   const reply = "I'm connecting you with a team member right now. They'll respond shortly! 🙏\n\nIn the meantime, feel free to describe your query.";
-
-  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
-    await sendTextMessage({
-      phoneNumberId: restaurant.whatsapp_phone_id,
-      accessToken: restaurant.whatsapp_token,
-      to: customer.phone,
-      text: reply,
-    });
-  }
-  await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
+  await sendBotReply(restaurant, customer, conversation, reply);
 
   logActivity({
     restaurantId: restaurant.id,
