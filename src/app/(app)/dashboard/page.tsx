@@ -146,7 +146,7 @@ export default async function DashboardPage() {
             </div>
             <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
-          <p className="mt-3 text-2xl font-bold">₹{todayRevenue.toLocaleString("en-IN")}</p>
+          <p className="mt-3 text-2xl font-bold">₹{(todayRevenue / 100).toLocaleString("en-IN")}</p>
           <p className="mt-0.5 text-sm text-muted-foreground">Revenue</p>
         </div>
         <div className="rounded-2xl border border-border/50 bg-card p-5 hover:border-border transition-colors">

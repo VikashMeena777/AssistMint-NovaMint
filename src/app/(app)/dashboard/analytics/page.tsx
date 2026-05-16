@@ -99,7 +99,7 @@ export default function AnalyticsPage() {
           <div className="flex items-center justify-between mb-3">
             <CreditCard className="h-5 w-5 text-primary" />
           </div>
-          <p className="text-2xl font-bold">₹{(stats.todayRevenue || 0).toLocaleString("en-IN")}</p>
+          <p className="text-2xl font-bold">₹{((stats.todayRevenue || 0) / 100).toLocaleString("en-IN")}</p>
           <p className="text-sm text-muted-foreground">Revenue (Today)</p>
           <p className="text-xs text-muted-foreground mt-1">{stats.activeOrders || 0} active orders</p>
         </div>
