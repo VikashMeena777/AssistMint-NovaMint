@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -45,6 +45,21 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [restaurantName, setRestaurantName] = useState("My Restaurant");
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("restaurants")
+        .select("name")
+        .eq("owner_id", user.id)
+        .single();
+      if (data) setRestaurantName((data as Record<string, string>).name);
+    })();
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -115,12 +130,17 @@ export default function DashboardLayout({
 
           <div className="flex-1" />
 
-          {/* Restaurant Selector (placeholder) */}
-          <button className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-            <div className="h-5 w-5 rounded bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">R</div>
-            <span className="font-medium">My Restaurant</span>
+          {/* Restaurant Selector → links to Settings */}
+          <Link
+            href="/dashboard/settings"
+            className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+          >
+            <div className="h-5 w-5 rounded bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
+              {restaurantName.charAt(0).toUpperCase()}
+            </div>
+            <span className="font-medium max-w-[150px] truncate">{restaurantName}</span>
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
+          </Link>
         </header>
 
         {/* Page Content */}

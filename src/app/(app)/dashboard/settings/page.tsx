@@ -81,9 +81,15 @@ export default function SettingsPage() {
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <Store className="h-12 w-12 text-muted-foreground mb-4" />
         <h2 className="text-xl font-semibold">No restaurant found</h2>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-muted-foreground mt-1 mb-4">
           Complete onboarding to set up your restaurant.
         </p>
+        <a
+          href="/onboarding"
+          className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+        >
+          Complete Setup →
+        </a>
       </div>
     );
   }
