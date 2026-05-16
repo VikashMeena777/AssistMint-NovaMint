@@ -75,24 +75,15 @@ export async function GET(req: NextRequest) {
       .update({ status: 'completed' })
       .eq('cashfree_order_id', orderId);
 
-    // Find and update order
-    const { data: payment } = await supabaseAdmin
-      .from('payments')
-      .select('order_id')
-      .eq('cashfree_order_id', orderId)
-      .single();
-
-    if (payment) {
-      const p = payment as Record<string, unknown>;
-      await supabaseAdmin
-        .from('orders')
-        .update({
-          status: 'confirmed',
-          payment_status: 'paid',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', p.order_id as string);
-    }
+    // Update order directly by payment_id (the cfOrderId stored on the order)
+    await supabaseAdmin
+      .from('orders')
+      .update({
+        status: 'confirmed',
+        payment_status: 'paid',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('payment_id', orderId);
 
     return renderPage('success', amountPaid, orderId);
   } else if (paymentStatus === 'pending' || paymentStatus === 'active') {
@@ -222,7 +213,7 @@ function renderPage(status: 'success' | 'pending' | 'failed' | 'error', amount: 
     <h1>${c.title}</h1>
     <p class="message">${c.message}</p>
     ${orderId ? `<p class="order-id">Order: ${orderId}</p>` : ''}
-    <a href="https://wa.me/" class="btn">↩ Back to WhatsApp</a>
+    <a href="https://api.whatsapp.com/" class="btn">↩ Back to WhatsApp</a>
     <p class="footer">Powered by AssistMint</p>
   </div>
 </body>
