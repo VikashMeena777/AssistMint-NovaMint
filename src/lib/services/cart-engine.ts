@@ -306,11 +306,26 @@ export async function convertCartToOrder(
   specialInstructions?: string,
   paymentMethod: 'cod' | 'online' = 'cod'
 ): Promise<string> {
+  // Lookup customer phone from customers table
+  let customerPhone = '';
+  let customerName = '';
+  const { data: cust } = await supabaseAdmin
+    .from('customers')
+    .select('phone, saved_name, whatsapp_name')
+    .eq('id', cart.customer_id)
+    .single();
+  if (cust) {
+    customerPhone = (cust as Record<string, string>).phone || '';
+    customerName = (cust as Record<string, string>).saved_name || (cust as Record<string, string>).whatsapp_name || '';
+  }
+
   const { data: order, error } = await supabaseAdmin
     .from('orders')
     .insert({
       restaurant_id: cart.restaurant_id,
       customer_id: cart.customer_id,
+      customer_phone: customerPhone,
+      customer_name: customerName,
       items: cart.items,
       subtotal: cart.subtotal,
       tax: cart.tax,

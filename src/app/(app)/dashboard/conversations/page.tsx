@@ -112,20 +112,34 @@ export default function ConversationsPage() {
     return () => clearInterval(interval);
   }, [restaurantId, loadConversations]);
 
-  const loadMessages = async (session: ConversationSession) => {
-    setSelectedSession(session);
-    setLoadingMessages(true);
+  const refreshMessages = useCallback(async (phone: string) => {
+    if (!restaurantId) return;
     const supabase = createClient();
     const { data } = await supabase
       .from("conversations")
       .select("*")
-      .eq("restaurant_id", restaurantId!)
-      .eq("customer_phone", session.customer_phone)
+      .eq("restaurant_id", restaurantId)
+      .eq("customer_phone", phone)
       .order("created_at", { ascending: true })
       .limit(100);
     setMessages(data || []);
+  }, [restaurantId]);
+
+  const loadMessages = async (session: ConversationSession) => {
+    setSelectedSession(session);
+    setLoadingMessages(true);
+    await refreshMessages(session.customer_phone);
     setLoadingMessages(false);
   };
+
+  // Auto-refresh selected conversation messages every 10 seconds
+  useEffect(() => {
+    if (!selectedSession) return;
+    const interval = setInterval(() => {
+      refreshMessages(selectedSession.customer_phone);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [selectedSession, refreshMessages]);
 
   const filtered = sessions.filter((s) => {
     if (!search) return true;

@@ -6,7 +6,7 @@
 
 import { generateAIResponse } from '@/lib/ai/engine';
 import { getFullMenu, buildMenuContext, getMenuItemById } from '@/lib/services/menu-service';
-import { getOrCreateCart, addToCart, removeFromCart, clearCart, formatCartForWhatsApp, convertCartToOrder, type CartItem } from '@/lib/services/cart-engine';
+import { getOrCreateCart, addToCart, removeFromCart, clearCart, formatCartForWhatsApp, convertCartToOrder, updateCartItemQuantity, type CartItem } from '@/lib/services/cart-engine';
 import { getOrCreateCustomer, updateCustomerOrderStats } from '@/lib/services/customer-service';
 import { getOrCreateConversation, getRecentMessages, saveMessage, setBotActive } from '@/lib/services/conversation-manager';
 import { getRestaurantByPhoneId, type Restaurant } from '@/lib/services/restaurant-service';
@@ -67,20 +67,50 @@ export async function handleIncomingMessage(params: {
   // 6. Handle special commands
   const lowerText = (text || '').toLowerCase().trim();
 
-  if (lowerText === 'hi' || lowerText === 'hello' || lowerText === 'hey') {
+  if (lowerText === 'hi' || lowerText === 'hello' || lowerText === 'hey' || lowerText === 'start') {
     await sendGreeting(restaurant, customer, conversation);
     return;
   }
-  if (lowerText === 'menu') {
+  if (lowerText === 'menu' || lowerText === 'browse') {
     await sendMenuOverview(restaurant, customer, conversation);
     return;
   }
-  if (lowerText === 'cart') {
+  if (lowerText === 'cart' || lowerText === 'my cart') {
     await sendCartSummary(restaurant, customer, conversation);
     return;
   }
-  if (lowerText === 'agent' || lowerText === 'human') {
+  if (lowerText === 'checkout' || lowerText === 'order' || lowerText === 'place order') {
+    await askForDeliveryAddress(restaurant, customer, conversation);
+    return;
+  }
+  if (lowerText === 'agent' || lowerText === 'human' || lowerText === 'help') {
     await handleHumanHandoff(restaurant, customer, conversation);
+    return;
+  }
+
+  // 6.5 Check if bot asked for delivery address — treat this text as the address
+  const recentMsgs = await getRecentMessages(conversation.id);
+  const lastBotMsg = [...recentMsgs].reverse().find((m) => m.role === 'assistant');
+  if (lastBotMsg && lastBotMsg.content.includes('delivery address')) {
+    // User replied with their address — save and proceed to payment
+    const address = text || '';
+    await sendBotReply(restaurant, customer, conversation, `📍 *Delivery Address saved:*\n${address}\n\nProceeding to payment...`);
+    // Store address in conversation metadata for order creation
+    const cart = await getOrCreateCart(restaurant.id, customer.id);
+    if (cart.items.length > 0) {
+      // Update cart metadata with address
+      const { createClient: createAdmin } = await import('@supabase/supabase-js');
+      const supabaseAdmin = createAdmin(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { auth: { persistSession: false } }
+      );
+      await supabaseAdmin
+        .from('cart_sessions')
+        .update({ metadata: { delivery_address: address } })
+        .eq('id', cart.id);
+    }
+    await sendPaymentChoice(restaurant, customer, conversation);
     return;
   }
 
@@ -112,7 +142,7 @@ async function handleInteractiveReply(
       break;
 
     case 'btn_place_order':
-      await sendPaymentChoice(restaurant, customer, conversation);
+      await askForDeliveryAddress(restaurant, customer, conversation);
       break;
 
     case 'btn_clear_cart':
@@ -128,12 +158,20 @@ async function handleInteractiveReply(
       await handleOnlinePayOrder(restaurant, customer, conversation);
       break;
 
+    case 'btn_skip_address':
+      await sendPaymentChoice(restaurant, customer, conversation);
+      break;
+
     default:
-      // Handle dynamic IDs: item_uuid, add_uuid
+      // Handle dynamic IDs: item_uuid, add_uuid, inc_uuid, dec_uuid
       if (btnId.startsWith('item_')) {
         await sendItemDetails(restaurant, customer, conversation, btnId.replace('item_', ''));
       } else if (btnId.startsWith('add_')) {
         await handleDirectAddToCart(restaurant, customer, conversation, btnId.replace('add_', ''));
+      } else if (btnId.startsWith('inc_')) {
+        await handleCartIncrement(restaurant, customer, conversation, btnId.replace('inc_', ''));
+      } else if (btnId.startsWith('dec_')) {
+        await handleCartDecrement(restaurant, customer, conversation, btnId.replace('dec_', ''));
       } else {
         await generateAndSendAIResponse(restaurant, customer, conversation, reply.title);
       }
@@ -312,24 +350,124 @@ async function sendCartSummary(
   conversation: { id: string }
 ): Promise<void> {
   const cart = await getOrCreateCart(restaurant.id, customer.id);
-  const cartText = formatCartForWhatsApp(cart);
 
-  if (cart.items.length > 0 && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
-    await sendReplyButtons({
+  if (cart.items.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty!\n\nBrowse the menu to add delicious items.');
+    return;
+  }
+
+  // Build rich itemized cart
+  const itemLines = cart.items.map((i, idx) => {
+    const total = ((i.unit_price * i.quantity) / 100).toFixed(0);
+    return `${idx + 1}. ${i.item_name} × ${i.quantity} — ₹${total}`;
+  }).join('\n');
+
+  const subtotalR = (cart.subtotal / 100).toFixed(0);
+  const deliveryR = (cart.delivery_fee / 100).toFixed(0);
+  const taxR = (cart.tax / 100).toFixed(0);
+  const totalR = (cart.total / 100).toFixed(0);
+
+  const cartText = `🛒 *Your Cart*\n\n${itemLines}\n\n━━━━━━━━━━━━━━━━\n📦 Subtotal: ₹${subtotalR}\n🚗 Delivery: ₹${deliveryR}\n📋 Tax: ₹${taxR}\n━━━━━━━━━━━━━━━━\n💰 *Total: ₹${totalR}*`;
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    // Build list sections for editing cart
+    const editRows = cart.items.flatMap((i) => [
+      { id: `inc_${i.item_id}`, title: `➕ Add 1 ${i.item_name.substring(0, 18)}`, description: `Current: ${i.quantity}` },
+      { id: `dec_${i.item_id}`, title: `➖ Remove 1 ${i.item_name.substring(0, 15)}`, description: i.quantity === 1 ? 'Removes from cart' : `Current: ${i.quantity}` },
+    ]);
+
+    const sections: ListSection[] = [
+      { title: '📝 Edit Items', rows: editRows.slice(0, 8) },
+      { title: '⚡ Actions', rows: [
+        { id: 'btn_place_order', title: '✅ Place Order', description: `Total: ₹${totalR}` },
+        { id: 'btn_clear_cart', title: '🗑 Clear Cart', description: 'Remove all items' },
+        { id: 'btn_menu', title: '📋 Add More Items', description: 'Browse menu' },
+      ]},
+    ];
+
+    await sendListMessage({
       phoneNumberId: restaurant.whatsapp_phone_id,
       accessToken: restaurant.whatsapp_token,
       to: customer.phone,
+      headerText: '🛒 Your Cart',
       bodyText: cartText,
-      buttons: [
-        { id: 'btn_place_order', title: '✅ Place Order' },
-        { id: 'btn_clear_cart', title: '🗑 Clear Cart' },
-        { id: 'btn_menu', title: '📋 Add More' },
-      ],
+      buttonText: '📝 Edit / Checkout',
+      sections,
     });
     await saveMessage(conversation.id, restaurant.id, 'bot', cartText, undefined, { phone: customer.phone });
   } else {
     await sendBotReply(restaurant, customer, conversation, cartText);
   }
+}
+
+// ─── Delivery Address Collection ────────────
+
+async function askForDeliveryAddress(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string }
+): Promise<void> {
+  const cart = await getOrCreateCart(restaurant.id, customer.id);
+  if (cart.items.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty!');
+    return;
+  }
+
+  const bodyText = '📍 *Where should we deliver your order?*\n\nPlease type your full delivery address below, or choose pickup.';
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText,
+      buttons: [
+        { id: 'btn_skip_address', title: '🏪 Pickup Instead' },
+      ],
+    });
+  }
+  await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+}
+
+// ─── Cart Increment/Decrement ───────────────
+
+async function handleCartIncrement(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string },
+  itemId: string
+): Promise<void> {
+  const cart = await getOrCreateCart(restaurant.id, customer.id);
+  const item = cart.items.find((i) => i.item_id === itemId);
+  if (!item) {
+    await sendBotReply(restaurant, customer, conversation, '❌ Item not found in cart.');
+    return;
+  }
+  await updateCartItemQuantity(cart.id, itemId, item.quantity + 1);
+  await sendBotReply(restaurant, customer, conversation, `➕ *${item.item_name}* quantity updated to ${item.quantity + 1}`);
+  await sendCartSummary(restaurant, customer, conversation);
+}
+
+async function handleCartDecrement(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string },
+  itemId: string
+): Promise<void> {
+  const cart = await getOrCreateCart(restaurant.id, customer.id);
+  const item = cart.items.find((i) => i.item_id === itemId);
+  if (!item) {
+    await sendBotReply(restaurant, customer, conversation, '❌ Item not found in cart.');
+    return;
+  }
+  if (item.quantity <= 1) {
+    await removeFromCart(cart.id, itemId);
+    await sendBotReply(restaurant, customer, conversation, `🗑 *${item.item_name}* removed from cart.`);
+  } else {
+    await updateCartItemQuantity(cart.id, itemId, item.quantity - 1);
+    await sendBotReply(restaurant, customer, conversation, `➖ *${item.item_name}* quantity updated to ${item.quantity - 1}`);
+  }
+  await sendCartSummary(restaurant, customer, conversation);
 }
 
 // ─── Payment Choice ─────────────────────────
