@@ -102,11 +102,8 @@ export default function MenuPage() {
     let imageUrl: string | undefined;
     if (imageFile) {
       try {
-        const { createClient } = await import("@supabase/supabase-js");
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-        );
+        const { createClient: createBrowserSupabase } = await import("@/lib/supabase/client");
+        const supabase = createBrowserSupabase();
         const ext = imageFile.name.split(".").pop();
         const fileName = `${restaurantId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
         const { error: uploadError } = await supabase.storage
