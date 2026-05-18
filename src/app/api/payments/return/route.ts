@@ -112,11 +112,11 @@ async function sendPaymentConfirmationWhatsApp(cfOrderId: string, amount: string
   // Get restaurant WhatsApp credentials
   const { data: restaurant } = await supabaseAdmin
     .from('restaurants')
-    .select('name, whatsapp_phone_id, whatsapp_token')
+    .select('name, whatsapp_phone_id, whatsapp_access_token')
     .eq('id', order.restaurant_id)
     .single();
 
-  if (!restaurant?.whatsapp_phone_id || !restaurant?.whatsapp_token) return;
+  if (!restaurant?.whatsapp_phone_id || !restaurant?.whatsapp_access_token) return;
 
   const phone = order.customer_phone;
   if (!phone) return;
@@ -128,7 +128,7 @@ async function sendPaymentConfirmationWhatsApp(cfOrderId: string, amount: string
     await fetch(`https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${restaurant.whatsapp_token}`,
+        Authorization: `Bearer ${restaurant.whatsapp_access_token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
