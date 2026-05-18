@@ -128,13 +128,13 @@ export async function handleIncomingMessage(params: {
   if (lowerText === 'hindi' || lowerText === 'हिंदी') {
     await setCustomerLanguage(customer.id, 'hi');
     customer.language_preference = 'hi';
-    await sendBotReply(restaurant, customer, conversation, '✅ भाषा हिंदी में बदल दी गई है! 🇮🇳\n\nअब मैं आपसे हिंदी में बात करूँगा। मेनू देखने के लिए *menu* भेजें।');
+    await sendBotReply(restaurant, customer, conversation, '✅ भाषा हिंदी में बदल दी गई है! 🇮🇳\nमेनू देखने के लिए *menu* भेजें।');
     return;
   }
   if (lowerText === 'english') {
     await setCustomerLanguage(customer.id, 'en');
     customer.language_preference = 'en';
-    await sendBotReply(restaurant, customer, conversation, '✅ Language switched to English! 🇬🇧\n\nSend *menu* to browse our menu.');
+    await sendBotReply(restaurant, customer, conversation, '✅ Language switched to English! 🇬🇧\nSend *menu* to browse our menu.');
     return;
   }
 
@@ -145,7 +145,7 @@ export async function handleIncomingMessage(params: {
     // User replied with their address — save and proceed to payment
     const address = text || '';
     await addSavedAddress(customer.id, address);
-    await sendBotReply(restaurant, customer, conversation, `📍 *Delivery Address saved:*\n${address}\n\nProceeding to payment...`);
+    await sendBotReply(restaurant, customer, conversation, `📍 *Address saved:* ${address}`);
     // Store address in conversation metadata for order creation
     const cart = await getOrCreateCart(restaurant.id, customer.id);
     if (cart.items.length > 0) {
@@ -226,7 +226,7 @@ async function handleLocationMessage(
 
     // Confirm and proceed to payment
     await sendBotReply(restaurant, customer, conversation,
-      `📍 *Delivery Location Set!*\n\n${addressStr}\n\n${formatCartForWhatsApp(cart)}`
+      `📍 *Delivery location set!*\n${addressStr}`
     );
 
     // Show payment options
@@ -243,7 +243,7 @@ async function handleLocationMessage(
   } else {
     // No items in cart — just save the address
     await sendBotReply(restaurant, customer, conversation,
-      `📍 *Location saved!*\n\n${addressStr}\n\nYour address has been saved for future orders. Browse our menu to start ordering! 🍽️`
+      `📍 *Location saved!*\n${addressStr}\nSend *menu* to start ordering 🍽️`
     );
   }
 }
@@ -309,7 +309,7 @@ async function handleInteractiveReply(
       break;
 
     case 'btn_location':
-      await sendBotReply(restaurant, customer, conversation, '📍 Please share your *live location* by tapping the 📎 attachment icon → Location → Share Live Location.\n\nThis helps us deliver your order faster!');
+      await sendBotReply(restaurant, customer, conversation, '📍 Share your *live location* by tapping 📎 → Location.\nThis helps us deliver faster!');
       break;
 
     default:
@@ -328,13 +328,15 @@ async function handleInteractiveReply(
         const rating = parseInt(parts[0]);
         const orderId = parts.slice(1).join('_');
         await saveOrderRating(orderId, rating);
-        const ratingMsg = rating >= 4 ? '🎉 Thank you for the amazing rating!' : '🙏 Thank you for your feedback. We\'ll work to improve!';
-        await sendBotReply(restaurant, customer, conversation, `${ratingMsg}\n\n⭐ You rated: ${rating}/5`);
+        const ratingMsg = rating >= 4
+          ? `${'\u2b50'.repeat(rating)} Thank you! We're glad you loved it \ud83c\udf89`
+          : `${'\u2b50'.repeat(rating)} Thanks for the honest feedback \u2014 we'll do better next time \ud83d\ude4f`;
+        await sendBotReply(restaurant, customer, conversation, ratingMsg);
       } else if (btnId.startsWith('addr_')) {
         const idx = parseInt(btnId.replace('addr_', ''));
         const addresses = await getSavedAddresses(customer.id);
         if (addresses[idx]) {
-          await sendBotReply(restaurant, customer, conversation, `📍 *Delivery Address:*\n${addresses[idx]}\n\nProceeding to payment...`);
+          await sendBotReply(restaurant, customer, conversation, `📍 *Address:* ${addresses[idx]}`);
           const cart = await getOrCreateCart(restaurant.id, customer.id);
           if (cart.items.length > 0) {
             const { createClient: createAdmin } = await import('@supabase/supabase-js');
@@ -371,9 +373,9 @@ async function sendItemDetails(
   const priceRupees = (item.price / 100).toFixed(0);
   const veg = item.is_veg ? '🟢 Veg' : '🔴 Non-Veg';
   const star = item.is_bestseller ? ' ⭐ Bestseller' : '';
-  const desc = item.description ? `\n\n${item.description}` : '';
+  const desc = item.description ? `\n${item.description}` : '';
 
-  const bodyText = `*${item.name}*${star}\n${veg} · ₹${priceRupees}${desc}\n\n⏱ Ready in ~${item.prep_time_minutes} mins`;
+  const bodyText = `*${item.name}*${star}\n${veg} \u00b7 \u20b9${priceRupees}${desc}\n\u23f1 ~${item.prep_time_minutes || 15} mins`;
 
   // Send image first if available
   if (item.image_url && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
@@ -432,7 +434,7 @@ async function handleDirectAddToCart(
   const itemCount = updatedCart.items.reduce((sum, i) => sum + i.quantity, 0);
   const totalRupees = (updatedCart.total / 100).toFixed(0);
 
-  const bodyText = `✅ *Added to cart!*\n\n${item.name} — ₹${priceRupees}\n\n🛒 Cart: ${itemCount} item${itemCount > 1 ? 's' : ''} · ₹${totalRupees}`;
+  const bodyText = `\u2705 *${item.name}* added! (\u20b9${priceRupees})\n\ud83d\uded2 ${itemCount} item${itemCount > 1 ? 's' : ''} \u00b7 Total: \u20b9${totalRupees}`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendReplyButtons({
@@ -462,11 +464,11 @@ async function sendGreeting(
   
   let bodyText: string;
   if (isHindi) {
-    const greeting = customer.name ? `नमस्ते ${customer.name}! 👋` : 'नमस्ते! 👋';
-    bodyText = `${greeting}\n\n*${restaurant.name}* में आपका स्वागत है! 🌿\n\nमैं आपका AI असिस्टेंट हूँ — मेनू देखने, ऑर्डर करने, और बहुत कुछ में मदद कर सकता हूँ!\n\nआप क्या करना चाहेंगे?`;
+    const greeting = customer.name ? `\u0928\u092e\u0938\u094d\u0924\u0947 ${customer.name}! \ud83d\udc4b` : '\u0928\u092e\u0938\u094d\u0924\u0947! \ud83d\udc4b';
+    bodyText = `${greeting}\n*${restaurant.name}* \u092e\u0947\u0902 \u0938\u094d\u0935\u093e\u0917\u0924 \u0939\u0948 \ud83c\udf3f\n\u092e\u0948\u0902 \u0906\u092a\u0915\u093e \u0911\u0930\u094d\u0921\u0930\u093f\u0902\u0917 \u0905\u0938\u093f\u0938\u094d\u091f\u0947\u0902\u091f \u0939\u0942\u0901 \u2014 \u0915\u094d\u092f\u093e \u0915\u0930\u0928\u093e \u091a\u093e\u0939\u0947\u0902\u0917\u0947?`;
   } else {
-    const greeting = customer.name ? `Hi ${customer.name}! 👋` : 'Hi there! 👋';
-    bodyText = `${greeting}\n\nWelcome${isReturning ? ' back' : ''} to *${restaurant.name}*! 🌿\n\nI'm your AI assistant — I can help you browse our menu, take your order, and more!\n\nWhat would you like to do?`;
+    const greeting = customer.name ? `Hi ${customer.name}! \ud83d\udc4b` : 'Hey there! \ud83d\udc4b';
+    bodyText = `${greeting}\nWelcome${isReturning ? ' back' : ''} to *${restaurant.name}* \ud83c\udf3f\nI'm your ordering assistant \u2014 what can I get you?`;
   }
 
   const buttons = isReturning
@@ -506,7 +508,7 @@ async function sendMenuOverview(
 
   if (!menu || menu.categories.length === 0) {
     await sendBotReply(restaurant, customer, conversation,
-      `Welcome to ${restaurant.name}! 🌿\n\nOur menu is being set up. Please check back soon!`);
+      `Welcome to ${restaurant.name}! 🌿\nOur menu is being set up — check back soon!`);
     return;
   }
 
@@ -543,8 +545,8 @@ async function sendMenuOverview(
   const filterLabel = dietaryFilter === 'veg' ? ' (🟢 Veg Only)' : dietaryFilter === 'nonveg' ? ' (🔴 Non-Veg)' : dietaryFilter === 'bestseller' ? ' (⭐ Bestsellers)' : '';
   const isHindi = customer.language_preference === 'hi';
   const bodyText = isHindi
-    ? `हमारा मेनू देखें${filterLabel}! 🍽️\n\nआइटम चुनें और ऑर्डर करें।\n\n📝 सर्च करें: *search पनीर* भेजें\n🟢 वेज: *veg* | 🔴 नॉन-वेज: *nonveg*`
-    : `Here's our menu${filterLabel}! 🍽️\n\nTap below to browse and order.\n\n📝 Search: *search paneer*\n🟢 Veg only: *veg* | 🔴 Non-veg: *nonveg*\n⭐ Popular: *bestsellers*`;
+    ? `हमारा मेनू${filterLabel} 🍽️\nनीचे टैप करें और ऑर्डर करें`
+    : `Our menu${filterLabel} 🍽️\nTap below to browse and order.`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     try {
@@ -563,10 +565,10 @@ async function sendMenuOverview(
       console.warn('[Orchestrator] List message failed, falling back to text:', e);
       const textMenu = filteredMenu.categories
         .map((c) => `📂 *${c.name}*\n${c.items.map((i) => `  • ${i.name} — ₹${(i.price / 100).toFixed(0)}${i.is_veg ? ' 🟢' : ' 🔴'}${i.is_bestseller ? ' ⭐' : ''}`).join('\n')}`)
-        .join('\n\n');
+        .join('\n');
 
       await sendBotReply(restaurant, customer, conversation,
-        `Here's our menu${filterLabel}! 🍽️\n\n${textMenu}\n\nJust tell me what you'd like to order!`);
+        `Our menu${filterLabel} 🍽️\n${textMenu}\nTell me what you'd like to order!`);
       return;
     }
   }
@@ -584,7 +586,7 @@ async function sendCartSummary(
   const cart = await getOrCreateCart(restaurant.id, customer.id);
 
   if (cart.items.length === 0) {
-    await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty!\n\nBrowse the menu to add delicious items.');
+    await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty!\nSend *menu* to start adding items.');
     return;
   }
 
@@ -599,7 +601,10 @@ async function sendCartSummary(
   const taxR = (cart.tax / 100).toFixed(0);
   const totalR = (cart.total / 100).toFixed(0);
 
-  const cartText = `🛒 *Your Cart*\n\n${itemLines}\n\n━━━━━━━━━━━━━━━━\n📦 Subtotal: ₹${subtotalR}\n🚗 Delivery: ₹${deliveryR}\n📋 Tax: ₹${taxR}\n━━━━━━━━━━━━━━━━\n💰 *Total: ₹${totalR}*`;
+  let cartText = `🛒 *Your Cart*\n${itemLines}\n— — — — — —\nSubtotal: ₹${subtotalR}`;
+  if (parseInt(taxR) > 0) cartText += `\nTax: ₹${taxR}`;
+  if (parseInt(deliveryR) > 0) cartText += `\n🚚 Delivery: ₹${deliveryR}`;
+  cartText += `\n*Total: ₹${totalR}*`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     // Build list sections for editing cart
@@ -641,7 +646,7 @@ async function askForDeliveryAddress(
 ): Promise<void> {
   const cart = await getOrCreateCart(restaurant.id, customer.id);
   if (cart.items.length === 0) {
-    await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty!');
+    await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to browse.');
     return;
   }
 
@@ -666,13 +671,13 @@ async function askForDeliveryAddress(
       accessToken: restaurant.whatsapp_token,
       to: customer.phone,
       headerText: 'Delivery Address',
-      bodyText: '📍 *Where should we deliver?*\n\nSelect a saved address, or type a new one below.',
+      bodyText: '📍 *Where should we deliver?*\nSelect a saved address or type a new one.',
       buttonText: '📍 Choose Address',
       sections,
     });
     await saveMessage(conversation.id, restaurant.id, 'bot', 'Choose delivery address or type new one', undefined, { phone: customer.phone });
   } else {
-    const bodyText = '📍 *Where should we deliver your order?*\n\nPlease type your full delivery address below, or choose pickup.';
+    const bodyText = '📍 *Where should we deliver?*\nType your address or share your location.';
     if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
       await sendReplyButtons({
         phoneNumberId: restaurant.whatsapp_phone_id,
@@ -704,7 +709,6 @@ async function handleCartIncrement(
     return;
   }
   await updateCartItemQuantity(cart.id, itemId, item.quantity + 1);
-  await sendBotReply(restaurant, customer, conversation, `➕ *${item.item_name}* quantity updated to ${item.quantity + 1}`);
   await sendCartSummary(restaurant, customer, conversation);
 }
 
@@ -722,10 +726,10 @@ async function handleCartDecrement(
   }
   if (item.quantity <= 1) {
     await removeFromCart(cart.id, itemId);
-    await sendBotReply(restaurant, customer, conversation, `🗑 *${item.item_name}* removed from cart.`);
+    // Shows updated cart below
   } else {
     await updateCartItemQuantity(cart.id, itemId, item.quantity - 1);
-    await sendBotReply(restaurant, customer, conversation, `➖ *${item.item_name}* quantity updated to ${item.quantity - 1}`);
+    // Shows updated cart below
   }
   await sendCartSummary(restaurant, customer, conversation);
 }
@@ -740,8 +744,7 @@ async function sendPaymentChoice(
   const cart = await getOrCreateCart(restaurant.id, customer.id);
 
   if (cart.items.length === 0) {
-    await sendBotReply(restaurant, customer, conversation,
-      '🛒 Your cart is empty! Browse the menu to add items first.');
+    await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to add items.');
     return;
   }
 
@@ -756,7 +759,10 @@ async function sendPaymentChoice(
     return `• ${i.item_name} × ${i.quantity} — ₹${itemTotal}`;
   }).join('\n');
 
-  const bodyText = `🧾 *Order Summary*\n\n${itemLines}\n\n━━━━━━━━━━━━━━━━\n📦 Subtotal: ₹${subtotalRupees}\n🚗 Delivery: ₹${deliveryRupees}\n📋 Tax (5%): ₹${taxRupees}\n━━━━━━━━━━━━━━━━\n💰 *Total: ₹${totalRupees}*\n\nHow would you like to pay?`;
+  let bodyText = `🧾 *Order Summary*\n${itemLines}\n— — — — — —\nSubtotal: ₹${subtotalRupees}`;
+  if (parseInt(taxRupees) > 0) bodyText += `\nTax: ₹${taxRupees}`;
+  if (parseInt(deliveryRupees) > 0) bodyText += `\n🚚 Delivery: ₹${deliveryRupees}`;
+  bodyText += `\n*Total: ₹${totalRupees}*\nHow would you like to pay?`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendReplyButtons({
@@ -783,7 +789,7 @@ async function handleCODOrder(
 ): Promise<void> {
   const cart = await getOrCreateCart(restaurant.id, customer.id);
   if (cart.items.length === 0) {
-    await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty!');
+    await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to add items.');
     return;
   }
 
@@ -792,7 +798,7 @@ async function handleCODOrder(
 
   const totalRupees = (cart.total / 100).toFixed(0);
   const estimatedTime = getEstimatedDeliveryTime(cart.items.length, 'delivery');
-  const reply = `🎉 *Order Placed!*\n\n💵 Payment: Cash on Delivery\n💰 Amount: ₹${totalRupees}\n⏱️ Estimated: *${estimatedTime}*\n\nYour order is being prepared! You'll pay ₹${totalRupees} when it arrives.\n\nThank you for ordering from *${restaurant.name}*! 🌿`;
+  const reply = `🎉 *Order Confirmed!*\n💵 Pay ₹${totalRupees} on delivery\n⏱️ Ready in *${estimatedTime}*\nThank you for ordering from *${restaurant.name}*! 🌿`;
 
   await sendBotReply(restaurant, customer, conversation, reply);
 
@@ -819,7 +825,7 @@ async function handleOnlinePayOrder(
 ): Promise<void> {
   const cart = await getOrCreateCart(restaurant.id, customer.id);
   if (cart.items.length === 0) {
-    await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty!');
+    await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to add items.');
     return;
   }
 
@@ -840,9 +846,9 @@ async function handleOnlinePayOrder(
 
   let reply: string;
   if (paymentLink) {
-    reply = `🎉 *Order Placed!*\n\n💳 Payment: Online\n💰 Amount: ₹${totalRupees}\n⏱️ Estimated: *${estimatedTime}*\n\n👉 Pay securely here:\n${paymentLink}\n\nYour order will be confirmed once payment is received.\n\nThank you for ordering from *${restaurant.name}*! 🌿`;
+    reply = `🎉 *Order Confirmed!*\n💳 Amount: ₹${totalRupees} · ⏱️ *${estimatedTime}*\n👉 Pay here: ${paymentLink}\nThank you, *${restaurant.name}*! 🌿`;
   } else {
-    reply = `🎉 *Order Placed!*\n\n💰 Amount: ₹${totalRupees}\n⏱️ Estimated: *${estimatedTime}*\n\n⚠️ Online payment is being set up. Our team will contact you for payment.\n\nThank you for ordering from *${restaurant.name}*! 🌿`;
+    reply = `🎉 *Order Confirmed!*\n💰 Amount: ₹${totalRupees}\n⏱️ Ready in *${estimatedTime}*\n⚠️ Our team will contact you for payment.\nThank you! 🌿`;
   }
 
   await sendBotReply(restaurant, customer, conversation, reply);
@@ -890,7 +896,7 @@ async function generateAndSendAIResponse(
       ...history,
       { role: 'user', content: userMessage },
     ],
-    maxOutputTokens: 512,
+    maxOutputTokens: 256,
     temperature: 0.7,
   });
 
@@ -957,18 +963,20 @@ You are the premium AI concierge for "${restaurant.name}" on WhatsApp. You provi
 
 ## YOUR PERSONALITY:
 - Professional yet warm. Like a 5-star restaurant host.
-- Keep responses SHORT (2-4 lines max). No walls of text.
-- Use bold (*text*) for emphasis. Use emojis tastefully (1-2 per message).
+- MAXIMUM 2 lines per response. Never exceed 3 lines. No paragraphs. No walls of text.
+- Use bold (*text*) for item names and totals only. Use 1 emoji per message max.
 - Speak naturally. Never say "I am an AI" or "as an AI assistant".
+- Never use double line breaks. Use single \\n only.
+- Do NOT list multiple items unprompted. Suggest one thing at a time.
 ${langInstruction}
 
 ## STRICT RULES:
 1. ALL prices are in ₹ (Indian Rupees). Menu prices are in paise — ALWAYS divide by 100 when showing to customer.
 2. NEVER invent menu items. Only recommend what's in the MENU section below.
-3. If customer asks for something not on the menu, say "That's not on our menu right now" and suggest similar items.
-4. For complaints or complex issues, say: "Let me connect you with our team — just type *agent*"
+3. If customer asks for something not on the menu, say "That's not on our menu right now" and suggest ONE similar item.
+4. For complaints or complex issues, say: "Let me connect you with our team — type *agent*"
 5. Minimum order: ₹${(restaurant.min_order_amount / 100).toFixed(0)}
-6. Keep responses conversational, not listy.
+6. Keep responses conversational. Never use bullet points or numbered lists.
 
 ## CUSTOMER:
 ${customer.name ? `Name: ${customer.name}` : 'New customer'}${customer.total_orders > 0 ? ` · ${customer.total_orders} previous orders · ${customer.loyalty_tier} tier` : ''}
@@ -1131,7 +1139,7 @@ async function handleHumanHandoff(
   // Deactivate bot for this conversation
   await setBotActive(conversation.id, false);
 
-  const reply = "I'm connecting you with a team member right now. They'll respond shortly! 🙏\n\nIn the meantime, feel free to describe your query.";
+  const reply = "Connecting you with our team now 🙏\nThey'll respond shortly — feel free to describe your query.";
   await sendBotReply(restaurant, customer, conversation, reply);
 
   logActivity({
@@ -1151,7 +1159,7 @@ async function sendSearchResults(
   query: string
 ): Promise<void> {
   if (!query || query.length < 2) {
-    await sendBotReply(restaurant, customer, conversation, '🔍 Please type *search [item name]* to find menu items.\n\nExample: *search paneer*');
+    await sendBotReply(restaurant, customer, conversation, '🔍 Type *search [item name]* to find items.\nExample: *search paneer*');
     return;
   }
 
@@ -1172,7 +1180,7 @@ async function sendSearchResults(
     })),
   }];
 
-  const bodyText = `🔍 Found ${results.length} item${results.length > 1 ? 's' : ''} matching *"${query}"*\n\nTap to view details and add to cart.`;
+  const bodyText = `🔍 ${results.length} result${results.length > 1 ? 's' : ''} for *"${query}"*\nTap to view details and add to cart.`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     try {
@@ -1188,7 +1196,7 @@ async function sendSearchResults(
     } catch {
       // Fallback to text
       const textResults = results.slice(0, 5).map((i) => `• ${i.name} — ₹${(i.price / 100).toFixed(0)}${i.is_veg ? ' 🟢' : ' 🔴'}`).join('\n');
-      await sendBotReply(restaurant, customer, conversation, `🔍 Results for "${query}":\n\n${textResults}\n\nTell me which one you'd like to add!`);
+      await sendBotReply(restaurant, customer, conversation, `🔍 Results for "${query}":\n${textResults}\nWhich one would you like?`);
       return;
     }
   }
@@ -1205,7 +1213,7 @@ async function sendOrderHistory(
   const orders = await getCustomerOrders(customer.id, 5);
 
   if (orders.length === 0) {
-    await sendBotReply(restaurant, customer, conversation, '📦 No order history yet!\n\nSend *menu* to place your first order. 🎉');
+    await sendBotReply(restaurant, customer, conversation, '📦 No order history yet!\nSend *menu* to place your first order 🎉');
     return;
   }
 
@@ -1216,9 +1224,9 @@ async function sendOrderHistory(
     const rating = o.rating ? `⭐${o.rating}` : '';
     const items = (o.items as Array<Record<string, unknown>> || []).map((i) => i.item_name).join(', ');
     return `${idx + 1}. *#${o.order_number || 'N/A'}* — ${date}\n   ₹${total} · ${status} ${rating}\n   ${items.substring(0, 60)}`;
-  }).join('\n\n');
+  }).join('\n');
 
-  const bodyText = `📦 *Your Recent Orders*\n\n${orderLines}\n\n💡 Send *reorder* to repeat your last order!`;
+  const bodyText = `📦 *Recent Orders*\n${orderLines}\n💡 Send *reorder* to repeat your last order!`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendReplyButtons({
@@ -1245,7 +1253,7 @@ async function handleReorder(
   const orders = await getCustomerOrders(customer.id, 1);
 
   if (orders.length === 0) {
-    await sendBotReply(restaurant, customer, conversation, '📦 No previous orders to reorder!\n\nSend *menu* to place your first order.');
+    await sendBotReply(restaurant, customer, conversation, '📦 No previous orders found.\nSend *menu* to place your first order!');
     return;
   }
 
@@ -1282,7 +1290,7 @@ async function handleReorder(
     return;
   }
 
-  const bodyText = `🔄 *Reorder Ready!*\n\n${addedCount} item${addedCount > 1 ? 's' : ''} from your last order have been added to cart.\n\nReview your cart or proceed to checkout!`;
+  const bodyText = `🔄 *Reorder Ready!*\n${addedCount} item${addedCount > 1 ? 's' : ''} from your last order added to cart.\nReview or checkout below!`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendReplyButtons({
@@ -1309,7 +1317,7 @@ export async function sendFeedbackRequest(
 ): Promise<void> {
   if (!restaurant.whatsapp_token || !restaurant.whatsapp_phone_id) return;
 
-  const bodyText = `🎉 *Your order has been delivered!*\n\nHow was your experience? Rate us:\n\n⭐ Your feedback helps us serve you better!`;
+  const bodyText = `🎉 *Order delivered!*\nHow was your experience? Tap to rate below.`;
 
   try {
     await sendReplyButtons({
@@ -1357,7 +1365,7 @@ export async function sendOrderReceipt(
         phoneNumberId: restaurant.whatsapp_phone_id,
         accessToken: restaurant.whatsapp_token,
         to: customerPhone,
-        text: `🧾 *Your Receipt*\n\nDownload your invoice here:\n${receiptUrl}\n\nThank you for ordering from ${restaurant.name}! 🙏`,
+        text: `🧾 *Your Receipt*\nDownload here: ${receiptUrl}\nThank you! 🙏`,
       });
     } catch {
       console.error('[Orchestrator] Receipt delivery failed completely');
@@ -1407,10 +1415,10 @@ async function sendComboSuggestions(
         const comboRupees = ((c.combo_price as number) / 100).toFixed(0);
         const savings = (((c.original_price as number) - (c.combo_price as number)) / 100).toFixed(0);
         return `🔥 *${c.name}* — ₹${comboRupees} ~~₹${originalRupees}~~ (Save ₹${savings})\n   ${c.description || ''}`;
-      }).join('\n\n');
+      }).join('\n');
 
       await sendBotReply(restaurant, customer, conversation,
-        `🎯 *Combo Deals for You!*\n\n${comboLines}\n\nJust type the combo name to add it!`
+        `🎯 *Combo Deals!*\n${comboLines}\nType the combo name to add it!`
       );
       return;
     }
@@ -1451,7 +1459,7 @@ async function sendComboSuggestions(
       .join('\n');
 
     await sendBotReply(restaurant, customer, conversation,
-      `💡 *Goes great with your order:*\n\n${suggestionText}\n\nJust type the item name to add!`
+      `💡 *Goes great with your order:*\n${suggestionText}\nType the item name to add!`
     );
   } catch (e) {
     console.warn('[Orchestrator] Combo suggestion failed:', e);

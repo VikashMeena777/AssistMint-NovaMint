@@ -307,14 +307,12 @@ export function formatCartForWhatsApp(cart: Cart): string {
     return '🛒 Your cart is empty! Browse our menu to add items.';
   }
 
-  let text = '🛒 *Your Cart*\n━━━━━━━━━━━━━━━\n';
+  let text = '🛒 *Your Cart*\n';
 
   cart.items.forEach((item, i) => {
     const price = (item.unit_price * item.quantity) / 100;
     const variant = item.variant_name ? ` (${item.variant_name})` : '';
-    text += `${i + 1}. ${item.item_name}${variant}\n`;
-    text += `   ${item.quantity}x ₹${(item.unit_price / 100).toFixed(0)} = ₹${price.toFixed(0)}\n`;
-
+    text += `${i + 1}. ${item.item_name}${variant} × ${item.quantity} — ₹${price.toFixed(0)}\n`;
     if (item.addon_names && item.addon_names.length > 0) {
       text += `   + ${item.addon_names.join(', ')}\n`;
     }
@@ -323,12 +321,12 @@ export function formatCartForWhatsApp(cart: Cart): string {
     }
   });
 
-  text += '━━━━━━━━━━━━━━━\n';
+  text += `— — — — — —\n`;
   text += `Subtotal: ₹${(cart.subtotal / 100).toFixed(0)}\n`;
-  text += `GST (5%): ₹${(cart.tax / 100).toFixed(0)}\n`;
-  if (cart.delivery_fee > 0) text += `Delivery: ₹${(cart.delivery_fee / 100).toFixed(0)}\n`;
-  if (cart.discount > 0) text += `Discount: -₹${(cart.discount / 100).toFixed(0)}\n`;
-  text += `\n*Total: ₹${(cart.total / 100).toFixed(0)}*`;
+  if (cart.tax > 0) text += `Tax (5%): ₹${(cart.tax / 100).toFixed(0)}\n`;
+  if (cart.delivery_fee > 0) text += `🚚 Delivery: ₹${(cart.delivery_fee / 100).toFixed(0)}\n`;
+  if (cart.discount > 0) text += `🎉 Discount: -₹${(cart.discount / 100).toFixed(0)}\n`;
+  text += `*Total: ₹${(cart.total / 100).toFixed(0)}*`;
 
   return text;
 }
