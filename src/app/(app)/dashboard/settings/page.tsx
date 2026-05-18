@@ -11,6 +11,7 @@ import {
   Loader2,
   MessageSquare,
   Webhook,
+  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -21,6 +22,7 @@ import {
 
 const SETTINGS_TABS = [
   { id: "restaurant", label: "Restaurant", icon: Store },
+  { id: "delivery", label: "Delivery", icon: Truck },
   { id: "whatsapp", label: "WhatsApp", icon: MessageSquare },
   { id: "ai", label: "AI Bot", icon: Bot },
   { id: "payments", label: "Payments", icon: CreditCard },
@@ -152,6 +154,9 @@ export default function SettingsPage() {
           )}
           {activeTab === "ai" && (
             <AISettings data={formData} onChange={handleChange} />
+          )}
+          {activeTab === "delivery" && (
+            <DeliverySettings data={formData} onChange={handleChange} />
           )}
           {activeTab === "payments" && <PaymentSettings />}
           {activeTab === "language" && (
@@ -430,6 +435,139 @@ function APISettings() {
             New orders will be forwarded to this URL for POS integration.
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DeliverySettings({
+  data,
+  onChange,
+}: {
+  data: RestaurantData;
+  onChange: (key: string, value: string | boolean | string[]) => void;
+}) {
+  const rules = data.delivery_fee_rules || { flat_fee: 0, free_above: 0, enabled: false };
+  const enabled = rules.enabled || false;
+  const flatFeeRupees = ((rules.flat_fee || 0) / 100).toString();
+  const freeAboveRupees = ((rules.free_above || 0) / 100).toString();
+
+  const updateRules = (field: string, value: string | boolean) => {
+    const current = data.delivery_fee_rules || { flat_fee: 0, free_above: 0, enabled: false };
+    let updated;
+
+    if (field === "enabled") {
+      updated = { ...current, enabled: value as boolean };
+    } else if (field === "flat_fee") {
+      const rupees = parseFloat(value as string) || 0;
+      updated = { ...current, flat_fee: Math.round(rupees * 100) };
+    } else if (field === "free_above") {
+      const rupees = parseFloat(value as string) || 0;
+      updated = { ...current, free_above: Math.round(rupees * 100) };
+    } else {
+      updated = current;
+    }
+
+    // We pass this as a string but the parent stores it as-is in formData
+    onChange("delivery_fee_rules", updated as unknown as string);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <h3 className="text-base font-semibold mb-1">Delivery Charges</h3>
+        <p className="text-sm text-muted-foreground mb-5">
+          Configure how delivery fees are applied to customer orders.
+        </p>
+
+        {/* Enable Toggle */}
+        <div className="flex items-center justify-between rounded-xl border border-border/50 p-4 mb-5">
+          <div>
+            <p className="text-sm font-medium">Enable Delivery Charges</p>
+            <p className="text-xs text-muted-foreground">
+              When enabled, delivery fee will be added to all orders
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => updateRules("enabled", e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-10 h-5 rounded-full bg-muted peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
+          </label>
+        </div>
+
+        {enabled && (
+          <div className="space-y-4">
+            {/* Flat Fee */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Delivery Fee (₹)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">₹</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={flatFeeRupees}
+                  onChange={(e) => updateRules("flat_fee", e.target.value)}
+                  placeholder="e.g., 30"
+                  className="flex h-10 w-full rounded-xl border border-input bg-muted/30 pl-8 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Flat delivery charge applied to each order
+              </p>
+            </div>
+
+            {/* Free Delivery Threshold */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Free Delivery Above (₹)</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">₹</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="50"
+                  value={freeAboveRupees}
+                  onChange={(e) => updateRules("free_above", e.target.value)}
+                  placeholder="e.g., 500"
+                  className="flex h-10 w-full rounded-xl border border-input bg-muted/30 pl-8 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Orders above this amount get free delivery. Set to 0 to always charge.
+              </p>
+            </div>
+
+            {/* Preview */}
+            <div className="rounded-xl bg-primary/5 border border-primary/20 p-4 mt-4">
+              <p className="text-sm font-medium text-primary mb-2">📋 Preview</p>
+              <div className="space-y-1 text-sm text-muted-foreground">
+                <p>
+                  • Delivery fee: <span className="font-medium text-foreground">₹{flatFeeRupees}</span> per order
+                </p>
+                {parseInt(freeAboveRupees) > 0 && (
+                  <p>
+                    • Free delivery on orders above: <span className="font-medium text-foreground">₹{freeAboveRupees}</span>
+                  </p>
+                )}
+                <p className="text-xs mt-2 italic">
+                  Bot will automatically show &quot;🚚 Delivery: ₹{flatFeeRupees}&quot; in the cart summary
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!enabled && (
+          <div className="rounded-xl bg-muted/30 border border-border/50 p-4">
+            <p className="text-sm text-muted-foreground">
+              Delivery charges are currently disabled. All orders will show ₹0 delivery fee.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
