@@ -235,8 +235,40 @@ async function recalculateAndSave(
 
   // 5% GST on food
   const tax = Math.round(subtotal * 0.05);
-  const deliveryFee = (cart.delivery_fee as number) || 0;
   const discount = (cart.discount as number) || 0;
+
+  // Compute delivery fee from restaurant settings
+  let deliveryFee = (cart.delivery_fee as number) || 0;
+  try {
+    const restaurantId = cart.restaurant_id as string;
+    if (restaurantId) {
+      const { data: restaurant } = await supabaseAdmin
+        .from('restaurants')
+        .select('delivery_fee_rules')
+        .eq('id', restaurantId)
+        .single();
+
+      if (restaurant) {
+        const rules = (restaurant as Record<string, unknown>).delivery_fee_rules as {
+          flat_fee?: number;
+          free_above?: number;
+          enabled?: boolean;
+        } | null;
+
+        if (rules?.enabled && rules.flat_fee) {
+          // Apply flat fee, but waive if subtotal meets free delivery threshold
+          if (rules.free_above && subtotal >= rules.free_above) {
+            deliveryFee = 0; // Free delivery!
+          } else {
+            deliveryFee = rules.flat_fee;
+          }
+        }
+      }
+    }
+  } catch {
+    // Silently fall back to cart-level delivery_fee
+  }
+
   const total = subtotal + tax + deliveryFee - discount;
 
   const { data: updated } = await supabaseAdmin
@@ -245,6 +277,7 @@ async function recalculateAndSave(
       items,
       subtotal,
       tax,
+      delivery_fee: deliveryFee,
       total,
       updated_at: new Date().toISOString(),
     })

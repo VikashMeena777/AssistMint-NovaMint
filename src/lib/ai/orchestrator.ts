@@ -1374,26 +1374,59 @@ async function sendComboSuggestions(
   justAddedItemId: string
 ): Promise<void> {
   try {
+    // 1. Check for pre-configured combo deals from the combos table
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false } }
+    );
+
+    const now = new Date().toISOString();
+    const { data: combos } = await supabaseAdmin
+      .from('combos')
+      .select('*')
+      .eq('restaurant_id', restaurant.id)
+      .eq('is_active', true)
+      .or(`valid_until.is.null,valid_until.gte.${now}`)
+      .order('display_order', { ascending: true })
+      .limit(3);
+
+    // Check if any combo contains the just-added item
+    const relevantCombos = (combos || []).filter((combo) => {
+      const items = (combo.combo_items as Array<Record<string, unknown>>) || [];
+      return items.some((ci) => ci.item_id === justAddedItemId);
+    });
+
+    // If relevant combos found, suggest them
+    const combosToShow = relevantCombos.length > 0 ? relevantCombos : (combos || []).slice(0, 2);
+
+    if (combosToShow.length > 0) {
+      const comboLines = combosToShow.map((c) => {
+        const originalRupees = ((c.original_price as number) / 100).toFixed(0);
+        const comboRupees = ((c.combo_price as number) / 100).toFixed(0);
+        const savings = (((c.original_price as number) - (c.combo_price as number)) / 100).toFixed(0);
+        return `🔥 *${c.name}* — ₹${comboRupees} ~~₹${originalRupees}~~ (Save ₹${savings})\n   ${c.description || ''}`;
+      }).join('\n\n');
+
+      await sendBotReply(restaurant, customer, conversation,
+        `🎯 *Combo Deals for You!*\n\n${comboLines}\n\nJust type the combo name to add it!`
+      );
+      return;
+    }
+
+    // 2. Fallback: Heuristic-based suggestions (drinks → bestsellers from other categories)
     const menu = await getFullMenu(restaurant.id);
     if (!menu) return;
 
-    // Get the item that was just added
     const addedItem = menu.categories
       .flatMap(c => c.items)
       .find(i => i.id === justAddedItemId);
     if (!addedItem) return;
 
-    // Find items from a DIFFERENT category (complementary)
     const addedCategoryId = addedItem.category_id;
-    const otherItems = menu.categories
-      .filter(c => c.id !== addedCategoryId)
-      .flatMap(c => c.items)
-      .filter(i => i.is_available && i.is_bestseller) // Only suggest bestsellers
-      .slice(0, 3);
 
-    if (otherItems.length === 0) return;
-
-    // Also check if drinks/beverages category exists for food items
+    // Check if drinks/beverages category exists
     const drinkCategory = menu.categories.find(c =>
       c.name.toLowerCase().includes('drink') ||
       c.name.toLowerCase().includes('beverage') ||
@@ -1402,9 +1435,14 @@ async function sendComboSuggestions(
       c.name.toLowerCase().includes('juice')
     );
 
+    // Get suggestions: drinks first, then bestsellers from other categories
     const suggestions = drinkCategory
       ? drinkCategory.items.filter(i => i.is_available).slice(0, 3)
-      : otherItems;
+      : menu.categories
+          .filter(c => c.id !== addedCategoryId)
+          .flatMap(c => c.items)
+          .filter(i => i.is_available && i.is_bestseller)
+          .slice(0, 3);
 
     if (suggestions.length === 0) return;
 

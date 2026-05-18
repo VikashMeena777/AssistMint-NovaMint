@@ -4,6 +4,48 @@
 
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v21.0';
 
+// ─── Exponential Backoff Retry ──────────────
+
+interface RetryOptions {
+  maxRetries?: number;
+  baseDelayMs?: number;
+  retryableStatusCodes?: number[];
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<T> {
+  const { maxRetries = 2, baseDelayMs = 200, retryableStatusCodes = [429, 500, 502, 503, 504] } = options;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      const message = lastError.message || '';
+
+      // Check if error is retryable (rate limit or server error)
+      const isRetryable = retryableStatusCodes.some(code => message.includes(`${code}`)) ||
+        message.includes('ECONNRESET') ||
+        message.includes('ETIMEDOUT') ||
+        message.includes('fetch failed');
+
+      if (!isRetryable || attempt === maxRetries) {
+        throw lastError;
+      }
+
+      // Exponential backoff: 200ms → 400ms → 800ms
+      const delay = baseDelayMs * Math.pow(2, attempt);
+      console.warn(`[WhatsApp] Retry ${attempt + 1}/${maxRetries} after ${delay}ms: ${message.substring(0, 100)}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError!;
+}
+
 interface SendMessageOptions {
   phoneNumberId: string;
   accessToken: string;
@@ -15,30 +57,32 @@ interface SendMessageOptions {
 export async function sendTextMessage(
   options: SendMessageOptions & { text: string }
 ): Promise<{ message_id: string }> {
-  const { phoneNumberId, accessToken, to, text } = options;
-  const response = await fetch(
-    `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'text',
-        text: { preview_url: false, body: text },
-      }),
-    }
-  );
+  return withRetry(async () => {
+    const { phoneNumberId, accessToken, to, text } = options;
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to,
+          type: 'text',
+          text: { preview_url: false, body: text },
+        }),
+      }
+    );
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
-  }
-  return { message_id: data.messages?.[0]?.id || '' };
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(data)}`);
+    }
+    return { message_id: data.messages?.[0]?.id || '' };
+  });
 }
 
 // ─── Send Interactive List ──────────────────
@@ -57,37 +101,39 @@ export async function sendListMessage(
     sections: ListSection[];
   }
 ): Promise<{ message_id: string }> {
-  const { phoneNumberId, accessToken, to, headerText, bodyText, footerText, buttonText, sections } = options;
+  return withRetry(async () => {
+    const { phoneNumberId, accessToken, to, headerText, bodyText, footerText, buttonText, sections } = options;
 
-  const interactive: Record<string, unknown> = {
-    type: 'list',
-    body: { text: bodyText },
-    action: { button: buttonText, sections },
-  };
-  if (headerText) interactive.header = { type: 'text', text: headerText };
-  if (footerText) interactive.footer = { text: footerText };
+    const interactive: Record<string, unknown> = {
+      type: 'list',
+      body: { text: bodyText },
+      action: { button: buttonText, sections },
+    };
+    if (headerText) interactive.header = { type: 'text', text: headerText };
+    if (footerText) interactive.footer = { text: footerText };
 
-  const response = await fetch(
-    `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'interactive',
-        interactive,
-      }),
-    }
-  );
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to,
+          type: 'interactive',
+          interactive,
+        }),
+      }
+    );
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
-  return { message_id: data.messages?.[0]?.id || '' };
+    const data = await response.json();
+    if (!response.ok) throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(data)}`);
+    return { message_id: data.messages?.[0]?.id || '' };
+  });
 }
 
 // ─── Send Reply Buttons ─────────────────────
@@ -100,42 +146,44 @@ export async function sendReplyButtons(
     buttons: { id: string; title: string }[];
   }
 ): Promise<{ message_id: string }> {
-  const { phoneNumberId, accessToken, to, headerText, bodyText, footerText, buttons } = options;
+  return withRetry(async () => {
+    const { phoneNumberId, accessToken, to, headerText, bodyText, footerText, buttons } = options;
 
-  const interactive: Record<string, unknown> = {
-    type: 'button',
-    body: { text: bodyText },
-    action: {
-      buttons: buttons.slice(0, 3).map((b) => ({
-        type: 'reply',
-        reply: { id: b.id, title: b.title.substring(0, 20) },
-      })),
-    },
-  };
-  if (headerText) interactive.header = { type: 'text', text: headerText };
-  if (footerText) interactive.footer = { text: footerText };
-
-  const response = await fetch(
-    `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
+    const interactive: Record<string, unknown> = {
+      type: 'button',
+      body: { text: bodyText },
+      action: {
+        buttons: buttons.slice(0, 3).map((b) => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title.substring(0, 20) },
+        })),
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'interactive',
-        interactive,
-      }),
-    }
-  );
+    };
+    if (headerText) interactive.header = { type: 'text', text: headerText };
+    if (footerText) interactive.footer = { text: footerText };
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
-  return { message_id: data.messages?.[0]?.id || '' };
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to,
+          type: 'interactive',
+          interactive,
+        }),
+      }
+    );
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(data)}`);
+    return { message_id: data.messages?.[0]?.id || '' };
+  });
 }
 
 // ─── Send Image Message ─────────────────────
@@ -146,29 +194,31 @@ export async function sendImageMessage(
     caption?: string;
   }
 ): Promise<{ message_id: string }> {
-  const { phoneNumberId, accessToken, to, imageUrl, caption } = options;
+  return withRetry(async () => {
+    const { phoneNumberId, accessToken, to, imageUrl, caption } = options;
 
-  const response = await fetch(
-    `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'image',
-        image: { link: imageUrl, caption },
-      }),
-    }
-  );
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to,
+          type: 'image',
+          image: { link: imageUrl, caption },
+        }),
+      }
+    );
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
-  return { message_id: data.messages?.[0]?.id || '' };
+    const data = await response.json();
+    if (!response.ok) throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(data)}`);
+    return { message_id: data.messages?.[0]?.id || '' };
+  });
 }
 
 // ─── Send Template Message ──────────────────
@@ -180,35 +230,37 @@ export async function sendTemplateMessage(
     components?: unknown[];
   }
 ): Promise<{ message_id: string }> {
-  const { phoneNumberId, accessToken, to, templateName, languageCode = 'en', components } = options;
+  return withRetry(async () => {
+    const { phoneNumberId, accessToken, to, templateName, languageCode = 'en', components } = options;
 
-  const template: Record<string, unknown> = {
-    name: templateName,
-    language: { code: languageCode },
-  };
-  if (components) template.components = components;
+    const template: Record<string, unknown> = {
+      name: templateName,
+      language: { code: languageCode },
+    };
+    if (components) template.components = components;
 
-  const response = await fetch(
-    `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'template',
-        template,
-      }),
-    }
-  );
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to,
+          type: 'template',
+          template,
+        }),
+      }
+    );
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
-  return { message_id: data.messages?.[0]?.id || '' };
+    const data = await response.json();
+    if (!response.ok) throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(data)}`);
+    return { message_id: data.messages?.[0]?.id || '' };
+  });
 }
 
 // ─── Verify Webhook Signature ───────────────
@@ -256,33 +308,35 @@ export async function sendDocumentMessage(
     caption?: string;
   }
 ): Promise<{ message_id: string }> {
-  const { phoneNumberId, accessToken, to, documentUrl, filename, caption } = options;
-  const response = await fetch(
-    `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'document',
-        document: {
-          link: documentUrl,
-          filename,
-          caption: caption || '',
+  return withRetry(async () => {
+    const { phoneNumberId, accessToken, to, documentUrl, filename, caption } = options;
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
         },
-      }),
-    }
-  );
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to,
+          type: 'document',
+          document: {
+            link: documentUrl,
+            filename,
+            caption: caption || '',
+          },
+        }),
+      }
+    );
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { message_id: (data as any)?.messages?.[0]?.id || '' };
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(data)}`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { message_id: (data as any)?.messages?.[0]?.id || '' };
+  });
 }

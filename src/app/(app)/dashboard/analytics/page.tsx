@@ -23,6 +23,7 @@ import {
   getRecentActivity,
   getPeakHours,
   getOrderInsights,
+  getRevenueByPaymentMethod,
 } from "@/lib/actions/analytics-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
 
@@ -38,6 +39,7 @@ export default function AnalyticsPage() {
   const [activity, setActivity] = useState<AnyData[]>([]);
   const [peakHours, setPeakHours] = useState<AnyData[]>([]);
   const [insights, setInsights] = useState<AnyData>({});
+  const [paymentBreakdown, setPaymentBreakdown] = useState<AnyData>({});
 
   useEffect(() => {
     (async () => {
@@ -50,13 +52,14 @@ export default function AnalyticsPage() {
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
     setLoading(true);
-    const [s, t, ti, a, ph, ins] = await Promise.all([
+    const [s, t, ti, a, ph, ins, pb] = await Promise.all([
       getDashboardStats(restaurantId),
       getOrderTrend(restaurantId),
       getTopSellingItems(restaurantId, 5),
       getRecentActivity(restaurantId, 10),
       getPeakHours(restaurantId),
       getOrderInsights(restaurantId),
+      getRevenueByPaymentMethod(restaurantId),
     ]);
     setStats(s);
     setTrend(t);
@@ -64,6 +67,7 @@ export default function AnalyticsPage() {
     setActivity(a.data || []);
     setPeakHours(ph);
     setInsights(ins);
+    setPaymentBreakdown(pb);
     setLoading(false);
   }, [restaurantId]);
 
@@ -299,6 +303,96 @@ export default function AnalyticsPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Payment Method Breakdown + Order Summary */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-border/50 bg-card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <CreditCard className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Revenue by Payment Method (30 Days)</h3>
+          </div>
+          {(paymentBreakdown.totalOrders || 0) > 0 ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-emerald-500" />
+                    <span className="text-sm font-medium">💵 Cash on Delivery</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-bold">₹{((paymentBreakdown.cod?.revenue || 0) / 100).toLocaleString('en-IN')}</span>
+                    <span className="text-xs text-muted-foreground ml-2">({paymentBreakdown.codPercentage}%)</span>
+                  </div>
+                </div>
+                <div className="h-2.5 w-full rounded-full bg-muted/50 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all"
+                    style={{ width: `${paymentBreakdown.codPercentage || 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{paymentBreakdown.cod?.count || 0} orders</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-blue-500" />
+                    <span className="text-sm font-medium">💳 Online Payment</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-bold">₹{((paymentBreakdown.online?.revenue || 0) / 100).toLocaleString('en-IN')}</span>
+                    <span className="text-xs text-muted-foreground ml-2">({paymentBreakdown.onlinePercentage}%)</span>
+                  </div>
+                </div>
+                <div className="h-2.5 w-full rounded-full bg-muted/50 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-all"
+                    style={{ width: `${paymentBreakdown.onlinePercentage || 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{paymentBreakdown.online?.count || 0} orders</p>
+              </div>
+              <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Total Revenue</span>
+                <span className="text-sm font-bold">₹{((paymentBreakdown.totalRevenue || 0) / 100).toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-40 items-center justify-center rounded-xl bg-muted/30 border border-dashed border-border">
+              <div className="text-center">
+                <CreditCard className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  Payment data will show after delivered orders
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-border/50 bg-card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Order Summary (30 Days)</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-xl bg-muted/30 p-4 text-center">
+              <p className="text-2xl font-bold text-primary">{insights.totalDelivered || 0}</p>
+              <p className="text-xs text-muted-foreground mt-1">Delivered</p>
+            </div>
+            <div className="rounded-xl bg-muted/30 p-4 text-center">
+              <p className="text-2xl font-bold text-emerald-500">₹{((insights.avgOrderValue || 0) / 100).toFixed(0)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Avg Order</p>
+            </div>
+            <div className="rounded-xl bg-muted/30 p-4 text-center">
+              <p className="text-2xl font-bold text-blue-500">{insights.repeatRate || 0}%</p>
+              <p className="text-xs text-muted-foreground mt-1">Repeat Rate</p>
+            </div>
+            <div className="rounded-xl bg-muted/30 p-4 text-center">
+              <p className="text-2xl font-bold text-amber-500">{insights.avgRating || 'N/A'}</p>
+              <p className="text-xs text-muted-foreground mt-1">Avg Rating</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Activity Feed */}

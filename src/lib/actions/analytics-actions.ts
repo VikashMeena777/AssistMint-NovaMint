@@ -271,3 +271,44 @@ export async function getOrderInsights(restaurantId: string) {
     totalCustomers,
   };
 }
+
+// ─── Revenue by Payment Method ──────────────
+
+export async function getRevenueByPaymentMethod(restaurantId: string) {
+  const supabase = await createClient();
+
+  const monthAgo = new Date();
+  monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+  const { data: orders } = await supabase
+    .from('orders')
+    .select('total, payment_method')
+    .eq('restaurant_id', restaurantId)
+    .eq('status', 'delivered')
+    .gte('created_at', monthAgo.toISOString());
+
+  const breakdown: Record<string, { count: number; revenue: number }> = {
+    cod: { count: 0, revenue: 0 },
+    online: { count: 0, revenue: 0 },
+  };
+
+  for (const order of orders || []) {
+    const method = ((order as Record<string, unknown>).payment_method as string) || 'cod';
+    const total = ((order as Record<string, unknown>).total as number) || 0;
+    const key = method === 'online' ? 'online' : 'cod';
+    breakdown[key].count += 1;
+    breakdown[key].revenue += total;
+  }
+
+  const totalRevenue = breakdown.cod.revenue + breakdown.online.revenue;
+  const totalOrders = breakdown.cod.count + breakdown.online.count;
+
+  return {
+    cod: breakdown.cod,
+    online: breakdown.online,
+    totalRevenue,
+    totalOrders,
+    codPercentage: totalOrders > 0 ? Math.round((breakdown.cod.count / totalOrders) * 100) : 0,
+    onlinePercentage: totalOrders > 0 ? Math.round((breakdown.online.count / totalOrders) * 100) : 0,
+  };
+}
