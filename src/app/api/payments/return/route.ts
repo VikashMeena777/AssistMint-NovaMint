@@ -85,10 +85,12 @@ export async function GET(req: NextRequest) {
       })
       .eq('payment_id', orderId);
 
-    // Send WhatsApp payment confirmation (fire and forget)
-    sendPaymentConfirmationWhatsApp(orderId, amountPaid).catch((err) =>
-      console.error('[PaymentReturn] WhatsApp confirmation error:', err)
-    );
+    // Send WhatsApp payment confirmation — MUST await before returning (Vercel kills background tasks)
+    try {
+      await sendPaymentConfirmationWhatsApp(orderId, amountPaid);
+    } catch (err) {
+      console.error('[PaymentReturn] WhatsApp confirmation error:', err);
+    }
 
     return renderPage('success', amountPaid, orderId);
   } else if (paymentStatus === 'pending' || paymentStatus === 'active') {
@@ -125,7 +127,7 @@ async function sendPaymentConfirmationWhatsApp(cfOrderId: string, amount: string
   const msg = `✅ *Payment Received!*\n\n💰 Amount: ${totalRupees}\n📋 Order: #${order.order_number || '—'}\n\nYour order is *confirmed* and being prepared! 🍳\n\nThank you for ordering from *${restaurant.name}*! 🌿`;
 
   try {
-    await fetch(`https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`, {
+    const waRes = await fetch(`https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${restaurant.whatsapp_access_token}`,
@@ -138,6 +140,12 @@ async function sendPaymentConfirmationWhatsApp(cfOrderId: string, amount: string
         text: { body: msg },
       }),
     });
+    const waBody = await waRes.json();
+    if (!waRes.ok) {
+      console.error('[PaymentReturn] WhatsApp API error:', waRes.status, JSON.stringify(waBody));
+    } else {
+      console.log('[PaymentReturn] WhatsApp confirmation sent successfully to', phone);
+    }
   } catch (err) {
     console.error('[PaymentReturn] Failed to send WhatsApp confirmation:', err);
   }
