@@ -152,3 +152,81 @@ export async function updateCustomerOrderStats(
     })
     .eq('id', customerId);
 }
+
+// ─── Get Customer Saved Addresses ───────────
+
+export async function getSavedAddresses(customerId: string): Promise<string[]> {
+  const { data } = await supabaseAdmin
+    .from('customers')
+    .select('saved_addresses')
+    .eq('id', customerId)
+    .single();
+  if (!data) return [];
+  return ((data as Record<string, unknown>).saved_addresses as string[]) || [];
+}
+
+export async function addSavedAddress(customerId: string, address: string): Promise<void> {
+  const addresses = await getSavedAddresses(customerId);
+  if (!addresses.includes(address)) {
+    addresses.unshift(address); // newest first
+    if (addresses.length > 5) addresses.pop(); // keep max 5
+    await supabaseAdmin
+      .from('customers')
+      .update({ saved_addresses: addresses })
+      .eq('id', customerId);
+  }
+}
+
+// ─── Customer Preferences ───────────────────
+
+export async function getCustomerPreferences(customerId: string): Promise<Record<string, unknown>> {
+  const { data } = await supabaseAdmin
+    .from('customers')
+    .select('preferences')
+    .eq('id', customerId)
+    .single();
+  if (!data) return {};
+  return ((data as Record<string, unknown>).preferences as Record<string, unknown>) || {};
+}
+
+export async function updateCustomerPreferences(
+  customerId: string,
+  updates: Record<string, unknown>
+): Promise<void> {
+  const current = await getCustomerPreferences(customerId);
+  await supabaseAdmin
+    .from('customers')
+    .update({ preferences: { ...current, ...updates } })
+    .eq('id', customerId);
+}
+
+// ─── Customer Language ──────────────────────
+
+export async function setCustomerLanguage(customerId: string, language: string): Promise<void> {
+  await supabaseAdmin
+    .from('customers')
+    .update({ language_preference: language })
+    .eq('id', customerId);
+}
+
+// ─── Order History ──────────────────────────
+
+export async function getCustomerOrders(customerId: string, limit = 5): Promise<Array<Record<string, unknown>>> {
+  const { data } = await supabaseAdmin
+    .from('orders')
+    .select('id, order_number, total, status, payment_status, items, created_at, rating')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data || []) as Array<Record<string, unknown>>;
+}
+
+// ─── Save Order Rating ──────────────────────
+
+export async function saveOrderRating(orderId: string, rating: number, feedback?: string): Promise<void> {
+  await supabaseAdmin
+    .from('orders')
+    .update({ rating, feedback: feedback || '' })
+    .eq('id', orderId);
+}
+

@@ -285,6 +285,9 @@ export function formatCartForWhatsApp(cart: Cart): string {
     if (item.addon_names && item.addon_names.length > 0) {
       text += `   + ${item.addon_names.join(', ')}\n`;
     }
+    if (item.special_instructions) {
+      text += `   📝 _${item.special_instructions}_\n`;
+    }
   });
 
   text += '━━━━━━━━━━━━━━━\n';

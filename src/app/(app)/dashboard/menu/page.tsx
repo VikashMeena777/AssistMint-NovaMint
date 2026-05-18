@@ -12,6 +12,7 @@ import {
   ToggleLeft,
   ToggleRight,
   X,
+  ImagePlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -48,6 +49,8 @@ export default function MenuPage() {
     is_bestseller: false,
   });
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -94,11 +97,42 @@ export default function MenuPage() {
       return;
     }
     setSaving(true);
+
+    // Upload image if provided
+    let imageUrl: string | undefined;
+    if (imageFile) {
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+        const ext = imageFile.name.split(".").pop();
+        const fileName = `${restaurantId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("menu-images")
+          .upload(fileName, imageFile, { cacheControl: "3600", upsert: false });
+        if (uploadError) {
+          toast.error("Image upload failed: " + uploadError.message);
+          setSaving(false);
+          return;
+        }
+        const { data: urlData } = supabase.storage.from("menu-images").getPublicUrl(fileName);
+        imageUrl = urlData.publicUrl;
+      } catch (e) {
+        console.error("Image upload error:", e);
+        toast.error("Image upload failed.");
+        setSaving(false);
+        return;
+      }
+    }
+
     const result = await createMenuItem(restaurantId, {
       category_id: newItem.category_id,
       name: newItem.name,
       description: newItem.description || undefined,
       price: Math.round(parseFloat(newItem.price) * 100), // Convert to paise
+      image_url: imageUrl,
       is_veg: newItem.is_veg,
       is_bestseller: newItem.is_bestseller,
     });
@@ -108,6 +142,8 @@ export default function MenuPage() {
     } else {
       toast.success("Menu item added!");
       setNewItem({ name: "", category_id: "", price: "", description: "", is_veg: true, is_bestseller: false });
+      setImageFile(null);
+      setImagePreview(null);
       setShowAddItem(false);
       loadData();
     }
@@ -272,7 +308,7 @@ export default function MenuPage() {
               className="flex h-10 rounded-xl border border-input bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             />
           </div>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4 items-center">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={newItem.is_veg} onChange={(e) => setNewItem((p) => ({ ...p, is_veg: e.target.checked }))} className="accent-primary" />
               <Leaf className="h-3.5 w-3.5 text-green-600" /> Veg
@@ -281,7 +317,37 @@ export default function MenuPage() {
               <input type="checkbox" checked={newItem.is_bestseller} onChange={(e) => setNewItem((p) => ({ ...p, is_bestseller: e.target.checked }))} className="accent-primary" />
               <Star className="h-3.5 w-3.5 text-amber-500" /> Bestseller
             </label>
-
+            <label className="flex items-center gap-2 text-sm cursor-pointer border border-dashed border-primary/40 rounded-xl px-3 py-2 hover:bg-primary/5 transition-colors">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    if (file.size > 5 * 1024 * 1024) {
+                      toast.error("Image must be under 5MB");
+                      return;
+                    }
+                    setImageFile(file);
+                    setImagePreview(URL.createObjectURL(file));
+                  }
+                }}
+              />
+              <ImagePlus className="h-4 w-4 text-primary" />
+              <span className="text-primary">{imageFile ? imageFile.name.substring(0, 20) : 'Add Photo'}</span>
+            </label>
+            {imagePreview && (
+              <div className="relative">
+                <img src={imagePreview} alt="Preview" className="h-12 w-12 rounded-lg object-cover border border-border" />
+                <button
+                  onClick={() => { setImageFile(null); setImagePreview(null); }}
+                  className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-white flex items-center justify-center text-xs"
+                >
+                  ×
+                </button>
+              </div>
+            )}
           </div>
           <button
             onClick={handleAddItem}
@@ -318,14 +384,26 @@ export default function MenuPage() {
                 className={`flex items-center justify-between p-4 hover:bg-muted/20 transition-colors ${!item.is_available ? "opacity-50" : ""}`}
               >
                 <div className="flex items-center gap-4 min-w-0">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/30 shrink-0 text-lg">
-                    {item.is_veg ? "🟢" : "🔴"}
-                  </div>
+                  {item.image_url ? (
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      className="h-10 w-10 rounded-xl object-cover shrink-0 border border-border/50"
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/30 shrink-0 text-lg">
+                      {item.is_veg ? "🟢" : "🔴"}
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold truncate">{item.name}</p>
                       {item.is_bestseller && <Star className="h-3 w-3 text-amber-500 shrink-0" />}
-
+                      {!item.image_url && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                          {item.is_veg ? "🟢" : "🔴"}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {item.menu_categories?.name || "Uncategorized"} · ₹{(item.price / 100).toFixed(0)}

@@ -11,12 +11,18 @@ import {
   Loader2,
   Activity,
   UtensilsCrossed,
+  Clock,
+  Star,
+  Repeat2,
+  IndianRupee,
 } from "lucide-react";
 import {
   getDashboardStats,
   getOrderTrend,
   getTopSellingItems,
   getRecentActivity,
+  getPeakHours,
+  getOrderInsights,
 } from "@/lib/actions/analytics-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
 
@@ -30,6 +36,8 @@ export default function AnalyticsPage() {
   const [trend, setTrend] = useState<AnyData[]>([]);
   const [topItems, setTopItems] = useState<AnyData[]>([]);
   const [activity, setActivity] = useState<AnyData[]>([]);
+  const [peakHours, setPeakHours] = useState<AnyData[]>([]);
+  const [insights, setInsights] = useState<AnyData>({});
 
   useEffect(() => {
     (async () => {
@@ -42,16 +50,20 @@ export default function AnalyticsPage() {
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
     setLoading(true);
-    const [s, t, ti, a] = await Promise.all([
+    const [s, t, ti, a, ph, ins] = await Promise.all([
       getDashboardStats(restaurantId),
       getOrderTrend(restaurantId),
       getTopSellingItems(restaurantId, 5),
       getRecentActivity(restaurantId, 10),
+      getPeakHours(restaurantId),
+      getOrderInsights(restaurantId),
     ]);
     setStats(s);
     setTrend(t);
     setTopItems(ti);
     setActivity(a.data || []);
+    setPeakHours(ph);
+    setInsights(ins);
     setLoading(false);
   }, [restaurantId]);
 
@@ -70,6 +82,12 @@ export default function AnalyticsPage() {
   // Find max revenue for the bar chart scaling
   const maxRevenue = Math.max(...trend.map((d) => d.revenue || 0), 1);
 
+  // Peak hours: filter to business hours (8 AM - 11 PM)
+  const businessHours = peakHours.filter(
+    (h) => h.hourNum >= 8 && h.hourNum <= 23
+  );
+  const maxPeakCount = Math.max(...businessHours.map((h) => h.count || 0), 1);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -85,7 +103,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs Row 1 */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-border/50 bg-card p-5">
           <div className="flex items-center justify-between mb-3">
@@ -121,7 +139,53 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Charts */}
+      {/* KPIs Row 2 — Insights */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="rounded-2xl border border-border/50 bg-card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <IndianRupee className="h-5 w-5 text-emerald-500" />
+          </div>
+          <p className="text-2xl font-bold">
+            ₹{((insights.avgOrderValue || 0) / 100).toFixed(0)}
+          </p>
+          <p className="text-sm text-muted-foreground">Avg Order Value</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {insights.totalDelivered || 0} delivered (30d)
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border/50 bg-card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <Repeat2 className="h-5 w-5 text-blue-500" />
+          </div>
+          <p className="text-2xl font-bold">{insights.repeatRate || 0}%</p>
+          <p className="text-sm text-muted-foreground">Repeat Rate</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {insights.repeatCustomers || 0} of {insights.totalCustomers || 0} customers
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border/50 bg-card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <Star className="h-5 w-5 text-amber-500" />
+          </div>
+          <p className="text-2xl font-bold">{insights.avgRating || 'N/A'}</p>
+          <p className="text-sm text-muted-foreground">Avg Rating</p>
+          <p className="text-xs text-muted-foreground mt-1">From customer feedback</p>
+        </div>
+        <div className="rounded-2xl border border-border/50 bg-card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <Clock className="h-5 w-5 text-violet-500" />
+          </div>
+          <p className="text-2xl font-bold">
+            {businessHours.length > 0
+              ? businessHours.reduce((best, h) => (h.count > best.count ? h : best), businessHours[0]).hour
+              : 'N/A'}
+          </p>
+          <p className="text-sm text-muted-foreground">Peak Hour</p>
+          <p className="text-xs text-muted-foreground mt-1">Most orders placed</p>
+        </div>
+      </div>
+
+      {/* Charts Row 1 */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Revenue Trend (simple bar chart) */}
         <div className="rounded-2xl border border-border/50 bg-card p-6">
@@ -193,6 +257,48 @@ export default function AnalyticsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Peak Hours Chart */}
+      <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="h-4 w-4 text-violet-500" />
+          <h3 className="text-sm font-semibold">Peak Ordering Hours (Last 30 Days)</h3>
+        </div>
+        {businessHours.some((h) => h.count > 0) ? (
+          <div className="flex items-end gap-1 h-40">
+            {businessHours.map((h, i) => (
+              <div key={i} className="flex flex-col items-center flex-1 gap-1">
+                <span className="text-[9px] text-muted-foreground font-medium">
+                  {h.count > 0 ? h.count : ''}
+                </span>
+                <div
+                  className="w-full rounded-t-md transition-all min-h-[2px]"
+                  style={{
+                    height: `${Math.max((h.count / maxPeakCount) * 120, 2)}px`,
+                    backgroundColor: h.count === maxPeakCount
+                      ? 'hsl(var(--primary))'
+                      : h.count > maxPeakCount * 0.6
+                        ? 'hsl(var(--primary) / 0.7)'
+                        : 'hsl(var(--primary) / 0.3)',
+                  }}
+                />
+                <span className="text-[8px] text-muted-foreground -rotate-45 origin-top-left whitespace-nowrap">
+                  {h.hour}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex h-40 items-center justify-center rounded-xl bg-muted/30 border border-dashed border-border">
+            <div className="text-center">
+              <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Peak hours will show after you receive orders
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Activity Feed */}

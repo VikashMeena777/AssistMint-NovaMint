@@ -246,3 +246,43 @@ export async function markAsRead(
     }),
   });
 }
+
+// ─── Send Document Message ──────────────────
+
+export async function sendDocumentMessage(
+  options: SendMessageOptions & {
+    documentUrl: string;
+    filename: string;
+    caption?: string;
+  }
+): Promise<{ message_id: string }> {
+  const { phoneNumberId, accessToken, to, documentUrl, filename, caption } = options;
+  const response = await fetch(
+    `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'document',
+        document: {
+          link: documentUrl,
+          filename,
+          caption: caption || '',
+        },
+      }),
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { message_id: (data as any)?.messages?.[0]?.id || '' };
+}

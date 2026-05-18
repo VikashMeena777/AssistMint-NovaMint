@@ -185,3 +185,89 @@ export async function getRecentActivity(restaurantId: string, limit: number = 20
   if (error) return { error: error.message, data: null };
   return { data, error: null };
 }
+
+// ─── Peak Hours Analysis ────────────────────
+
+export async function getPeakHours(restaurantId: string) {
+  const supabase = await createClient();
+
+  // Get orders from last 30 days
+  const monthAgo = new Date();
+  monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+  const { data: orders } = await supabase
+    .from('orders')
+    .select('created_at')
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', monthAgo.toISOString());
+
+  // Count orders per hour
+  const hourCounts = new Array(24).fill(0);
+  for (const order of orders || []) {
+    const hour = new Date((order as Record<string, string>).created_at).getHours();
+    hourCounts[hour]++;
+  }
+
+  // Return as array of { hour: "9 AM", count: 12 }
+  return hourCounts.map((count, hour) => ({
+    hour: hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`,
+    count,
+    hourNum: hour,
+  }));
+}
+
+// ─── Average Order Value & Repeat Rate ──────
+
+export async function getOrderInsights(restaurantId: string) {
+  const supabase = await createClient();
+
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+
+  const monthAgo = new Date();
+  monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+  // All delivered orders (last 30 days)
+  const { data: orders } = await supabase
+    .from('orders')
+    .select('total, customer_id, rating')
+    .eq('restaurant_id', restaurantId)
+    .eq('status', 'delivered')
+    .gte('created_at', monthAgo.toISOString());
+
+  const orderList = orders || [];
+
+  // Average order value
+  const totalRevenue = orderList.reduce(
+    (sum, o) => sum + ((o as Record<string, number>).total || 0),
+    0
+  );
+  const avgOrderValue = orderList.length > 0 ? Math.round(totalRevenue / orderList.length) : 0;
+
+  // Repeat customer rate
+  const customerOrders = new Map<string, number>();
+  for (const order of orderList) {
+    const custId = (order as Record<string, string>).customer_id;
+    if (custId) {
+      customerOrders.set(custId, (customerOrders.get(custId) || 0) + 1);
+    }
+  }
+  const totalCustomers = customerOrders.size;
+  const repeatCustomers = Array.from(customerOrders.values()).filter(c => c > 1).length;
+  const repeatRate = totalCustomers > 0 ? Math.round((repeatCustomers / totalCustomers) * 100) : 0;
+
+  // Average rating
+  const ratedOrders = orderList.filter(o => (o as Record<string, number>).rating > 0);
+  const avgRating = ratedOrders.length > 0
+    ? (ratedOrders.reduce((sum, o) => sum + ((o as Record<string, number>).rating || 0), 0) / ratedOrders.length).toFixed(1)
+    : 'N/A';
+
+  return {
+    avgOrderValue, // in paise
+    repeatRate,    // percentage
+    avgRating,
+    totalDelivered: orderList.length,
+    repeatCustomers,
+    totalCustomers,
+  };
+}

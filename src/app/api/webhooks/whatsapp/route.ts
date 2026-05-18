@@ -172,6 +172,18 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // Parse location messages
+        let locationData: { latitude: number; longitude: number; name?: string; address?: string } | undefined;
+        if (message.type === 'location') {
+          const loc = message.location as Record<string, unknown>;
+          locationData = {
+            latitude: loc.latitude as number,
+            longitude: loc.longitude as number,
+            name: loc.name as string | undefined,
+            address: loc.address as string | undefined,
+          };
+        }
+
         // Route to AI orchestrator
         await handleIncomingMessage({
           phoneNumberId,
@@ -180,6 +192,7 @@ export async function POST(req: NextRequest) {
           text: (message.text as Record<string, string>)?.body,
           interactiveReply,
           whatsappName,
+          location: locationData,
         });
       } catch (err) {
         console.error(`[WhatsApp Webhook] Error processing message ${message.id}:`, err);
