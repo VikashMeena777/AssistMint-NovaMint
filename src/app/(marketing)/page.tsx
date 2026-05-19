@@ -178,14 +178,20 @@ function HeroSection() {
                 </div>
 
                 {/* Chat Preview */}
-                <div className="mt-4 rounded-lg bg-card border border-border p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Live WhatsApp Conversation
-                    </span>
+                <div className="mt-4 rounded-lg bg-card border border-border overflow-hidden">
+                  {/* WhatsApp-style header */}
+                  <div className="flex items-center gap-3 px-4 py-3 bg-[#075e54]">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white text-xs font-bold">
+                      🤖
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">AssistMint Bot</p>
+                      <p className="text-[10px] text-white/70">online</p>
+                    </div>
+                    <div className="ml-auto flex h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
                   </div>
-                  <div className="space-y-2.5">
+                  {/* Chat bubbles */}
+                  <div className="p-4 space-y-2.5 bg-[#ece5dd]/30">
                     {[
                       { msg: "Hi! Can I see your menu? 🍕", from: "user" },
                       { msg: "Welcome! 🌿 Here's our menu. What would you like to order today?", from: "bot" },
@@ -194,16 +200,16 @@ function HeroSection() {
                     ].map((chat, i) => (
                       <motion.div
                         key={i}
-                        initial={{ opacity: 0, x: chat.from === "user" ? -12 : 12 }}
+                        initial={{ opacity: 0, x: chat.from === "user" ? 12 : -12 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 1.0 + i * 0.3 }}
-                        className={`flex ${chat.from === "bot" ? "justify-end" : ""}`}
+                        className={`flex ${chat.from === "user" ? "justify-end" : ""}`}
                       >
                         <div
-                          className={`rounded-xl px-3.5 py-2 text-sm max-w-xs ${
+                          className={`rounded-xl px-3.5 py-2 text-sm max-w-[75%] shadow-sm ${
                             chat.from === "user"
-                              ? "rounded-tl-sm bg-secondary text-foreground"
-                              : "rounded-tr-sm bg-primary/10 text-foreground border border-primary/15"
+                              ? "rounded-tr-sm bg-[#dcf8c6] text-foreground"
+                              : "rounded-tl-sm bg-white text-foreground"
                           }`}
                         >
                           {chat.msg}
