@@ -138,7 +138,7 @@ async function handlePaymentSuccess(data: PaymentData) {
     .update({ status: 'completed' })
     .eq('cashfree_order_id', cfOrderId);
 
-  // Send WhatsApp confirmation to customer
+  // Send WhatsApp confirmation + receipt to customer
   try {
     const { data: order } = await supabaseAdmin
       .from('orders')
@@ -156,7 +156,7 @@ async function handlePaymentSuccess(data: PaymentData) {
 
       const { data: restaurant } = await supabaseAdmin
         .from('restaurants')
-        .select('whatsapp_phone_id, whatsapp_token, name')
+        .select('id, whatsapp_phone_id, whatsapp_token, name')
         .eq('id', restaurantId)
         .single();
 
@@ -170,8 +170,22 @@ async function handlePaymentSuccess(data: PaymentData) {
             phoneNumberId: r.whatsapp_phone_id as string,
             accessToken: r.whatsapp_token as string,
             to: c.phone as string,
-            text: `✅ *Payment Received!*\n\nAmount: ₹${totalRupees}\nMethod: ${paymentMethod}\n\nYour order is confirmed and being prepared! 🎉\n\n— ${r.name}`,
+            text: `✅ *Payment Received!*\nAmount: ₹${totalRupees} · ${paymentMethod}\nYour order is confirmed and being prepared! 🎉`,
           });
+
+          // Send receipt after payment confirmation
+          try {
+            const { sendOrderReceipt } = await import('@/lib/ai/orchestrator');
+            const restaurantObj = {
+              id: r.id as string,
+              name: r.name as string,
+              whatsapp_phone_id: r.whatsapp_phone_id as string,
+              whatsapp_token: r.whatsapp_token as string,
+            };
+            sendOrderReceipt(restaurantObj as Parameters<typeof sendOrderReceipt>[0], orderId, c.phone as string).catch(() => {});
+          } catch (receiptErr) {
+            console.error('[Cashfree] Receipt send failed:', receiptErr);
+          }
         }
       }
     }

@@ -313,8 +313,10 @@ async function handleInteractiveReply(
       break;
 
     default:
-      // Handle dynamic IDs: item_uuid, add_uuid, inc_uuid, dec_uuid, rate_N_uuid, addr_N
-      if (btnId.startsWith('item_')) {
+      // Handle dynamic IDs: cat_uuid, item_uuid, add_uuid, inc_uuid, dec_uuid, rate_N_uuid, addr_N
+      if (btnId.startsWith('cat_')) {
+        await sendCategoryItems(restaurant, customer, conversation, btnId.replace('cat_', ''));
+      } else if (btnId.startsWith('item_')) {
         await sendItemDetails(restaurant, customer, conversation, btnId.replace('item_', ''));
       } else if (btnId.startsWith('add_')) {
         await handleDirectAddToCart(restaurant, customer, conversation, btnId.replace('add_', ''));
@@ -532,21 +534,39 @@ async function sendMenuOverview(
     return;
   }
 
-  // Build interactive list sections from menu categories
-  const sections: ListSection[] = filteredMenu.categories.slice(0, 10).map((cat) => ({
-    title: cat.name.substring(0, 24),
-    rows: cat.items.slice(0, 10).map((item) => ({
-      id: `item_${item.id}`,
-      title: item.name.substring(0, 24),
-      description: `₹${(item.price / 100).toFixed(0)}${item.is_veg ? ' 🟢' : ' 🔴'}${item.is_bestseller ? ' ⭐' : ''}`,
-    })),
-  }));
+  // If only 1 category or few total items, show items directly
+  const totalItems = filteredMenu.categories.reduce((sum, c) => sum + c.items.length, 0);
+  const showCategoriesFirst = filteredMenu.categories.length >= 2 && totalItems > 8;
+
+  let sections: ListSection[];
+
+  if (showCategoriesFirst) {
+    // Show CATEGORIES as the list — user taps a category → gets image cards
+    sections = [{
+      title: 'Categories',
+      rows: filteredMenu.categories.slice(0, 10).map((cat) => ({
+        id: `cat_${cat.id}`,
+        title: cat.name.substring(0, 24),
+        description: `${cat.items.length} items · ${cat.items.filter(i => i.is_bestseller).length > 0 ? '⭐ Has Bestsellers' : 'Tap to browse'}`,
+      })),
+    }];
+  } else {
+    // Small menu — show all items directly
+    sections = filteredMenu.categories.slice(0, 10).map((cat) => ({
+      title: cat.name.substring(0, 24),
+      rows: cat.items.slice(0, 10).map((item) => ({
+        id: `item_${item.id}`,
+        title: item.name.substring(0, 24),
+        description: `₹${(item.price / 100).toFixed(0)}${item.is_veg ? ' 🟢' : ' 🔴'}${item.is_bestseller ? ' ⭐' : ''}`,
+      })),
+    }));
+  }
 
   const filterLabel = dietaryFilter === 'veg' ? ' (🟢 Veg Only)' : dietaryFilter === 'nonveg' ? ' (🔴 Non-Veg)' : dietaryFilter === 'bestseller' ? ' (⭐ Bestsellers)' : '';
   const isHindi = customer.language_preference === 'hi';
   const bodyText = isHindi
     ? `हमारा मेनू${filterLabel} 🍽️\nनीचे टैप करें और ऑर्डर करें`
-    : `Our menu${filterLabel} 🍽️\nTap below to browse and order.`;
+    : `Our menu${filterLabel} 🍽️\nTap ${showCategoriesFirst ? 'a category' : 'below'} to browse and order.`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     try {
@@ -556,7 +576,7 @@ async function sendMenuOverview(
         to: customer.phone,
         headerText: `${restaurant.name} Menu${filterLabel}`,
         bodyText,
-        footerText: 'Tap an item to see details & image',
+        footerText: showCategoriesFirst ? 'Pick a category to see items with photos' : 'Tap an item to see details & image',
         buttonText: '📋 Browse Menu',
         sections,
       });
@@ -574,6 +594,88 @@ async function sendMenuOverview(
   }
 
   await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+}
+
+// ─── Category Items with Image Cards ────────
+
+async function sendCategoryItems(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string },
+  categoryId: string
+): Promise<void> {
+  const menu = await getFullMenu(restaurant.id);
+  if (!menu) return;
+
+  const category = menu.categories.find(c => c.id === categoryId);
+  if (!category || category.items.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, 'This category has no items available right now.');
+    return;
+  }
+
+  // Send category header
+  await sendBotReply(restaurant, customer, conversation,
+    `📂 *${category.name}* — ${category.items.length} items\nSwipe through to browse 👇`);
+
+  // Send top 5 items as image cards with Add to Cart buttons
+  const itemsToShow = category.items.slice(0, 5);
+
+  for (const item of itemsToShow) {
+    const priceRupees = (item.price / 100).toFixed(0);
+    const veg = item.is_veg ? '🟢 Veg' : '🔴 Non-Veg';
+    const star = item.is_bestseller ? ' ⭐' : '';
+
+    // Send image if available
+    if (item.image_url && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+      try {
+        await sendImageMessage({
+          phoneNumberId: restaurant.whatsapp_phone_id,
+          accessToken: restaurant.whatsapp_token,
+          to: customer.phone,
+          imageUrl: item.image_url,
+          caption: `*${item.name}*${star}\n${veg} · ₹${priceRupees}${item.description ? '\n' + item.description : ''}`,
+        });
+      } catch (e) {
+        console.warn(`[Orchestrator] Image send failed for ${item.name}:`, e);
+      }
+    }
+
+    // Send "Add to Cart" button
+    if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+      await sendReplyButtons({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        bodyText: item.image_url
+          ? `Add *${item.name}* to your cart?`
+          : `*${item.name}*${star}\n${veg} · ₹${priceRupees}${item.description ? '\n' + item.description : ''}`,
+        buttons: [
+          { id: `add_${item.id}`, title: '🛒 Add to Cart' },
+          { id: 'btn_cart', title: '🛒 View Cart' },
+        ],
+      });
+    }
+
+    // Small delay between cards to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  // If more items exist, offer to see the full list
+  if (category.items.length > 5 && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    const remaining = category.items.length - 5;
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText: `${remaining} more items in *${category.name}*`,
+      buttons: [
+        { id: 'btn_menu', title: '📋 Full Menu' },
+        { id: 'btn_cart', title: '🛒 View Cart' },
+      ],
+    });
+  }
+
+  await saveMessage(conversation.id, restaurant.id, 'bot', `Browsing ${category.name}`, undefined, { phone: customer.phone });
 }
 
 // ─── Cart Summary with Buttons ──────────────
