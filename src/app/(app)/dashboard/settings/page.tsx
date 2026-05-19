@@ -18,6 +18,7 @@ import {
   getCurrentRestaurant,
   updateRestaurantSettings,
   updateWhatsAppConfig,
+  setupWhatsAppIceBreakers,
 } from "@/lib/actions/restaurant-actions";
 
 const SETTINGS_TABS = [
@@ -229,6 +230,7 @@ function WhatsAppSettings({
   restaurantId: string;
 }) {
   const [saving, setSaving] = useState(false);
+  const [settingUpIce, setSettingUpIce] = useState(false);
 
   const handleSaveWhatsApp = async () => {
     setSaving(true);
@@ -285,6 +287,32 @@ function WhatsAppSettings({
               : "https://your-domain.com"}
             /api/webhooks/whatsapp
           </code>
+        </div>
+
+        {/* Ice Breakers */}
+        <div className="mt-4 rounded-xl border border-border/50 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Quick Actions (Ice Breakers)</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Auto-show options when customer opens chat — zero API cost.
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                setSettingUpIce(true);
+                const result = await setupWhatsAppIceBreakers(restaurantId);
+                setSettingUpIce(false);
+                if (result.error) toast.error(result.error);
+                else toast.success("Ice breakers configured! ❄️");
+              }}
+              disabled={settingUpIce}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50 transition-all shrink-0"
+            >
+              {settingUpIce ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              Setup
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -568,6 +596,36 @@ function DeliverySettings({
             </p>
           </div>
         )}
+      </div>
+
+      {/* Tax Rate */}
+      <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <h3 className="text-base font-semibold mb-1">Tax / GST</h3>
+        <p className="text-sm text-muted-foreground mb-5">
+          Set the tax percentage applied to all orders. Set to 0 to disable tax.
+        </p>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Tax Rate (%)</label>
+          <div className="relative max-w-[200px]">
+            <input
+              type="number"
+              min="0"
+              max="28"
+              step="0.5"
+              value={((data.tax_rate as number) ?? 500) / 100}
+              onChange={(e) => {
+                const pct = parseFloat(e.target.value) || 0;
+                onChange("tax_rate", Math.round(pct * 100) as unknown as string);
+              }}
+              placeholder="e.g., 5"
+              className="flex h-10 w-full rounded-xl border border-input bg-muted/30 pl-4 pr-8 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Standard GST for restaurants is 5%. Set to 0 to disable tax on orders.
+          </p>
+        </div>
       </div>
     </div>
   );

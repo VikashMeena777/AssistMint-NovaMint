@@ -155,12 +155,12 @@ async function sendOrderStatusWhatsApp(
   if (!restaurant?.whatsapp_phone_id || !restaurant?.whatsapp_access_token) return;
 
   const statusMessages: Record<string, string> = {
-    confirmed: '✅ *Order Confirmed!*\n\nYour order #ORDER has been confirmed. We\'re getting it ready for you!',
-    preparing: '👨‍🍳 *Your order is being prepared!*\n\nOrder #ORDER is now in the kitchen. Hang tight!',
-    ready: '📦 *Order Ready!*\n\nYour order #ORDER is ready for pickup/delivery! 🎉',
-    out_for_delivery: '🚗 *Out for Delivery!*\n\nYour order #ORDER is on its way to you!',
-    delivered: '🎉 *Order Delivered!*\n\nYour order #ORDER has been delivered. Enjoy your meal!\n\nThank you for ordering from *RESTAURANT*! 🌿',
-    cancelled: '❌ *Order Cancelled*\n\nYour order #ORDER has been cancelled. If you have questions, please message us.',
+    confirmed: '✅ *Order #ORDER confirmed!*\nWe\'re getting it ready for you.',
+    preparing: '👨‍🍳 *Order #ORDER is being prepared!*\nHang tight, almost ready.',
+    ready: '📦 *Order #ORDER is ready!*\nPickup/delivery coming soon 🎉',
+    out_for_delivery: '🚗 *Order #ORDER is on its way!*\nAlmost there.',
+    delivered: '🎉 *Order #ORDER delivered!*\nEnjoy your meal from *RESTAURANT*! 🌿',
+    cancelled: '❌ *Order #ORDER cancelled.*\nQuestions? Just message us.',
   };
 
   let msg = statusMessages[status];
@@ -183,6 +183,23 @@ async function sendOrderStatusWhatsApp(
         text: { body: msg },
       }),
     });
+
+    // On delivery: send receipt + feedback request (non-blocking, delayed)
+    if (status === 'delivered') {
+      const { sendOrderReceipt, sendFeedbackRequest } = await import('@/lib/ai/orchestrator');
+      const { getRestaurantById } = await import('@/lib/services/restaurant-service');
+      const fullRestaurant = await getRestaurantById(restaurantId);
+
+      if (fullRestaurant) {
+        // Send receipt immediately
+        sendOrderReceipt(fullRestaurant, orderId, order.customer_phone).catch(() => {});
+
+        // Send rating request after 3 seconds
+        setTimeout(() => {
+          sendFeedbackRequest(fullRestaurant, orderId, order.customer_phone).catch(() => {});
+        }, 3000);
+      }
+    }
   } catch {
     // Silent fail — don't block order update
   }

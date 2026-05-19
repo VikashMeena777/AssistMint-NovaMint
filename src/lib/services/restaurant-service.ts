@@ -24,6 +24,7 @@ export interface Restaurant {
   plan: string;
   min_order_amount: number;
   business_hours: Record<string, unknown>;
+  tax_rate: number;            // percentage × 100 (e.g., 500 = 5%). 0 = no tax
   delivery_fee_rules: {
     flat_fee?: number;         // in paise (e.g., 3000 = ₹30)
     free_above?: number;       // free delivery if subtotal >= this (in paise)
@@ -56,6 +57,7 @@ export async function getRestaurantByPhoneId(phoneNumberId: string): Promise<Res
     whatsapp_token: r.whatsapp_access_token as string | undefined,
     plan: (r.plan as string) || 'starter',
     min_order_amount: (r.min_order_amount as number) || 0,
+    tax_rate: (r.tax_rate as number) ?? 500, // default 5% (500 = 5.00%)
     business_hours: (r.business_hours as Record<string, unknown>) || {},
     delivery_fee_rules: (r.delivery_fee_rules as Restaurant['delivery_fee_rules']) || { flat_fee: 0, free_above: 0, enabled: false },
   };
@@ -85,6 +87,7 @@ export async function getRestaurantById(id: string): Promise<Restaurant | null> 
     whatsapp_token: r.whatsapp_access_token as string | undefined,
     plan: (r.plan as string) || 'starter',
     min_order_amount: (r.min_order_amount as number) || 0,
+    tax_rate: (r.tax_rate as number) ?? 500,
     business_hours: (r.business_hours as Record<string, unknown>) || {},
     delivery_fee_rules: (r.delivery_fee_rules as Restaurant['delivery_fee_rules']) || { flat_fee: 0, free_above: 0, enabled: false },
   };

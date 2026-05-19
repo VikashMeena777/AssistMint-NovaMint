@@ -178,3 +178,66 @@ export async function updateBusinessHours(
 ) {
   return updateRestaurantSettings(restaurantId, { business_hours: hours });
 }
+
+// ─── Setup WhatsApp Ice Breakers ────────────
+
+export async function setupWhatsAppIceBreakers(restaurantId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  const { data: restaurant } = await supabase
+    .from('restaurants')
+    .select('whatsapp_phone_id, whatsapp_access_token')
+    .eq('id', restaurantId)
+    .eq('owner_id', user.id)
+    .single();
+
+  if (!restaurant) return { error: 'Restaurant not found' };
+
+  const r = restaurant as Record<string, unknown>;
+  const phoneId = r.whatsapp_phone_id as string;
+  const token = r.whatsapp_access_token as string;
+
+  if (!phoneId || !token) {
+    return { error: 'WhatsApp not configured. Add your Phone ID and Token first.' };
+  }
+
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/whatsapp_business_profile`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        ice_breakers: [
+          { text: '📋 Browse Menu' },
+          { text: '🛒 View Cart' },
+          { text: '📦 Track Order' },
+          { text: '💬 Talk to Us' },
+        ],
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error('[IceBreakers] Setup failed:', err);
+      return { error: 'Failed to setup ice breakers. Check WhatsApp credentials.' };
+    }
+
+    logActivity({
+      restaurantId,
+      actorType: 'owner',
+      actorId: user.id,
+      action: 'whatsapp.ice_breakers_setup',
+      details: {},
+    });
+
+    return { success: true };
+  } catch (e) {
+    console.error('[IceBreakers] Error:', e);
+    return { error: 'Network error setting up ice breakers.' };
+  }
+}

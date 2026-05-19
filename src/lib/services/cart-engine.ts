@@ -233,40 +233,47 @@ async function recalculateAndSave(
     0
   );
 
-  // 5% GST on food
-  const tax = Math.round(subtotal * 0.05);
   const discount = (cart.discount as number) || 0;
 
-  // Compute delivery fee from restaurant settings
+  // Read tax_rate + delivery_fee_rules from restaurant settings
+  let tax = 0;
   let deliveryFee = (cart.delivery_fee as number) || 0;
   try {
     const restaurantId = cart.restaurant_id as string;
     if (restaurantId) {
       const { data: restaurant } = await supabaseAdmin
         .from('restaurants')
-        .select('delivery_fee_rules')
+        .select('tax_rate, delivery_fee_rules')
         .eq('id', restaurantId)
         .single();
 
       if (restaurant) {
-        const rules = (restaurant as Record<string, unknown>).delivery_fee_rules as {
+        const r = restaurant as Record<string, unknown>;
+
+        // Tax: tax_rate is stored as percentage × 100 (500 = 5%). Default 5%
+        const taxRate = (r.tax_rate as number) ?? 500;
+        if (taxRate > 0) {
+          tax = Math.round(subtotal * (taxRate / 10000));
+        }
+
+        // Delivery fee
+        const rules = r.delivery_fee_rules as {
           flat_fee?: number;
           free_above?: number;
           enabled?: boolean;
         } | null;
 
         if (rules?.enabled && rules.flat_fee) {
-          // Apply flat fee, but waive if subtotal meets free delivery threshold
           if (rules.free_above && subtotal >= rules.free_above) {
-            deliveryFee = 0; // Free delivery!
+            deliveryFee = 0;
           } else {
             deliveryFee = rules.flat_fee;
           }
         }
       }
     }
-  } catch {
-    // Silently fall back to cart-level delivery_fee
+  } catch (e) {
+    console.warn('[CartEngine] Error reading restaurant settings:', e);
   }
 
   const total = subtotal + tax + deliveryFee - discount;

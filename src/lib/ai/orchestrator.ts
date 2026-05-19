@@ -802,10 +802,7 @@ async function handleCODOrder(
 
   await sendBotReply(restaurant, customer, conversation, reply);
 
-  // Send receipt PDF (non-blocking)
-  if (orderId) {
-    sendOrderReceipt(restaurant, orderId, customer.phone).catch(() => {});
-  }
+  // Receipt will be sent when order is marked 'delivered'
 
   logActivity({
     restaurantId: restaurant.id,
@@ -853,10 +850,7 @@ async function handleOnlinePayOrder(
 
   await sendBotReply(restaurant, customer, conversation, reply);
 
-  // Send receipt PDF (non-blocking)
-  if (orderId) {
-    sendOrderReceipt(restaurant, orderId, customer.phone).catch(() => {});
-  }
+  // Receipt will be sent when order is marked 'delivered'
 
   logActivity({
     restaurantId: restaurant.id,
