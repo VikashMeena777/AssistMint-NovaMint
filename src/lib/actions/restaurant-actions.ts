@@ -188,7 +188,7 @@ export async function setupWhatsAppIceBreakers(restaurantId: string) {
 
   const { data: restaurant } = await supabase
     .from('restaurants')
-    .select('whatsapp_phone_id, whatsapp_access_token')
+    .select('whatsapp_phone_id, whatsapp_waba_id')
     .eq('id', restaurantId)
     .eq('owner_id', user.id)
     .single();
@@ -196,48 +196,22 @@ export async function setupWhatsAppIceBreakers(restaurantId: string) {
   if (!restaurant) return { error: 'Restaurant not found' };
 
   const r = restaurant as Record<string, unknown>;
-  const phoneId = r.whatsapp_phone_id as string;
-  const token = r.whatsapp_access_token as string;
+  const wabaId = r.whatsapp_waba_id as string;
 
-  if (!phoneId || !token) {
-    return { error: 'WhatsApp not configured. Add your Phone ID and Token first.' };
-  }
-
-  try {
-    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/whatsapp_business_profile`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        ice_breakers: [
-          { text: '📋 Browse Menu' },
-          { text: '🛒 View Cart' },
-          { text: '📦 Track Order' },
-          { text: '💬 Talk to Us' },
-        ],
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      console.error('[IceBreakers] Setup failed:', err);
-      return { error: 'Failed to setup ice breakers. Check WhatsApp credentials.' };
-    }
-
-    logActivity({
-      restaurantId,
-      actorType: 'owner',
-      actorId: user.id,
-      action: 'whatsapp.ice_breakers_setup',
-      details: {},
-    });
-
-    return { success: true };
-  } catch (e) {
-    console.error('[IceBreakers] Error:', e);
-    return { error: 'Network error setting up ice breakers.' };
-  }
+  // Ice breakers must be configured in Meta WhatsApp Manager (no API support)
+  return {
+    success: true,
+    instructions: true,
+    managerUrl: wabaId
+      ? `https://business.facebook.com/wa/manage/phone-numbers/?waba_id=${wabaId}`
+      : 'https://business.facebook.com/wa/manage/phone-numbers/',
+    steps: [
+      'Open WhatsApp Manager (link above)',
+      'Select your phone number → Settings (gear icon)',
+      'Go to "Automations" tab',
+      'Find "Ice Breakers" → click Edit',
+      'Add: Browse Menu, View Cart, Track Order, Talk to Us',
+      'Save changes',
+    ],
+  };
 }

@@ -231,6 +231,8 @@ function WhatsAppSettings({
 }) {
   const [saving, setSaving] = useState(false);
   const [settingUpIce, setSettingUpIce] = useState(false);
+  const [iceManagerUrl, setIceManagerUrl] = useState("");
+  const [iceSteps, setIceSteps] = useState<string[] | null>(null);
 
   const handleSaveWhatsApp = async () => {
     setSaving(true);
@@ -291,26 +293,58 @@ function WhatsAppSettings({
 
         {/* Ice Breakers */}
         <div className="mt-4 rounded-xl border border-border/50 p-4">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
               <p className="text-sm font-medium">Quick Actions (Ice Breakers)</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Auto-show options when customer opens chat — zero API cost.
+              <p className="text-xs text-muted-foreground mt-0.5 mb-3">
+                Clickable prompts shown when a customer opens your chat for the first time.
               </p>
+              {settingUpIce && iceSteps && (
+                <div className="space-y-2 mt-2">
+                  <a
+                    href={iceManagerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-all"
+                  >
+                    Open WhatsApp Manager →
+                  </a>
+                  <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
+                    {iceSteps.map((step, i) => (
+                      <li key={i}>{step}</li>
+                    ))}
+                  </ol>
+                  <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 mt-2">
+                    <p className="text-xs font-medium text-primary mb-1">Recommended Ice Breakers:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["Browse Menu", "View Cart", "Track Order", "Talk to Us"].map((t) => (
+                        <span key={t} className="inline-flex items-center rounded-full bg-card border border-border px-2.5 py-0.5 text-[11px] font-medium">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <button
               onClick={async () => {
-                setSettingUpIce(true);
-                const result = await setupWhatsAppIceBreakers(restaurantId);
-                setSettingUpIce(false);
-                if (result.error) toast.error(result.error);
-                else toast.success("Ice breakers configured! ❄️");
+                if (settingUpIce) {
+                  setSettingUpIce(false);
+                  return;
+                }
+                const result = await setupWhatsAppIceBreakers(restaurantId) as Record<string, unknown>;
+                if (result.error) {
+                  toast.error(result.error as string);
+                } else {
+                  setIceManagerUrl(result.managerUrl as string);
+                  setIceSteps(result.steps as string[]);
+                  setSettingUpIce(true);
+                }
               }}
-              disabled={settingUpIce}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50 transition-all shrink-0"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 text-xs font-semibold text-primary hover:bg-primary/10 transition-all shrink-0"
             >
-              {settingUpIce ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-              Setup
+              {settingUpIce ? "Hide" : "Setup Guide"}
             </button>
           </div>
         </div>
