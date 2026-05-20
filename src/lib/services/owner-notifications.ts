@@ -12,10 +12,20 @@ const supabaseAdmin = createClient(
   { auth: { persistSession: false } }
 );
 
+// ─── Sanitization helper for WhatsApp numbers ─
+
+export function sanitizeWhatsAppNumber(phone: string): string {
+  let clean = phone.trim().replace(/\D/g, ''); // Keep only digits
+  if (clean.length === 10) {
+    clean = '91' + clean; // Default to India prefix if 10 digits
+  }
+  return clean;
+}
+
 // ─── Send WhatsApp to a number ──────────────
 
 async function sendWhatsApp(phoneNumberId: string, accessToken: string, to: string, body: string) {
-  await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+  const response = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -23,11 +33,16 @@ async function sendWhatsApp(phoneNumberId: string, accessToken: string, to: stri
     },
     body: JSON.stringify({
       messaging_product: 'whatsapp',
-      to,
+      to: sanitizeWhatsAppNumber(to),
       type: 'text',
       text: { body },
     }),
   });
+
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(errBody)}`);
+  }
 }
 
 // ─── Notify Owner: New Order ────────────────
@@ -84,12 +99,17 @@ export async function handleOwnerReply(
 ): Promise<boolean> {
   try {
     // Check if this sender is a restaurant owner
-    const { data: restaurant } = await supabaseAdmin
+    const { data: restaurants } = await supabaseAdmin
       .from('restaurants')
-      .select('id, name, whatsapp_phone_id, whatsapp_access_token')
-      .eq('owner_whatsapp', from)
-      .eq('whatsapp_phone_id', phoneNumberId)
-      .single();
+      .select('id, name, owner_whatsapp, whatsapp_phone_id, whatsapp_access_token')
+      .eq('whatsapp_phone_id', phoneNumberId);
+
+    if (!restaurants || restaurants.length === 0) return false;
+
+    // Match by comparing sanitized WhatsApp numbers
+    const restaurant = restaurants.find(
+      (r) => r.owner_whatsapp && sanitizeWhatsAppNumber(r.owner_whatsapp) === sanitizeWhatsAppNumber(from)
+    );
 
     if (!restaurant) return false;
 
