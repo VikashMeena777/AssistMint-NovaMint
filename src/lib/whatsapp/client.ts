@@ -234,7 +234,7 @@ export async function sendCarouselMessage(
 
     const carouselCards = cards.map((card, idx) => ({
       card_index: idx,
-      type: 'quick_reply' as const,
+      type: 'button' as const,
       header: {
         type: 'image' as const,
         image: { link: card.imageUrl },
