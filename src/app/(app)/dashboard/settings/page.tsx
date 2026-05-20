@@ -176,7 +176,7 @@ function RestaurantSettings({
   onChange,
 }: {
   data: RestaurantData;
-  onChange: (key: string, value: string) => void;
+  onChange: (key: string, value: any) => void;
 }) {
   const fields = [
     { key: "name", label: "Restaurant Name", placeholder: "e.g., Spice Garden" },
@@ -188,8 +188,56 @@ function RestaurantSettings({
     { key: "owner_whatsapp", label: "Owner WhatsApp (Order Alerts & Management)", placeholder: "e.g., +919876543210" },
   ];
 
+  const daysOfWeek = [
+    { key: "mon", label: "Monday" },
+    { key: "tue", label: "Tuesday" },
+    { key: "wed", label: "Wednesday" },
+    { key: "thu", label: "Thursday" },
+    { key: "fri", label: "Friday" },
+    { key: "sat", label: "Saturday" },
+    { key: "sun", label: "Sunday" },
+  ];
+
+  const [defaultOpen, setDefaultOpen] = useState("10:00");
+  const [defaultClose, setDefaultClose] = useState("22:00");
+
+  const applyDefaultToAll = () => {
+    const updated: Record<string, any> = {};
+    daysOfWeek.forEach((day) => {
+      updated[day.key] = {
+        open: defaultOpen,
+        close: defaultClose,
+        closed: false,
+      };
+    });
+    onChange("business_hours", updated);
+    toast.success("Applied default hours to all days! 🕐");
+  };
+
+  const updateDayHour = (dayKey: string, field: "open" | "close" | "closed", val: any) => {
+    const currentHours = data.business_hours || {
+      mon: { open: "10:00", close: "22:00" },
+      tue: { open: "10:00", close: "22:00" },
+      wed: { open: "10:00", close: "22:00" },
+      thu: { open: "10:00", close: "22:00" },
+      fri: { open: "10:00", close: "22:00" },
+      sat: { open: "10:00", close: "22:00" },
+      sun: { open: "10:00", close: "22:00" },
+    };
+    const dayConfig = currentHours[dayKey] || { open: "10:00", close: "22:00" };
+    const updated = {
+      ...currentHours,
+      [dayKey]: {
+        ...dayConfig,
+        [field]: val,
+      },
+    };
+    onChange("business_hours", updated);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Restaurant Details */}
       <div className="rounded-2xl border border-border/50 bg-card p-6">
         <h3 className="text-base font-semibold mb-4">Restaurant Details</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -215,6 +263,100 @@ function RestaurantSettings({
             rows={2}
             className="flex w-full rounded-xl border border-input bg-muted/30 px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors resize-none"
           />
+        </div>
+      </div>
+
+      {/* Business Hours Settings */}
+      <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h3 className="text-base font-semibold">Business Hours</h3>
+            <p className="text-sm text-muted-foreground">
+              Configure when your restaurant is open for receiving orders.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border border-border/50 shrink-0">
+            <input
+              type="time"
+              value={defaultOpen}
+              onChange={(e) => setDefaultOpen(e.target.value)}
+              className="bg-transparent border-0 text-xs font-semibold focus:ring-0 p-1 w-16"
+            />
+            <span className="text-xs text-muted-foreground font-medium">to</span>
+            <input
+              type="time"
+              value={defaultClose}
+              onChange={(e) => setDefaultClose(e.target.value)}
+              className="bg-transparent border-0 text-xs font-semibold focus:ring-0 p-1 w-16"
+            />
+            <button
+              onClick={applyDefaultToAll}
+              type="button"
+              className="bg-primary hover:opacity-90 text-primary-foreground text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+            >
+              Apply to All
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {daysOfWeek.map((day) => {
+            const currentHours = data.business_hours || {};
+            const config = currentHours[day.key] || { open: "10:00", close: "22:00" };
+            const isClosed = config.closed || config.is_closed || false;
+
+            return (
+              <div
+                key={day.key}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!isClosed}
+                      onChange={(e) => updateDayHour(day.key, "closed", !e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 rounded-full bg-muted peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
+                  </label>
+                  <span className="text-sm font-semibold min-w-[100px]">{day.label}</span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      isClosed
+                        ? "bg-red-500/10 text-red-500 border border-red-500/20"
+                        : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                    }`}
+                  >
+                    {isClosed ? "Closed" : "Open"}
+                  </span>
+                </div>
+
+                {!isClosed && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-medium">Open:</span>
+                      <input
+                        type="time"
+                        value={config.open || "10:00"}
+                        onChange={(e) => updateDayHour(day.key, "open", e.target.value)}
+                        className="flex h-9 w-24 rounded-lg border border-input bg-muted/30 px-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-medium">Close:</span>
+                      <input
+                        type="time"
+                        value={config.close || "22:00"}
+                        onChange={(e) => updateDayHour(day.key, "close", e.target.value)}
+                        className="flex h-9 w-24 rounded-lg border border-input bg-muted/30 px-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

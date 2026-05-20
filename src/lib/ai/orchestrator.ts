@@ -108,9 +108,11 @@ export async function handleIncomingMessage(params: {
   // ── Operating Hours Check ──
   if (lowerText === 'checkout' || lowerText === 'order' || lowerText === 'place order') {
     if (!isRestaurantOpen(restaurant)) {
-      const hours = getBusinessHoursText(restaurant);
-      await sendBotReply(restaurant, customer, conversation,
-        `🕐 *Sorry, we're currently closed.*\n${hours}\nYou can still browse the menu and add items to your cart!`);
+      const todayHours = getTodayHoursText(restaurant);
+      const msg = todayHours
+        ? `🕐 *We are not available right now.*\nOur operating hours for today are *${todayHours}*.\nYou can still browse the menu and add items to your cart!`
+        : `🕐 *Sorry, we are not available right now.*\nYou can still browse the menu and add items to your cart!`;
+      await sendBotReply(restaurant, customer, conversation, msg);
       return;
     }
     await askForDeliveryAddress(restaurant, customer, conversation);
@@ -661,6 +663,16 @@ async function askForDeliveryAddress(
   customer: { id: string; phone: string },
   conversation: { id: string }
 ): Promise<void> {
+  // Check if restaurant is open
+  if (!isRestaurantOpen(restaurant)) {
+    const todayHours = getTodayHoursText(restaurant);
+    const msg = todayHours
+      ? `🕐 *We are not available right now.*\nOur operating hours for today are *${todayHours}*.\nYou can still browse the menu and add items to your cart!`
+      : `🕐 *Sorry, we are not available right now.*\nYou can still browse the menu and add items to your cart!`;
+    await sendBotReply(restaurant, customer, conversation, msg);
+    return;
+  }
+
   const cart = await getOrCreateCart(restaurant.id, customer.id);
   if (cart.items.length === 0) {
     await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to browse.');
@@ -758,6 +770,16 @@ async function sendPaymentChoice(
   customer: { id: string; phone: string },
   conversation: { id: string }
 ): Promise<void> {
+  // Check if restaurant is open
+  if (!isRestaurantOpen(restaurant)) {
+    const todayHours = getTodayHoursText(restaurant);
+    const msg = todayHours
+      ? `🕐 *We are not available right now.*\nOur operating hours for today are *${todayHours}*.\nYou can still browse the menu and add items to your cart!`
+      : `🕐 *Sorry, we are not available right now.*\nYou can still browse the menu and add items to your cart!`;
+    await sendBotReply(restaurant, customer, conversation, msg);
+    return;
+  }
+
   const cart = await getOrCreateCart(restaurant.id, customer.id);
 
   if (cart.items.length === 0) {
@@ -974,7 +996,14 @@ function buildSystemPrompt(
     ? `\n\n## LANGUAGE: Respond ONLY in Hindi (Devanagari script). Use English for brand names, food names, and prices. Example: "आपके कार्ट में Paneer Tikka — ₹250 जोड़ दिया गया है!"`
     : '';
 
+  const isOpen = isRestaurantOpen(restaurant);
+  const todayHours = getTodayHoursText(restaurant);
+  const statusInstruction = !isOpen
+    ? `\n\n## CURRENT STATUS: CLOSED\nWe are currently closed/not available. Our operating hours for today are ${todayHours || 'not set (we are closed)'}. Do NOT let the customer order or checkout. If they try to add items to cart, order, or checkout, politely apologize and say "We are not available right now. We are open from ${todayHours || 'our scheduled timings'} today."`
+    : `\n\n## CURRENT STATUS: OPEN\nWe are open and taking orders. Our operating hours for today are ${todayHours || 'all day'}.`;
+
   return `${restaurant.ai_persona || ''}
+${statusInstruction}
 
 You are the premium AI concierge for "${restaurant.name}" on WhatsApp. You provide a world-class ordering experience.
 
@@ -1540,10 +1569,11 @@ function isRestaurantOpen(restaurant: Restaurant): boolean {
   const now = new Date();
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const today = days[now.getDay()];
-  const todayHours = hours[today] as { open?: string; close?: string; closed?: boolean } | undefined;
+  const todayShort = today.substring(0, 3);
+  const todayHours = (hours[today] || hours[todayShort]) as { open?: string; close?: string; closed?: boolean; is_closed?: boolean } | undefined;
 
   if (!todayHours) return true;
-  if (todayHours.closed) return false;
+  if (todayHours.closed || todayHours.is_closed) return false;
   if (!todayHours.open || !todayHours.close) return true;
 
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -1568,13 +1598,31 @@ function getBusinessHoursText(restaurant: Restaurant): string {
 
   const lines: string[] = [];
   for (const day of days) {
-    const h = hours[day] as { open?: string; close?: string; closed?: boolean } | undefined;
+    const dayShort = day.substring(0, 3);
+    const h = (hours[day] || hours[dayShort]) as { open?: string; close?: string; closed?: boolean; is_closed?: boolean } | undefined;
     if (!h) continue;
-    if (h.closed) {
+    if (h.closed || h.is_closed) {
       lines.push(`${dayLabels[day]}: Closed`);
     } else if (h.open && h.close) {
       lines.push(`${dayLabels[day]}: ${h.open} - ${h.close}`);
     }
   }
   return lines.length > 0 ? `📅 *Our Hours:*\n${lines.join('\n')}` : '';
+}
+
+function getTodayHoursText(restaurant: Restaurant): string {
+  const hours = restaurant.business_hours;
+  if (!hours || Object.keys(hours).length === 0) return '';
+
+  const now = new Date();
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const today = days[now.getDay()];
+  const todayShort = today.substring(0, 3);
+  const todayHours = (hours[today] || hours[todayShort]) as { open?: string; close?: string; closed?: boolean; is_closed?: boolean } | undefined;
+
+  if (!todayHours || todayHours.closed || todayHours.is_closed) return '';
+  if (todayHours.open && todayHours.close) {
+    return `${todayHours.open} to ${todayHours.close}`;
+  }
+  return '';
 }
