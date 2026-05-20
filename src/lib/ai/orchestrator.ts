@@ -585,6 +585,8 @@ async function sendMenuOverview(
           bodyText: `${filterLabel} from *${restaurant.name}* 🍽️`,
           cards,
         });
+        // Wait for carousel to be delivered before sending nav buttons
+        await new Promise(resolve => setTimeout(resolve, 1500));
         await sendReplyButtons({
           phoneNumberId: restaurant.whatsapp_phone_id,
           accessToken: restaurant.whatsapp_token,
@@ -766,8 +768,12 @@ async function sendCategoryItems(
     }
   }
 
-  // Navigation buttons after items
+  // Navigation buttons after items — delay to ensure carousel arrives first
+  // WhatsApp processes image carousels slower than text buttons
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    // Wait for carousel to be delivered before sending nav buttons
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
     const navButtons: { id: string; title: string }[] = [];
     if (hasMore) {
       navButtons.push({ id: `cat_${categoryId}_p${page + 1}`, title: '➡️ More Items' });
