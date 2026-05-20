@@ -290,9 +290,20 @@ async function handleInteractiveReply(
       await generateAndSendAIResponse(restaurant, customer, conversation, 'I need help with ordering');
       break;
 
-    case 'btn_place_order':
+    case 'btn_place_order': {
+      // Guard: prevent stale checkout after order already placed
+      if (await hasRecentOrder(restaurant.id, customer.id)) {
+        await sendBotReply(restaurant, customer, conversation, '✅ You already placed an order just now! Send *orders* to check status.');
+        break;
+      }
+      const checkCart = await getOrCreateCart(restaurant.id, customer.id);
+      if (checkCart.items.length === 0) {
+        await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty! Browse the *menu* to add items first.');
+        break;
+      }
       await askForDeliveryAddress(restaurant, customer, conversation);
       break;
+    }
 
     case 'btn_clear_cart':
       await clearCart((await getOrCreateCart(restaurant.id, customer.id)).id);
@@ -307,9 +318,15 @@ async function handleInteractiveReply(
       await handleOnlinePayOrder(restaurant, customer, conversation);
       break;
 
-    case 'btn_skip_address':
+    case 'btn_skip_address': {
+      // Guard: prevent stale checkout
+      if (await hasRecentOrder(restaurant.id, customer.id)) {
+        await sendBotReply(restaurant, customer, conversation, '✅ You already placed an order just now! Send *orders* to check status.');
+        break;
+      }
       await sendPaymentChoice(restaurant, customer, conversation);
       break;
+    }
 
     case 'btn_reorder':
       await handleReorder(restaurant, customer, conversation);
@@ -625,8 +642,8 @@ async function sendMenuOverview(
 
   const isHindi = customer.language_preference === 'hi';
   const bodyText = isHindi
-    ? `*${restaurant.name}* का मेनू 🍽️\nकैटेगरी चुनें और फोटो के साथ आइटम देखें!`
-    : `*${restaurant.name}* Menu 🍽️\nPick a category to browse items with photos!`;
+    ? `कैटेगरी चुनें और फोटो के साथ आइटम देखें! 🍽️`
+    : `Pick a category to browse items with photos! 🍽️`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     try {

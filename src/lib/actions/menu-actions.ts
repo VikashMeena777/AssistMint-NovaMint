@@ -142,6 +142,7 @@ export async function createMenuItem(
     is_bestseller?: boolean;
     prep_time_minutes?: number;
     display_order?: number;
+    tags?: string[];
   }
 ) {
   const { supabase, error: authError } = await verifyOwnership(restaurantId);
@@ -161,6 +162,7 @@ export async function createMenuItem(
       is_available: true,
       prep_time_minutes: item.prep_time_minutes ?? 15,
       display_order: item.display_order ?? 0,
+      tags: item.tags ?? [],
     })
     .select()
     .single();

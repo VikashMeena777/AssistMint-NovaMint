@@ -35,6 +35,7 @@ export interface MenuItem {
   is_bestseller: boolean;
   is_available: boolean;
   prep_time_minutes: number;
+  tags?: string[];
   variants?: MenuVariant[];
   addons?: MenuAddon[];
 }
