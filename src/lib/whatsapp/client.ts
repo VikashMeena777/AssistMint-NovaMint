@@ -4,6 +4,14 @@
 
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v21.0';
 
+export function sanitizeWhatsAppNumber(phone: string): string {
+  let clean = phone.trim().replace(/\D/g, ''); // Keep only digits
+  if (clean.length === 10) {
+    clean = '91' + clean; // Default to India prefix if 10 digits
+  }
+  return clean;
+}
+
 // ─── Exponential Backoff Retry ──────────────
 
 interface RetryOptions {
@@ -70,7 +78,7 @@ export async function sendTextMessage(
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
-          to,
+          to: sanitizeWhatsAppNumber(to),
           type: 'text',
           text: { preview_url: false, body: text },
         }),
@@ -136,7 +144,7 @@ export async function sendListMessage(
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
-          to,
+          to: sanitizeWhatsAppNumber(to),
           type: 'interactive',
           interactive,
         }),
@@ -186,7 +194,7 @@ export async function sendReplyButtons(
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
-          to,
+          to: sanitizeWhatsAppNumber(to),
           type: 'interactive',
           interactive,
         }),
@@ -221,7 +229,7 @@ export async function sendImageMessage(
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
-          to,
+          to: sanitizeWhatsAppNumber(to),
           type: 'image',
           image: { link: imageUrl, caption },
         }),
@@ -263,7 +271,7 @@ export async function sendTemplateMessage(
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
-          to,
+          to: sanitizeWhatsAppNumber(to),
           type: 'template',
           template,
         }),
@@ -334,7 +342,7 @@ export async function sendDocumentMessage(
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
-          to,
+          to: sanitizeWhatsAppNumber(to),
           type: 'document',
           document: {
             link: documentUrl,

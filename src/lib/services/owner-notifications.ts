@@ -5,6 +5,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js';
+import { sendTextMessage, sanitizeWhatsAppNumber } from '@/lib/whatsapp/client';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,37 +13,15 @@ const supabaseAdmin = createClient(
   { auth: { persistSession: false } }
 );
 
-// ─── Sanitization helper for WhatsApp numbers ─
-
-export function sanitizeWhatsAppNumber(phone: string): string {
-  let clean = phone.trim().replace(/\D/g, ''); // Keep only digits
-  if (clean.length === 10) {
-    clean = '91' + clean; // Default to India prefix if 10 digits
-  }
-  return clean;
-}
-
 // ─── Send WhatsApp to a number ──────────────
 
 async function sendWhatsApp(phoneNumberId: string, accessToken: string, to: string, body: string) {
-  const response = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: sanitizeWhatsAppNumber(to),
-      type: 'text',
-      text: { body },
-    }),
+  await sendTextMessage({
+    phoneNumberId,
+    accessToken,
+    to,
+    text: body,
   });
-
-  if (!response.ok) {
-    const errBody = await response.json().catch(() => ({}));
-    throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(errBody)}`);
-  }
 }
 
 // ─── Notify Owner: New Order ────────────────
