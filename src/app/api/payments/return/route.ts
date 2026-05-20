@@ -69,27 +69,40 @@ export async function GET(req: NextRequest) {
 
   // Update DB if paid
   if (paymentStatus === 'paid') {
-    // Update payments table
-    await supabaseAdmin
-      .from('payments')
-      .update({ status: 'completed' })
-      .eq('cashfree_order_id', orderId);
-
-    // Update order directly by payment_id (the cfOrderId stored on the order)
-    await supabaseAdmin
+    // Idempotency check — skip if already processed to prevent duplicate messages on page reload
+    const { data: existingOrder } = await supabaseAdmin
       .from('orders')
-      .update({
-        status: 'confirmed',
-        payment_status: 'paid',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('payment_id', orderId);
+      .select('payment_status')
+      .eq('payment_id', orderId)
+      .single();
 
-    // Send WhatsApp payment confirmation — MUST await before returning (Vercel kills background tasks)
-    try {
-      await sendPaymentConfirmationWhatsApp(orderId, amountPaid);
-    } catch (err) {
-      console.error('[PaymentReturn] WhatsApp confirmation error:', err);
+    const alreadyPaid = existingOrder && (existingOrder as Record<string, unknown>).payment_status === 'paid';
+
+    if (!alreadyPaid) {
+      // Update payments table
+      await supabaseAdmin
+        .from('payments')
+        .update({ status: 'completed' })
+        .eq('cashfree_order_id', orderId);
+
+      // Update order directly by payment_id (the cfOrderId stored on the order)
+      await supabaseAdmin
+        .from('orders')
+        .update({
+          status: 'confirmed',
+          payment_status: 'paid',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('payment_id', orderId);
+
+      // Send WhatsApp payment confirmation — only once
+      try {
+        await sendPaymentConfirmationWhatsApp(orderId, amountPaid);
+      } catch (err) {
+        console.error('[PaymentReturn] WhatsApp confirmation error:', err);
+      }
+    } else {
+      console.log(`[PaymentReturn] Order ${orderId} already paid — skipping duplicate WhatsApp message`);
     }
 
     return renderPage('success', amountPaid, orderId);

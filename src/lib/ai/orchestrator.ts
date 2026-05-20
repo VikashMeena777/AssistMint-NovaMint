@@ -819,6 +819,26 @@ async function sendPaymentChoice(
   await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
 }
 
+// ─── Duplicate Order Guard ──────────────────
+
+async function hasRecentOrder(restaurantId: string, customerId: string, withinMinutes = 2): Promise<boolean> {
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+  const cutoff = new Date(Date.now() - withinMinutes * 60 * 1000).toISOString();
+  const { data } = await supabaseAdmin
+    .from('orders')
+    .select('id')
+    .eq('restaurant_id', restaurantId)
+    .eq('customer_id', customerId)
+    .gte('created_at', cutoff)
+    .limit(1);
+  return (data && data.length > 0) || false;
+}
+
 // ─── COD Order ──────────────────────────────
 
 async function handleCODOrder(
@@ -839,6 +859,12 @@ async function handleCODOrder(
   const cart = await getOrCreateCart(restaurant.id, customer.id);
   if (cart.items.length === 0) {
     await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to add items.');
+    return;
+  }
+
+  // Prevent duplicate orders from stale button clicks
+  if (await hasRecentOrder(restaurant.id, customer.id)) {
+    await sendBotReply(restaurant, customer, conversation, '⚠️ You already placed an order just now! Send *orders* to check your order status.');
     return;
   }
 
@@ -885,6 +911,12 @@ async function handleOnlinePayOrder(
   const cart = await getOrCreateCart(restaurant.id, customer.id);
   if (cart.items.length === 0) {
     await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to add items.');
+    return;
+  }
+
+  // Prevent duplicate orders from stale button clicks
+  if (await hasRecentOrder(restaurant.id, customer.id)) {
+    await sendBotReply(restaurant, customer, conversation, '⚠️ You already placed an order just now! Send *orders* to check your order status.');
     return;
   }
 

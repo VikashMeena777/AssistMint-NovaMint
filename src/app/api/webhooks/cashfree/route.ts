@@ -107,7 +107,7 @@ async function handlePaymentSuccess(data: PaymentData) {
   // Find the payment record by cashfree_order_id
   const { data: payment } = await supabaseAdmin
     .from('payments')
-    .select('order_id, restaurant_id')
+    .select('order_id, restaurant_id, status')
     .eq('cashfree_order_id', cfOrderId)
     .single();
 
@@ -117,6 +117,13 @@ async function handlePaymentSuccess(data: PaymentData) {
   }
 
   const p = payment as Record<string, unknown>;
+
+  // Idempotency: skip if already processed (prevents duplicate messages when both webhook + return URL fire)
+  if (p.status === 'completed') {
+    console.log(`[Cashfree] Payment ${cfOrderId} already completed — skipping duplicate processing`);
+    return;
+  }
+
   const orderId = p.order_id as string;
   const restaurantId = p.restaurant_id as string;
 
