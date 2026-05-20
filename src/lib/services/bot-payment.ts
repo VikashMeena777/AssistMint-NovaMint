@@ -40,6 +40,8 @@ export async function createBotPaymentLink(
   const totalRupees = totalPaise / 100;
   const cfOrderId = `AM-${orderId.slice(-8)}-${Date.now().toString(36)}`;
   const cleanPhone = customerPhone.replace(/^\+91/, '').replace(/^\+/, '');
+  // Cashfree rejects names with emojis/special chars — strip them
+  const cleanName = (customerName || 'Customer').replace(/[^\p{L}\p{N}\s.-]/gu, '').trim() || 'Customer';
 
   try {
     // Use Cashfree Payment Links API — returns a shareable URL
@@ -61,7 +63,7 @@ export async function createBotPaymentLink(
           send_email: false,
         },
         customer_details: {
-          customer_name: customerName || 'Customer',
+          customer_name: cleanName,
           customer_phone: cleanPhone,
         },
         link_meta: {
@@ -143,7 +145,7 @@ async function createFallbackPaymentSession(
         order_currency: 'INR',
         customer_details: {
           customer_id: orderId.slice(-12),
-          customer_name: customerName || 'Customer',
+          customer_name: (customerName || 'Customer').replace(/[^\p{L}\p{N}\s.-]/gu, '').trim() || 'Customer',
           customer_phone: customerPhone,
         },
         order_meta: {
