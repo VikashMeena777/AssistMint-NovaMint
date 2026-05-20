@@ -1,7 +1,7 @@
 // ============================================
 // AssistMint — Bot Payment Service
-// Creates Cashfree orders using admin access
-// (no user session needed)
+// Creates Cashfree payment links for WhatsApp
+// (shareable URLs, no JS SDK needed)
 // ============================================
 
 import { createClient } from '@supabase/supabase-js';
@@ -16,11 +16,11 @@ const CASHFREE_API_URL = process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production'
   ? 'https://api.cashfree.com/pg'
   : 'https://sandbox.cashfree.com/pg';
 
-const CASHFREE_API_VERSION = process.env.CASHFREE_API_VERSION || '2025-01-01';
+const CASHFREE_API_VERSION = process.env.CASHFREE_API_VERSION || '2023-08-01';
 
 /**
- * Create a Cashfree payment for an order (bot-side, no user session).
- * Strategy: /pg/orders first (always available) → /pg/links fallback
+ * Create a Cashfree payment link for WhatsApp bot orders.
+ * Uses /pg/links API which returns a shareable URL (no JS SDK needed).
  * Returns payment link URL or null.
  */
 export async function createBotPaymentLink(
@@ -43,93 +43,52 @@ export async function createBotPaymentLink(
   const cleanPhone = customerPhone.replace(/^\+91/, '').replace(/^\+/, '');
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamint.in';
 
-  try {
-    // PRIMARY: Use /pg/orders API — always available on all Cashfree accounts
-    const response = await fetch(`${CASHFREE_API_URL}/orders`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-version': CASHFREE_API_VERSION,
-        'x-client-id': clientId,
-        'x-client-secret': clientSecret,
-      },
-      body: JSON.stringify({
-        order_id: cfOrderId,
-        order_amount: totalRupees,
-        order_currency: 'INR',
-        customer_details: {
-          customer_id: `cust_${cleanPhone.slice(-10)}`,
-          customer_name: customerName || 'Customer',
-          customer_phone: cleanPhone,
-        },
-        order_meta: {
-          return_url: `${appUrl}/api/payments/return?order_id=${cfOrderId}`,
-          notify_url: `${appUrl}/api/webhooks/cashfree`,
-        },
-        order_expiry_time: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-        order_tags: { restaurant_id: restaurantId },
-      }),
-    });
+  // Try /pg/links API — returns a shareable payment URL for WhatsApp
+  const paymentLink = await createPaymentLinkViaLinksAPI(
+    clientId, clientSecret, cfOrderId, totalRupees,
+    cleanPhone, customerName, appUrl
+  );
 
-    const result = await response.json();
+  if (paymentLink) {
+    console.log(`[BotPayment] Created payment link: ${paymentLink}`);
 
-    if (!response.ok) {
-      console.error('[BotPayment] Cashfree /orders failed:', JSON.stringify(result));
+    await supabaseAdmin.from('orders').update({
+      payment_id: cfOrderId,
+      payment_status: 'pending',
+      payment_link: paymentLink,
+    }).eq('id', orderId);
 
-      // FALLBACK: Try /pg/links API
-      return await createPaymentLink(
-        clientId, clientSecret, cfOrderId, totalRupees,
-        orderId, cleanPhone, customerName, restaurantId, totalPaise, appUrl
-      );
-    }
-
-    // Build checkout URL from payment_session_id
-    const sessionId = result.payment_session_id as string;
-    const env = process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production' ? '' : 'sandbox.';
-    const paymentUrl = `https://${env}cashfree.com/pg/view/order/${cfOrderId}?payment_session_id=${sessionId}`;
-
-    console.log(`[BotPayment] Created order: ${cfOrderId}, URL: ${paymentUrl}`);
-
-    // Save to orders table
-    await supabaseAdmin
-      .from('orders')
-      .update({
-        payment_id: cfOrderId,
-        payment_status: 'pending',
-        payment_link: paymentUrl,
-      })
-      .eq('id', orderId);
-
-    // Save to payments table
     await supabaseAdmin.from('payments').insert({
       restaurant_id: restaurantId,
       order_id: orderId,
       cashfree_order_id: cfOrderId,
       amount: totalPaise,
       status: 'pending',
-      payment_link: paymentUrl,
+      payment_link: paymentLink,
     });
 
-    return paymentUrl;
-  } catch (error) {
-    console.error('[BotPayment] Error creating payment:', error);
-    return null;
+    return paymentLink;
   }
+
+  // Fallback: /pg/orders + build redirect page URL
+  const fallbackLink = await createPaymentViaOrdersAPI(
+    clientId, clientSecret, cfOrderId, totalRupees,
+    orderId, cleanPhone, customerName, restaurantId, totalPaise, appUrl
+  );
+
+  return fallbackLink;
 }
 
 /**
- * Fallback: Create payment via /pg/links API (may not be available on all accounts)
+ * PRIMARY: /pg/links API — returns a direct shareable URL
  */
-async function createPaymentLink(
+async function createPaymentLinkViaLinksAPI(
   clientId: string,
   clientSecret: string,
   cfOrderId: string,
   totalRupees: number,
-  orderId: string,
   customerPhone: string,
   customerName: string,
-  restaurantId: string,
-  totalPaise: number,
   appUrl: string
 ): Promise<string | null> {
   try {
@@ -160,18 +119,82 @@ async function createPaymentLink(
     });
 
     const result = await response.json();
+
     if (!response.ok) {
-      console.error('[BotPayment] Fallback /links also failed:', JSON.stringify(result));
+      console.error('[BotPayment] /pg/links failed:', JSON.stringify(result));
       return null;
     }
 
-    const paymentLink = (result.link_url as string) || null;
-    console.log(`[BotPayment] Created payment link: ${paymentLink}`);
+    return (result.link_url as string) || null;
+  } catch (e) {
+    console.error('[BotPayment] /pg/links error:', e);
+    return null;
+  }
+}
+
+/**
+ * FALLBACK: /pg/orders API — creates order, builds a redirect page URL
+ * since payment_session_id can't be used as a direct link
+ */
+async function createPaymentViaOrdersAPI(
+  clientId: string,
+  clientSecret: string,
+  cfOrderId: string,
+  totalRupees: number,
+  orderId: string,
+  customerPhone: string,
+  customerName: string,
+  restaurantId: string,
+  totalPaise: number,
+  appUrl: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(`${CASHFREE_API_URL}/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-version': CASHFREE_API_VERSION,
+        'x-client-id': clientId,
+        'x-client-secret': clientSecret,
+      },
+      body: JSON.stringify({
+        order_id: cfOrderId,
+        order_amount: totalRupees,
+        order_currency: 'INR',
+        customer_details: {
+          customer_id: `cust_${customerPhone.slice(-10)}`,
+          customer_name: customerName || 'Customer',
+          customer_phone: customerPhone,
+        },
+        order_meta: {
+          return_url: `${appUrl}/api/payments/return?order_id=${cfOrderId}`,
+          notify_url: `${appUrl}/api/webhooks/cashfree`,
+        },
+        order_expiry_time: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error('[BotPayment] /pg/orders also failed:', JSON.stringify(result));
+      return null;
+    }
+
+    const sessionId = result.payment_session_id as string;
+    if (!sessionId) {
+      console.error('[BotPayment] No payment_session_id in response');
+      return null;
+    }
+
+    // Build a redirect page URL that loads Cashfree JS SDK and opens checkout
+    const paymentPageUrl = `${appUrl}/pay?session=${encodeURIComponent(sessionId)}&order=${encodeURIComponent(cfOrderId)}`;
+
+    console.log(`[BotPayment] Created fallback payment page: ${paymentPageUrl}`);
 
     await supabaseAdmin.from('orders').update({
       payment_id: cfOrderId,
       payment_status: 'pending',
-      payment_link: paymentLink,
+      payment_link: paymentPageUrl,
     }).eq('id', orderId);
 
     await supabaseAdmin.from('payments').insert({
@@ -180,10 +203,10 @@ async function createPaymentLink(
       cashfree_order_id: cfOrderId,
       amount: totalPaise,
       status: 'pending',
-      payment_link: paymentLink,
+      payment_link: paymentPageUrl,
     });
 
-    return paymentLink;
+    return paymentPageUrl;
   } catch (e) {
     console.error('[BotPayment] Fallback payment failed:', e);
     return null;
