@@ -187,7 +187,8 @@ export async function POST(req: NextRequest) {
 
         // Check if this is a restaurant owner replying to manage orders
         const msgText = (message.text as Record<string, string>)?.body || '';
-        const isOwner = await handleOwnerReply(phoneNumberId, message.from as string, msgText);
+        const commandText = interactiveReply?.id || msgText;
+        const isOwner = await handleOwnerReply(phoneNumberId, message.from as string, commandText);
         if (isOwner) continue; // Owner message handled, skip customer orchestrator
 
         // Route to AI orchestrator (customer messages)

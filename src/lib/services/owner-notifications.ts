@@ -5,7 +5,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js';
-import { sendTextMessage, sanitizeWhatsAppNumber } from '@/lib/whatsapp/client';
+import { sendTextMessage, sendReplyButtons, sanitizeWhatsAppNumber } from '@/lib/whatsapp/client';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,6 +22,58 @@ async function sendWhatsApp(phoneNumberId: string, accessToken: string, to: stri
     to,
     text: body,
   });
+}
+
+// ─── Send WhatsApp with Status Reply Buttons ─
+
+async function sendWhatsAppWithButtons(
+  phoneNumberId: string,
+  accessToken: string,
+  to: string,
+  body: string,
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled'
+) {
+  const buttons: { id: string; title: string }[] = [];
+  if (status === 'pending') {
+    buttons.push({ id: 'accept', title: '✅ Accept' });
+    buttons.push({ id: 'reject', title: '❌ Reject' });
+  } else if (status === 'confirmed') {
+    buttons.push({ id: 'preparing', title: '👨‍🍳 Preparing' });
+    buttons.push({ id: 'ready', title: '📦 Ready' });
+    buttons.push({ id: 'delivered', title: '🎉 Delivered' });
+  } else if (status === 'preparing') {
+    buttons.push({ id: 'ready', title: '📦 Ready' });
+    buttons.push({ id: 'delivered', title: '🎉 Delivered' });
+  } else if (status === 'ready' || status === 'out_for_delivery') {
+    buttons.push({ id: 'delivered', title: '🎉 Delivered' });
+  }
+
+  if (buttons.length > 0) {
+    try {
+      await sendReplyButtons({
+        phoneNumberId,
+        accessToken,
+        to,
+        bodyText: body,
+        buttons,
+      });
+    } catch (e) {
+      console.warn('[OwnerNotify] Failed to send reply buttons, falling back to text:', e);
+      await sendTextMessage({
+        phoneNumberId,
+        accessToken,
+        to,
+        text: body,
+      });
+    }
+  } else {
+    await sendTextMessage({
+      phoneNumberId,
+      accessToken,
+      to,
+      text: body,
+    });
+  }
 }
 
 // ─── Notify Owner: New Order ────────────────
@@ -59,11 +111,26 @@ export async function notifyOwnerNewOrder(restaurantId: string, orderId: string)
     const itemList = items.map((i: any) => `  ${i.quantity}x ${i.item_name}`).join('\n');
     const totalRupees = ((order.total as number) / 100).toFixed(0);
     const payment = (order.payment_method as string) === 'online' ? '💳 Online' : '💵 COD';
-    const address = (order.delivery_address as string) || 'Pickup';
+    
+    const rawAddress = order.delivery_address;
+    let address = 'Pickup';
+    if (rawAddress) {
+      if (typeof rawAddress === 'object') {
+        address = (rawAddress as any).raw || (rawAddress as any).full_address || JSON.stringify(rawAddress);
+      } else {
+        address = String(rawAddress);
+      }
+    }
 
-    const msg = `🔔 *New Order #${order.order_number}*\n👤 ${customerName} (${order.customer_phone})\n📋 Items:\n${itemList}\n💰 ₹${totalRupees} · ${payment}\n📍 ${address}\n\nReply:\n✅ *1* — Accept\n❌ *2* — Reject`;
+    const msg = `🔔 *New Order #${order.order_number}*\n👤 ${customerName} (${order.customer_phone})\n📋 Items:\n${itemList}\n💰 ₹${totalRupees} · ${payment}\n📍 ${address}`;
 
-    await sendWhatsApp(rest.whatsapp_phone_id, rest.whatsapp_access_token, rest.owner_whatsapp, msg);
+    await sendWhatsAppWithButtons(
+      rest.whatsapp_phone_id,
+      rest.whatsapp_access_token,
+      rest.owner_whatsapp,
+      msg,
+      'pending'
+    );
   } catch (e) {
     console.error('[OwnerNotify] Error notifying owner:', e);
   }
@@ -211,7 +278,13 @@ export async function handleOwnerReply(
 
       // Confirm to owner
       if (restaurant.whatsapp_phone_id && restaurant.whatsapp_access_token) {
-        await sendWhatsApp(restaurant.whatsapp_phone_id, restaurant.whatsapp_access_token, from, ownerConfirm);
+        await sendWhatsAppWithButtons(
+          restaurant.whatsapp_phone_id,
+          restaurant.whatsapp_access_token,
+          from,
+          ownerConfirm,
+          newStatus as any
+        );
       }
 
       // On delivery: send receipt + feedback

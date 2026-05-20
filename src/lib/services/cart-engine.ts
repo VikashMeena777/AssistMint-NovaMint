@@ -360,6 +360,18 @@ export async function convertCartToOrder(
     customerName = (cust as Record<string, string>).saved_name || (cust as Record<string, string>).whatsapp_name || '';
   }
 
+  let finalAddress = deliveryAddress;
+  if (!finalAddress && orderType === 'delivery') {
+    const { data: sessionData } = await supabaseAdmin
+      .from('cart_sessions')
+      .select('metadata')
+      .eq('id', cart.id)
+      .single();
+    if (sessionData && sessionData.metadata) {
+      finalAddress = (sessionData.metadata as any).delivery_address || undefined;
+    }
+  }
+
   const { data: order, error } = await supabaseAdmin
     .from('orders')
     .insert({
@@ -375,7 +387,7 @@ export async function convertCartToOrder(
       total: cart.total,
       coupon_code: cart.coupon_code,
       notes: specialInstructions,
-      delivery_address: deliveryAddress ? { raw: deliveryAddress } : null,
+      delivery_address: finalAddress ? { raw: finalAddress } : null,
       delivery_type: orderType,
       status: 'pending',
       payment_status: paymentMethod === 'cod' ? 'cod_pending' : 'pending',
