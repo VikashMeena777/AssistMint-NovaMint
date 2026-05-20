@@ -463,7 +463,7 @@ async function sendGreeting(
 ): Promise<void> {
   const isHindi = customer.language_preference === 'hi';
   const isReturning = (customer.total_orders || 0) > 0;
-  
+
   let bodyText: string;
   if (isHindi) {
     const greeting = customer.name ? `\u0928\u092e\u0938\u094d\u0924\u0947 ${customer.name}! \ud83d\udc4b` : '\u0928\u092e\u0938\u094d\u0924\u0947! \ud83d\udc4b';
@@ -475,15 +475,15 @@ async function sendGreeting(
 
   const buttons = isReturning
     ? [
-        { id: 'btn_menu', title: '📋 View Menu' },
-        { id: 'btn_reorder', title: '🔄 Reorder Last' },
-        { id: 'btn_orders', title: '📦 My Orders' },
-      ]
+      { id: 'btn_menu', title: '📋 View Menu' },
+      { id: 'btn_reorder', title: '🔄 Reorder Last' },
+      { id: 'btn_orders', title: '📦 My Orders' },
+    ]
     : [
-        { id: 'btn_menu', title: '📋 View Menu' },
-        { id: 'btn_cart', title: '🛒 My Cart' },
-        { id: 'btn_help', title: '💬 Help' },
-      ];
+      { id: 'btn_menu', title: '📋 View Menu' },
+      { id: 'btn_cart', title: '🛒 My Cart' },
+      { id: 'btn_help', title: '💬 Help' },
+    ];
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendReplyButtons({
@@ -534,9 +534,8 @@ async function sendMenuOverview(
     return;
   }
 
-  // If only 1 category or few total items, show items directly
-  const totalItems = filteredMenu.categories.reduce((sum, c) => sum + c.items.length, 0);
-  const showCategoriesFirst = filteredMenu.categories.length >= 2 && totalItems > 8;
+  // Show categories first when there are 2+ categories
+  const showCategoriesFirst = filteredMenu.categories.length >= 2;
 
   let sections: ListSection[];
 
@@ -717,11 +716,13 @@ async function sendCartSummary(
 
     const sections: ListSection[] = [
       { title: '📝 Edit Items', rows: editRows.slice(0, 8) },
-      { title: '⚡ Actions', rows: [
-        { id: 'btn_place_order', title: '✅ Place Order', description: `Total: ₹${totalR}` },
-        { id: 'btn_clear_cart', title: '🗑 Clear Cart', description: 'Remove all items' },
-        { id: 'btn_menu', title: '📋 Add More Items', description: 'Browse menu' },
-      ]},
+      {
+        title: '⚡ Actions', rows: [
+          { id: 'btn_place_order', title: '✅ Place Order', description: `Total: ₹${totalR}` },
+          { id: 'btn_clear_cart', title: '🗑 Clear Cart', description: 'Remove all items' },
+          { id: 'btn_menu', title: '📋 Add More Items', description: 'Browse menu' },
+        ]
+      },
     ];
 
     await sendListMessage({
@@ -764,9 +765,11 @@ async function askForDeliveryAddress(
     }));
     const sections: ListSection[] = [
       { title: '📍 Saved Addresses', rows: addrRows },
-      { title: '⚙️ Options', rows: [
-        { id: 'btn_skip_address', title: '🏪 Pickup Instead', description: 'Pick up from restaurant' },
-      ]},
+      {
+        title: '⚙️ Options', rows: [
+          { id: 'btn_skip_address', title: '🏪 Pickup Instead', description: 'Pick up from restaurant' },
+        ]
+      },
     ];
     await sendListMessage({
       phoneNumberId: restaurant.whatsapp_phone_id,
@@ -1173,7 +1176,7 @@ async function executeAction(
 
       await addToCart(cartId, cartItem);
       // Fire-and-forget combo suggestion (non-blocking)
-      sendComboSuggestions(restaurant, customer, conversation, action.itemId).catch(() => {});
+      sendComboSuggestions(restaurant, customer, conversation, action.itemId).catch(() => { });
       break;
     }
 
@@ -1543,10 +1546,10 @@ async function sendComboSuggestions(
     const suggestions = drinkCategory
       ? drinkCategory.items.filter(i => i.is_available).slice(0, 3)
       : menu.categories
-          .filter(c => c.id !== addedCategoryId)
-          .flatMap(c => c.items)
-          .filter(i => i.is_available && i.is_bestseller)
-          .slice(0, 3);
+        .filter(c => c.id !== addedCategoryId)
+        .flatMap(c => c.items)
+        .filter(i => i.is_available && i.is_bestseller)
+        .slice(0, 3);
 
     if (suggestions.length === 0) return;
 
