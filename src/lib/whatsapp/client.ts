@@ -234,6 +234,7 @@ export async function sendCarouselMessage(
 
     const carouselCards = cards.map((card, idx) => ({
       card_index: idx,
+      type: 'quick_reply' as const,
       header: {
         type: 'image' as const,
         image: { link: card.imageUrl },
@@ -241,8 +242,8 @@ export async function sendCarouselMessage(
       body: { text: card.body.substring(0, 160) },
       action: {
         buttons: card.buttons.slice(0, maxButtons).map(b => ({
-          type: 'reply' as const,
-          reply: { id: b.id, title: b.title.substring(0, 20) },
+          type: 'quick_reply' as const,
+          quick_reply: { id: b.id, title: b.title.substring(0, 20) },
         })),
       },
     }));
