@@ -207,6 +207,74 @@ export async function sendReplyButtons(
   });
 }
 
+// ─── Send Carousel Message ──────────────────
+
+export interface CarouselCard {
+  imageUrl: string;
+  body: string;
+  buttons: { id: string; title: string }[];
+}
+
+export async function sendCarouselMessage(
+  options: SendMessageOptions & {
+    bodyText: string;
+    cards: CarouselCard[];
+  }
+): Promise<{ message_id: string }> {
+  return withRetry(async () => {
+    const { phoneNumberId, accessToken, to, bodyText, cards } = options;
+
+    // WhatsApp requires 2-10 cards, all with same button count & header type
+    if (cards.length < 2 || cards.length > 10) {
+      throw new Error(`Carousel requires 2-10 cards, got ${cards.length}`);
+    }
+
+    // Normalize button count across all cards (WhatsApp requires consistency)
+    const maxButtons = Math.min(2, Math.max(...cards.map(c => c.buttons.length)));
+
+    const carouselCards = cards.map((card, idx) => ({
+      card_index: idx,
+      header: {
+        type: 'image' as const,
+        image: { link: card.imageUrl },
+      },
+      body: { text: card.body.substring(0, 160) },
+      action: {
+        buttons: card.buttons.slice(0, maxButtons).map(b => ({
+          type: 'reply' as const,
+          reply: { id: b.id, title: b.title.substring(0, 20) },
+        })),
+      },
+    }));
+
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: sanitizeWhatsAppNumber(to),
+          type: 'interactive',
+          interactive: {
+            type: 'carousel',
+            body: { text: bodyText },
+            action: { cards: carouselCards },
+          },
+        }),
+      }
+    );
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(data)}`);
+    return { message_id: data.messages?.[0]?.id || '' };
+  });
+}
+
 // ─── Send Image Message ─────────────────────
 
 export async function sendImageMessage(

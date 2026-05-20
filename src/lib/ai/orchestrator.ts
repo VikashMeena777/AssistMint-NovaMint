@@ -12,7 +12,7 @@ import { getOrCreateConversation, getRecentMessages, saveMessage, setBotActive }
 import { getRestaurantByPhoneId, type Restaurant } from '@/lib/services/restaurant-service';
 import { createBotPaymentLink } from '@/lib/services/bot-payment';
 import { notifyOwnerNewOrder } from '@/lib/services/owner-notifications';
-import { sendTextMessage, sendReplyButtons, sendListMessage, sendImageMessage, sendDocumentMessage, type ListSection } from '@/lib/whatsapp/client';
+import { sendTextMessage, sendReplyButtons, sendListMessage, sendImageMessage, sendDocumentMessage, sendCarouselMessage, type ListSection, type CarouselCard } from '@/lib/whatsapp/client';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
 
 // ─── Main Orchestrator ──────────────────────
@@ -327,13 +327,30 @@ async function handleInteractiveReply(
       await sendMenuOverview(restaurant, customer, conversation, 'nonveg');
       break;
 
+    case 'btn_categories':
+      await sendMenuOverview(restaurant, customer, conversation);
+      break;
+
+    case 'btn_bestsellers':
+      await sendMenuOverview(restaurant, customer, conversation, 'bestseller');
+      break;
+
     case 'btn_location':
       await sendBotReply(restaurant, customer, conversation, '📍 Share your *live location* by tapping 📎 → Location.\nThis helps us deliver faster!');
       break;
 
     default:
-      // Handle dynamic IDs: item_uuid, add_uuid, inc_uuid, dec_uuid, rate_N_uuid, addr_N
-      if (btnId.startsWith('item_')) {
+      // Handle dynamic IDs: item_uuid, add_uuid, inc_uuid, dec_uuid, rate_N_uuid, addr_N, cat_uuid, cat_uuid_pN
+      if (btnId.startsWith('cat_') && btnId.includes('_p')) {
+        // Category pagination: cat_<catId>_p<page>
+        const match = btnId.match(/^cat_(.+)_p(\d+)$/);
+        if (match) {
+          await sendCategoryItems(restaurant, customer, conversation, match[1], parseInt(match[2]));
+        }
+      } else if (btnId.startsWith('cat_')) {
+        // Category selection: cat_<catId>
+        await sendCategoryItems(restaurant, customer, conversation, btnId.replace('cat_', ''));
+      } else if (btnId.startsWith('item_')) {
         await sendItemDetails(restaurant, customer, conversation, btnId.replace('item_', ''));
       } else if (btnId.startsWith('add_')) {
         await handleDirectAddToCart(restaurant, customer, conversation, btnId.replace('add_', ''));
@@ -453,7 +470,7 @@ async function handleDirectAddToCart(
   const itemCount = updatedCart.items.reduce((sum, i) => sum + i.quantity, 0);
   const totalRupees = (updatedCart.total / 100).toFixed(0);
 
-  const bodyText = `\u2705 *${item.name}* added! (\u20b9${priceRupees})\n\ud83d\uded2 ${itemCount} item${itemCount > 1 ? 's' : ''} \u00b7 Total: \u20b9${totalRupees}`;
+  const bodyText = `✅ *${item.name}* added!\n\n🛒 Cart: ${itemCount} item${itemCount > 1 ? 's' : ''} · ₹${totalRupees}`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendReplyButtons({
@@ -462,7 +479,7 @@ async function handleDirectAddToCart(
       to: customer.phone,
       bodyText,
       buttons: [
-        { id: 'btn_menu', title: '📋 Add More' },
+        { id: 'btn_categories', title: '📋 Add More' },
         { id: 'btn_cart', title: '🛒 View Cart' },
         { id: 'btn_place_order', title: '✅ Checkout' },
       ],
@@ -483,11 +500,15 @@ async function sendGreeting(
   
   let bodyText: string;
   if (isHindi) {
-    const greeting = customer.name ? `\u0928\u092e\u0938\u094d\u0924\u0947 ${customer.name}! \ud83d\udc4b` : '\u0928\u092e\u0938\u094d\u0924\u0947! \ud83d\udc4b';
-    bodyText = `${greeting}\n*${restaurant.name}* \u092e\u0947\u0902 \u0938\u094d\u0935\u093e\u0917\u0924 \u0939\u0948 \ud83c\udf3f\n\u092e\u0948\u0902 \u0906\u092a\u0915\u093e \u0911\u0930\u094d\u0921\u0930\u093f\u0902\u0917 \u0905\u0938\u093f\u0938\u094d\u091f\u0947\u0902\u091f \u0939\u0942\u0901 \u2014 \u0915\u094d\u092f\u093e \u0915\u0930\u0928\u093e \u091a\u093e\u0939\u0947\u0902\u0917\u0947?`;
+    const greeting = customer.name ? `नमस्ते ${customer.name}! 👋` : 'नमस्ते! 👋';
+    bodyText = isReturning
+      ? `${greeting}\n\n🏪 *${restaurant.name}*\nवापस आने पर खुशी हुई! 🎉\n\nआज क्या ऑर्डर करना चाहेंगे?`
+      : `${greeting}\n\n🏪 *${restaurant.name}*\nमैं आपका ऑर्डरिंग असिस्टेंट हूँ 🤖\n\n📋 मेनू देखें\n🛒 कार्ट में आइटम जोड़ें\n✅ ऑर्डर प्लेस करें\n\nशुरू करें! 👇`;
   } else {
-    const greeting = customer.name ? `Hi ${customer.name}! \ud83d\udc4b` : 'Hey there! \ud83d\udc4b';
-    bodyText = `${greeting}\nWelcome${isReturning ? ' back' : ''} to *${restaurant.name}* \ud83c\udf3f\nI'm your ordering assistant \u2014 what can I get you?`;
+    const greeting = customer.name ? `Hey ${customer.name}! 👋` : 'Hey there! 👋';
+    bodyText = isReturning
+      ? `${greeting}\n\n🏪 *${restaurant.name}*\nGreat to see you again! 🎉\n\nWhat are you craving today?`
+      : `${greeting}\n\n🏪 *${restaurant.name}*\nI'm your personal ordering assistant 🤖\n\n📋 Browse our menu with photos\n🛒 Add items to cart\n✅ Checkout & pay\n\nLet's get started! 👇`;
   }
 
   const buttons = isReturning
@@ -498,7 +519,7 @@ async function sendGreeting(
       ]
     : [
         { id: 'btn_menu', title: '📋 View Menu' },
-        { id: 'btn_cart', title: '🛒 My Cart' },
+        { id: 'btn_bestsellers', title: '⭐ Bestsellers' },
         { id: 'btn_help', title: '💬 Help' },
       ];
 
@@ -515,7 +536,7 @@ async function sendGreeting(
   await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
 }
 
-// ─── Menu Overview (Interactive List) ───────
+// ─── Menu Overview (Category Picker) ────────
 
 async function sendMenuOverview(
   restaurant: Restaurant,
@@ -531,41 +552,79 @@ async function sendMenuOverview(
     return;
   }
 
-  // Apply dietary filter
-  const filteredMenu = {
-    ...menu,
-    categories: menu.categories.map(cat => ({
-      ...cat,
-      items: cat.items.filter(item => {
-        if (dietaryFilter === 'veg') return item.is_veg;
-        if (dietaryFilter === 'nonveg') return !item.is_veg;
-        if (dietaryFilter === 'bestseller') return item.is_bestseller;
-        return true;
-      }),
-    })).filter(cat => cat.items.length > 0),
-  };
+  // If dietary filter is applied, show matching items directly via carousel
+  if (dietaryFilter) {
+    const allItems = menu.categories.flatMap(cat => cat.items.filter(item => {
+      if (dietaryFilter === 'veg') return item.is_veg;
+      if (dietaryFilter === 'nonveg') return !item.is_veg;
+      if (dietaryFilter === 'bestseller') return item.is_bestseller;
+      return true;
+    }));
 
-  if (filteredMenu.categories.length === 0) {
-    const filterName = dietaryFilter === 'veg' ? 'vegetarian' : dietaryFilter === 'nonveg' ? 'non-veg' : 'bestseller';
-    await sendBotReply(restaurant, customer, conversation, `No ${filterName} items found. Send *menu* to see the full menu.`);
+    if (allItems.length === 0) {
+      const filterName = dietaryFilter === 'veg' ? 'vegetarian' : dietaryFilter === 'nonveg' ? 'non-veg' : 'bestseller';
+      await sendBotReply(restaurant, customer, conversation, `No ${filterName} items found. Send *menu* to see the full menu.`);
+      return;
+    }
+
+    const filterLabel = dietaryFilter === 'veg' ? '🟢 Veg' : dietaryFilter === 'nonveg' ? '🔴 Non-Veg' : '⭐ Bestsellers';
+    const itemsWithImages = allItems.filter(i => i.image_url);
+
+    if (itemsWithImages.length >= 2 && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+      const cards: CarouselCard[] = itemsWithImages.slice(0, 10).map(item => ({
+        imageUrl: item.image_url!,
+        body: `${item.is_veg ? '🟢' : '🔴'} *${item.name}*${item.is_bestseller ? ' ⭐' : ''}\n₹${(item.price / 100).toFixed(0)} · ~${item.prep_time_minutes || 15} mins${item.description ? '\n' + item.description.substring(0, 60) : ''}`,
+        buttons: [{ id: `add_${item.id}`, title: '🛒 Add to Cart' }],
+      }));
+
+      try {
+        await sendCarouselMessage({
+          phoneNumberId: restaurant.whatsapp_phone_id,
+          accessToken: restaurant.whatsapp_token,
+          to: customer.phone,
+          bodyText: `${filterLabel} from *${restaurant.name}* 🍽️`,
+          cards,
+        });
+        await sendReplyButtons({
+          phoneNumberId: restaurant.whatsapp_phone_id,
+          accessToken: restaurant.whatsapp_token,
+          to: customer.phone,
+          bodyText: `${cards.length} ${filterLabel.toLowerCase()} items above ☝️`,
+          buttons: [
+            { id: 'btn_categories', title: '📋 All Categories' },
+            { id: 'btn_cart', title: '🛒 View Cart' },
+            { id: 'btn_place_order', title: '✅ Checkout' },
+          ],
+        });
+        await saveMessage(conversation.id, restaurant.id, 'bot', `Sent ${filterLabel} carousel`, undefined, { phone: customer.phone });
+        return;
+      } catch (e) {
+        console.warn('[Orchestrator] Filter carousel failed, falling back:', e);
+      }
+    }
+
+    // Fallback: text list for filter
+    const textList = allItems.slice(0, 15).map(i =>
+      `${i.is_veg ? '🟢' : '🔴'} *${i.name}*${i.is_bestseller ? ' ⭐' : ''} — ₹${(i.price / 100).toFixed(0)}`
+    ).join('\n');
+    await sendBotReply(restaurant, customer, conversation, `${filterLabel} Menu 🍽️\n\n${textList}\n\nTell me what you'd like to add!`);
     return;
   }
 
-  // Build interactive list sections from menu categories
-  const sections: ListSection[] = filteredMenu.categories.slice(0, 10).map((cat) => ({
-    title: cat.name.substring(0, 24),
-    rows: cat.items.slice(0, 10).map((item) => ({
-      id: `item_${item.id}`,
-      title: item.name.substring(0, 24),
-      description: `₹${(item.price / 100).toFixed(0)}${item.is_veg ? ' 🟢' : ' 🔴'}${item.is_bestseller ? ' ⭐' : ''}`,
+  // Default: Show category picker as interactive list
+  const sections: ListSection[] = [{
+    title: '📂 Menu Categories',
+    rows: menu.categories.slice(0, 10).map(cat => ({
+      id: `cat_${cat.id}`,
+      title: cat.name.substring(0, 24),
+      description: `${cat.items.length} item${cat.items.length > 1 ? 's' : ''}`,
     })),
-  }));
+  }];
 
-  const filterLabel = dietaryFilter === 'veg' ? ' (🟢 Veg Only)' : dietaryFilter === 'nonveg' ? ' (🔴 Non-Veg)' : dietaryFilter === 'bestseller' ? ' (⭐ Bestsellers)' : '';
   const isHindi = customer.language_preference === 'hi';
   const bodyText = isHindi
-    ? `हमारा मेनू${filterLabel} 🍽️\nनीचे टैप करें और ऑर्डर करें`
-    : `Our menu${filterLabel} 🍽️\nTap below to browse and order.`;
+    ? `*${restaurant.name}* का मेनू 🍽️\nकैटेगरी चुनें और फोटो के साथ आइटम देखें!`
+    : `*${restaurant.name}* Menu 🍽️\nPick a category to browse items with photos!`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     try {
@@ -573,26 +632,161 @@ async function sendMenuOverview(
         phoneNumberId: restaurant.whatsapp_phone_id,
         accessToken: restaurant.whatsapp_token,
         to: customer.phone,
-        headerText: `${restaurant.name} Menu${filterLabel}`,
+        headerText: `${restaurant.name} Menu`,
         bodyText,
-        footerText: 'Tap an item to see details & image',
-        buttonText: '📋 Browse Menu',
+        footerText: 'Items shown as visual cards',
+        buttonText: '📋 Browse Categories',
         sections,
       });
     } catch (e) {
-      // Fallback to text if list message fails
-      console.warn('[Orchestrator] List message failed, falling back to text:', e);
-      const textMenu = filteredMenu.categories
-        .map((c) => `📂 *${c.name}*\n${c.items.map((i) => `  • ${i.name} — ₹${(i.price / 100).toFixed(0)}${i.is_veg ? ' 🟢' : ' 🔴'}${i.is_bestseller ? ' ⭐' : ''}`).join('\n')}`)
+      console.warn('[Orchestrator] Category list failed:', e);
+      const textMenu = menu.categories
+        .map(c => `📂 *${c.name}* (${c.items.length} items)`)
         .join('\n');
-
       await sendBotReply(restaurant, customer, conversation,
-        `Our menu${filterLabel} 🍽️\n${textMenu}\nTell me what you'd like to order!`);
+        `${restaurant.name} Menu 🍽️\n\n${textMenu}\n\nTell me a category name or what you'd like!`);
       return;
     }
   }
 
   await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+}
+
+// ─── Category Items (Carousel Cards) ────────
+
+async function sendCategoryItems(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string },
+  categoryId: string,
+  page: number = 0
+): Promise<void> {
+  const menu = await getFullMenu(restaurant.id);
+  if (!menu) {
+    await sendBotReply(restaurant, customer, conversation, '❌ Menu not available right now.');
+    return;
+  }
+
+  const category = menu.categories.find(c => c.id === categoryId);
+  if (!category || category.items.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, '❌ Category not found. Send *menu* to browse.');
+    return;
+  }
+
+  const availableItems = category.items.filter(i => i.is_available);
+  const PAGE_SIZE = 10;
+  const startIdx = page * PAGE_SIZE;
+  const pageItems = availableItems.slice(startIdx, startIdx + PAGE_SIZE);
+  const hasMore = availableItems.length > startIdx + PAGE_SIZE;
+
+  if (pageItems.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, `📂 *${category.name}* — no items available right now.`);
+    return;
+  }
+
+  const itemsWithImages = pageItems.filter(i => i.image_url);
+  const itemsWithoutImages = pageItems.filter(i => !i.image_url);
+
+  // Carousel for items with images (min 2 required by WhatsApp)
+  if (itemsWithImages.length >= 2 && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    const cards: CarouselCard[] = itemsWithImages.map(item => ({
+      imageUrl: item.image_url!,
+      body: `${item.is_veg ? '🟢' : '🔴'} *${item.name}*${item.is_bestseller ? ' ⭐' : ''}\n₹${(item.price / 100).toFixed(0)} · ~${item.prep_time_minutes || 15} mins${item.description ? '\n' + item.description.substring(0, 60) : ''}`,
+      buttons: [{ id: `add_${item.id}`, title: '🛒 Add to Cart' }],
+    }));
+
+    try {
+      await sendCarouselMessage({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        bodyText: `📂 *${category.name}* · ${availableItems.length} items\nSwipe through & tap to add! 👉`,
+        cards,
+      });
+    } catch (e) {
+      console.warn('[Orchestrator] Carousel failed for category:', e);
+      itemsWithoutImages.push(...itemsWithImages);
+      itemsWithImages.length = 0;
+    }
+  } else if (itemsWithImages.length === 1 && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    // Single image item — send as image + buttons
+    const item = itemsWithImages[0];
+    try {
+      await sendImageMessage({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        imageUrl: item.image_url!,
+        caption: `${item.is_veg ? '🟢' : '🔴'} ${item.name}${item.is_bestseller ? ' ⭐' : ''} — ₹${(item.price / 100).toFixed(0)}`,
+      });
+      await sendReplyButtons({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        bodyText: `*${item.name}*\n₹${(item.price / 100).toFixed(0)} · ~${item.prep_time_minutes || 15} mins${item.description ? '\n' + item.description : ''}`,
+        buttons: [
+          { id: `add_${item.id}`, title: '🛒 Add to Cart' },
+          { id: 'btn_categories', title: '📋 Categories' },
+        ],
+      });
+    } catch (e) {
+      itemsWithoutImages.push(item);
+    }
+  }
+
+  // Items without images → interactive list or text
+  if (itemsWithoutImages.length > 0) {
+    if (itemsWithImages.length >= 2) {
+      // Already sent carousel above; show remaining as text
+      const textList = itemsWithoutImages.map(i =>
+        `${i.is_veg ? '🟢' : '🔴'} *${i.name}*${i.is_bestseller ? ' ⭐' : ''} — ₹${(i.price / 100).toFixed(0)}`
+      ).join('\n');
+      await sendBotReply(restaurant, customer, conversation, `Also in *${category.name}*:\n\n${textList}\n\nJust tell me the item name to add!`);
+    } else if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+      // No carousel sent — use interactive list
+      const sections: ListSection[] = [{
+        title: category.name.substring(0, 24),
+        rows: itemsWithoutImages.slice(0, 10).map(item => ({
+          id: `item_${item.id}`,
+          title: item.name.substring(0, 24),
+          description: `₹${(item.price / 100).toFixed(0)}${item.is_veg ? ' 🟢' : ' 🔴'}${item.is_bestseller ? ' ⭐' : ''}`,
+        })),
+      }];
+
+      await sendListMessage({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        headerText: `📂 ${category.name}`,
+        bodyText: `${availableItems.length} items\nTap below to browse!`,
+        footerText: 'Tap an item for details',
+        buttonText: '🍽️ View Items',
+        sections,
+      });
+    }
+  }
+
+  // Navigation buttons after items
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    const navButtons: { id: string; title: string }[] = [];
+    if (hasMore) {
+      navButtons.push({ id: `cat_${categoryId}_p${page + 1}`, title: '➡️ More Items' });
+    }
+    navButtons.push({ id: 'btn_categories', title: '📋 Categories' });
+    navButtons.push(hasMore ? { id: 'btn_cart', title: '🛒 View Cart' } : { id: 'btn_place_order', title: '✅ Checkout' });
+
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText: hasMore
+        ? `Showing ${startIdx + 1}–${startIdx + pageItems.length} of ${availableItems.length} in *${category.name}*`
+        : `That's everything in *${category.name}*! 😋`,
+      buttons: navButtons.slice(0, 3),
+    });
+  }
+
+  await saveMessage(conversation.id, restaurant.id, 'bot', `Sent ${category.name} items (page ${page + 1})`, undefined, { phone: customer.phone });
 }
 
 // ─── Cart Summary with Buttons ──────────────
@@ -792,16 +986,22 @@ async function sendPaymentChoice(
   const taxRupees = (cart.tax / 100).toFixed(0);
   const totalRupees = (cart.total / 100).toFixed(0);
 
-  // Build premium itemized receipt
-  const itemLines = cart.items.map((i) => {
+  // Premium itemized receipt
+  const itemLines = cart.items.map((i, idx) => {
     const itemTotal = ((i.unit_price * i.quantity) / 100).toFixed(0);
-    return `• ${i.item_name} × ${i.quantity} — ₹${itemTotal}`;
+    return `${idx + 1}. ${i.item_name} × ${i.quantity}  ₹${itemTotal}`;
   }).join('\n');
 
-  let bodyText = `🧾 *Order Summary*\n${itemLines}\n— — — — — —\nSubtotal: ₹${subtotalRupees}`;
-  if (parseInt(taxRupees) > 0) bodyText += `\nTax: ₹${taxRupees}`;
-  if (parseInt(deliveryRupees) > 0) bodyText += `\n🚚 Delivery: ₹${deliveryRupees}`;
-  bodyText += `\n*Total: ₹${totalRupees}*\nHow would you like to pay?`;
+  const estimatedTime = getEstimatedDeliveryTime(cart.items.length, 'delivery');
+
+  let bodyText = `🧾 *Order Summary*\n━━━━━━━━━━━━━━\n${itemLines}\n━━━━━━━━━━━━━━`;
+  bodyText += `\n   Subtotal:  ₹${subtotalRupees}`;
+  if (parseInt(taxRupees) > 0) bodyText += `\n   Tax:       ₹${taxRupees}`;
+  if (parseInt(deliveryRupees) > 0) bodyText += `\n   🚚 Delivery: ₹${deliveryRupees}`;
+  bodyText += `\n━━━━━━━━━━━━━━`;
+  bodyText += `\n   💰 *Total: ₹${totalRupees}*`;
+  bodyText += `\n   ⏱️ Ready in ~${estimatedTime}`;
+  bodyText += `\n\nChoose your payment method 👇`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendReplyButtons({
@@ -873,7 +1073,21 @@ async function handleCODOrder(
 
   const totalRupees = (cart.total / 100).toFixed(0);
   const estimatedTime = getEstimatedDeliveryTime(cart.items.length, 'delivery');
-  const reply = `🎉 *Order Confirmed!*\n💵 Pay ₹${totalRupees} on delivery\n⏱️ Ready in *${estimatedTime}*\nThank you for ordering from *${restaurant.name}*! 🌿`;
+  const itemCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
+  const shortId = orderId.substring(0, 8).toUpperCase();
+
+  const reply = [
+    `✅ *Order Confirmed!*`,
+    `━━━━━━━━━━━━━━`,
+    `🏪 *${restaurant.name}*`,
+    `🏷️ Order #${shortId}`,
+    `📦 ${itemCount} item${itemCount > 1 ? 's' : ''}`,
+    `💵 *₹${totalRupees}* — Cash on Delivery`,
+    `⏱️ Ready in *${estimatedTime}*`,
+    `━━━━━━━━━━━━━━`,
+    `We're preparing your order! 👨‍🍳`,
+    `Send *orders* to track your order.`,
+  ].join('\n');
 
   await sendBotReply(restaurant, customer, conversation, reply);
 
@@ -925,6 +1139,8 @@ async function handleOnlinePayOrder(
 
   const totalRupees = (cart.total / 100).toFixed(0);
   const estimatedTime = getEstimatedDeliveryTime(cart.items.length, 'delivery');
+  const itemCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
+  const shortId = orderId.substring(0, 8).toUpperCase();
 
   // Generate Cashfree payment link
   const paymentLink = await createBotPaymentLink(
@@ -937,9 +1153,31 @@ async function handleOnlinePayOrder(
 
   let reply: string;
   if (paymentLink) {
-    reply = `🎉 *Order Confirmed!*\n💳 Amount: ₹${totalRupees} · ⏱️ *${estimatedTime}*\n👉 Pay here: ${paymentLink}\nThank you, *${restaurant.name}*! 🌿`;
+    reply = [
+      `✅ *Order Confirmed!*`,
+      `━━━━━━━━━━━━━━`,
+      `🏪 *${restaurant.name}*`,
+      `🏷️ Order #${shortId}`,
+      `📦 ${itemCount} item${itemCount > 1 ? 's' : ''}`,
+      `💳 *₹${totalRupees}* — Pay Online`,
+      `⏱️ Ready in *${estimatedTime}*`,
+      `━━━━━━━━━━━━━━`,
+      `👉 *Pay here:* ${paymentLink}`,
+      ``,
+      `Complete payment to confirm your order!`,
+    ].join('\n');
   } else {
-    reply = `🎉 *Order Confirmed!*\n💰 Amount: ₹${totalRupees}\n⏱️ Ready in *${estimatedTime}*\n⚠️ Our team will contact you for payment.\nThank you! 🌿`;
+    reply = [
+      `✅ *Order Confirmed!*`,
+      `━━━━━━━━━━━━━━`,
+      `🏪 *${restaurant.name}*`,
+      `🏷️ Order #${shortId}`,
+      `📦 ${itemCount} item${itemCount > 1 ? 's' : ''}`,
+      `💰 *₹${totalRupees}*`,
+      `⏱️ Ready in *${estimatedTime}*`,
+      `━━━━━━━━━━━━━━`,
+      `⚠️ Our team will contact you for payment.`,
+    ].join('\n');
   }
 
   await sendBotReply(restaurant, customer, conversation, reply);
