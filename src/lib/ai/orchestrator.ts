@@ -1592,11 +1592,18 @@ async function addSpecialInstructions(
 
 // ─── Operating Hours Helpers ────────────────
 
+function getISTDate(): Date {
+  // Convert UTC to IST (Asia/Kolkata, UTC+5:30) for accurate business hours check
+  const now = new Date();
+  const istString = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  return new Date(istString);
+}
+
 function isRestaurantOpen(restaurant: Restaurant): boolean {
   const hours = restaurant.business_hours;
   if (!hours || Object.keys(hours).length === 0) return true; // No hours configured = always open
 
-  const now = new Date();
+  const now = getISTDate();
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const today = days[now.getDay()];
   const todayShort = today.substring(0, 3);
@@ -1644,7 +1651,7 @@ function getTodayHoursText(restaurant: Restaurant): string {
   const hours = restaurant.business_hours;
   if (!hours || Object.keys(hours).length === 0) return '';
 
-  const now = new Date();
+  const now = getISTDate();
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const today = days[now.getDay()];
   const todayShort = today.substring(0, 3);
