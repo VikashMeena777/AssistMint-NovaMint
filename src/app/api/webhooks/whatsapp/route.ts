@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { handleIncomingMessage } from '@/lib/ai/orchestrator';
+import { handleOwnerReply } from '@/lib/services/owner-notifications';
 import crypto from 'crypto';
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'assistmint-verify';
@@ -184,12 +185,17 @@ export async function POST(req: NextRequest) {
           };
         }
 
-        // Route to AI orchestrator
+        // Check if this is a restaurant owner replying to manage orders
+        const msgText = (message.text as Record<string, string>)?.body || '';
+        const isOwner = await handleOwnerReply(phoneNumberId, message.from as string, msgText);
+        if (isOwner) continue; // Owner message handled, skip customer orchestrator
+
+        // Route to AI orchestrator (customer messages)
         await handleIncomingMessage({
           phoneNumberId,
           from: message.from as string,
           messageId: message.id as string,
-          text: (message.text as Record<string, string>)?.body,
+          text: msgText || undefined,
           interactiveReply,
           whatsappName,
           location: locationData,

@@ -21,6 +21,7 @@ export interface Restaurant {
   languages: string[];
   whatsapp_phone_id?: string;
   whatsapp_token?: string;
+  owner_whatsapp?: string;
   plan: string;
   min_order_amount: number;
   business_hours: Record<string, unknown>;
@@ -55,6 +56,7 @@ export async function getRestaurantByPhoneId(phoneNumberId: string): Promise<Res
     languages: (r.supported_languages as string[]) || ['en'],
     whatsapp_phone_id: r.whatsapp_phone_id as string | undefined,
     whatsapp_token: r.whatsapp_access_token as string | undefined,
+    owner_whatsapp: (r.owner_whatsapp as string) || undefined,
     plan: (r.plan as string) || 'starter',
     min_order_amount: (r.min_order_amount as number) || 0,
     tax_rate: (r.tax_rate as number) ?? 500, // default 5% (500 = 5.00%)
@@ -85,6 +87,7 @@ export async function getRestaurantById(id: string): Promise<Restaurant | null> 
     languages: (r.supported_languages as string[]) || ['en'],
     whatsapp_phone_id: r.whatsapp_phone_id as string | undefined,
     whatsapp_token: r.whatsapp_access_token as string | undefined,
+    owner_whatsapp: (r.owner_whatsapp as string) || undefined,
     plan: (r.plan as string) || 'starter',
     min_order_amount: (r.min_order_amount as number) || 0,
     tax_rate: (r.tax_rate as number) ?? 500,

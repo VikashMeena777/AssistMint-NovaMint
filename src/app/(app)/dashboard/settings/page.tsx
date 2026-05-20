@@ -185,6 +185,7 @@ function RestaurantSettings({
     { key: "city", label: "City", placeholder: "e.g., Jaipur" },
     { key: "gst_number", label: "GST Number", placeholder: "e.g., 08AAACH7409R1ZZ" },
     { key: "min_order_amount", label: "Minimum Order Amount (₹)", placeholder: "e.g., 200" },
+    { key: "owner_whatsapp", label: "Owner WhatsApp (Order Alerts & Management)", placeholder: "e.g., +919876543210" },
   ];
 
   return (

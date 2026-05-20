@@ -11,6 +11,7 @@ import { getOrCreateCustomer, updateCustomerOrderStats, getSavedAddresses, addSa
 import { getOrCreateConversation, getRecentMessages, saveMessage, setBotActive } from '@/lib/services/conversation-manager';
 import { getRestaurantByPhoneId, type Restaurant } from '@/lib/services/restaurant-service';
 import { createBotPaymentLink } from '@/lib/services/bot-payment';
+import { notifyOwnerNewOrder } from '@/lib/services/owner-notifications';
 import { sendTextMessage, sendReplyButtons, sendListMessage, sendImageMessage, sendDocumentMessage, type ListSection } from '@/lib/whatsapp/client';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
 
@@ -76,6 +77,15 @@ export async function handleIncomingMessage(params: {
     return;
   }
 
+  // 6.1 Auto-detect Hindi from first message
+  if ((customer.total_orders || 0) === 0 && !customer.language_preference) {
+    const hindiPattern = /[\u0900-\u097F]/;
+    if (hindiPattern.test(text || '')) {
+      await setCustomerLanguage(customer.id, 'hi');
+      customer.language_preference = 'hi';
+    }
+  }
+
   // 7. Handle special commands
   const lowerText = (text || '').toLowerCase().trim();
 
@@ -91,12 +101,19 @@ export async function handleIncomingMessage(params: {
     await sendCartSummary(restaurant, customer, conversation);
     return;
   }
-  if (lowerText === 'checkout' || lowerText === 'order' || lowerText === 'place order') {
-    await askForDeliveryAddress(restaurant, customer, conversation);
-    return;
-  }
   if (lowerText === 'agent' || lowerText === 'human' || lowerText === 'help') {
     await handleHumanHandoff(restaurant, customer, conversation);
+    return;
+  }
+  // ── Operating Hours Check ──
+  if (lowerText === 'checkout' || lowerText === 'order' || lowerText === 'place order') {
+    if (!isRestaurantOpen(restaurant)) {
+      const hours = getBusinessHoursText(restaurant);
+      await sendBotReply(restaurant, customer, conversation,
+        `🕐 *Sorry, we're currently closed.*\n${hours}\nYou can still browse the menu and add items to your cart!`);
+      return;
+    }
+    await askForDeliveryAddress(restaurant, customer, conversation);
     return;
   }
   // ── New Commands ──
@@ -802,6 +819,9 @@ async function handleCODOrder(
 
   await sendBotReply(restaurant, customer, conversation, reply);
 
+  // Notify restaurant owner (fire-and-forget)
+  notifyOwnerNewOrder(restaurant.id, orderId).catch(() => {});
+
   // Receipt will be sent when order is marked 'delivered'
 
   logActivity({
@@ -849,6 +869,9 @@ async function handleOnlinePayOrder(
   }
 
   await sendBotReply(restaurant, customer, conversation, reply);
+
+  // Notify restaurant owner (fire-and-forget)
+  notifyOwnerNewOrder(restaurant.id, orderId).catch(() => {});
 
   // Receipt will be sent when order is marked 'delivered'
 
@@ -1506,4 +1529,52 @@ async function addSpecialInstructions(
       .update({ items, updated_at: new Date().toISOString() })
       .eq('id', cartId);
   }
+}
+
+// ─── Operating Hours Helpers ────────────────
+
+function isRestaurantOpen(restaurant: Restaurant): boolean {
+  const hours = restaurant.business_hours;
+  if (!hours || Object.keys(hours).length === 0) return true; // No hours configured = always open
+
+  const now = new Date();
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const today = days[now.getDay()];
+  const todayHours = hours[today] as { open?: string; close?: string; closed?: boolean } | undefined;
+
+  if (!todayHours) return true;
+  if (todayHours.closed) return false;
+  if (!todayHours.open || !todayHours.close) return true;
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const [openH, openM] = todayHours.open.split(':').map(Number);
+  const [closeH, closeM] = todayHours.close.split(':').map(Number);
+  const openMinutes = openH * 60 + openM;
+  const closeMinutes = closeH * 60 + closeM;
+
+  // Handle overnight hours (e.g., 18:00 - 02:00)
+  if (closeMinutes < openMinutes) {
+    return currentMinutes >= openMinutes || currentMinutes <= closeMinutes;
+  }
+  return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
+}
+
+function getBusinessHoursText(restaurant: Restaurant): string {
+  const hours = restaurant.business_hours;
+  if (!hours || Object.keys(hours).length === 0) return '';
+
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const dayLabels: Record<string, string> = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' };
+
+  const lines: string[] = [];
+  for (const day of days) {
+    const h = hours[day] as { open?: string; close?: string; closed?: boolean } | undefined;
+    if (!h) continue;
+    if (h.closed) {
+      lines.push(`${dayLabels[day]}: Closed`);
+    } else if (h.open && h.close) {
+      lines.push(`${dayLabels[day]}: ${h.open} - ${h.close}`);
+    }
+  }
+  return lines.length > 0 ? `📅 *Our Hours:*\n${lines.join('\n')}` : '';
 }
