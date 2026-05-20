@@ -39,6 +39,7 @@ export async function getCategories(restaurantId: string) {
     .from('menu_categories')
     .select('*')
     .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
     .order('display_order', { ascending: true });
 
   if (error) return { error: error.message, data: null };
@@ -93,13 +94,17 @@ export async function deleteCategory(restaurantId: string, categoryId: string) {
   const { supabase, error: authError } = await verifyOwnership(restaurantId);
   if (authError) return { error: authError };
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('menu_categories')
     .delete()
     .eq('id', categoryId)
-    .eq('restaurant_id', restaurantId);
+    .eq('restaurant_id', restaurantId)
+    .select();
 
   if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: 'Category not found or already deleted.' };
+
+  logActivity({ restaurantId, actorType: 'owner', action: ACTIONS.MENU_CATEGORY_DELETED, details: { categoryId, name: (data[0] as Record<string, unknown>)?.name } });
   revalidatePath('/dashboard/menu');
   return { success: true };
 }

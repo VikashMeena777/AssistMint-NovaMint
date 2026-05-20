@@ -63,6 +63,7 @@ export const ACTIONS = {
   MENU_ITEM_UPDATED: 'menu.item_updated',
   MENU_ITEM_DELETED: 'menu.item_deleted',
   MENU_CATEGORY_CREATED: 'menu.category_created',
+  MENU_CATEGORY_DELETED: 'menu.category_deleted',
 
   // Customers
   CUSTOMER_CREATED: 'customer.created',
