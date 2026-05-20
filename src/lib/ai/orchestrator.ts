@@ -626,8 +626,8 @@ async function sendCartSummary(
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     // Build list sections for editing cart
     const editRows = cart.items.flatMap((i) => [
-      { id: `inc_${i.item_id}`, title: `➕ Add 1 ${i.item_name.substring(0, 18)}`, description: `Current: ${i.quantity}` },
-      { id: `dec_${i.item_id}`, title: `➖ Remove 1 ${i.item_name.substring(0, 15)}`, description: i.quantity === 1 ? 'Removes from cart' : `Current: ${i.quantity}` },
+      { id: `inc_${i.item_id}`, title: `➕ Add: ${i.item_name.substring(0, 15)}`, description: `Add 1 (Current: ${i.quantity})` },
+      { id: `dec_${i.item_id}`, title: `➖ Less: ${i.item_name.substring(0, 15)}`, description: i.quantity === 1 ? 'Remove from cart' : `Remove 1 (Current: ${i.quantity})` },
     ]);
 
     const sections: ListSection[] = [

@@ -104,13 +104,26 @@ export async function sendListMessage(
   return withRetry(async () => {
     const { phoneNumberId, accessToken, to, headerText, bodyText, footerText, buttonText, sections } = options;
 
+    // Clean up sections and apply WhatsApp character limits
+    const sanitizedSections = sections.map((sec) => ({
+      title: sec.title.substring(0, 24),
+      rows: sec.rows.map((row) => ({
+        id: row.id,
+        title: row.title.substring(0, 24),
+        description: row.description ? row.description.substring(0, 72) : undefined,
+      })),
+    }));
+
     const interactive: Record<string, unknown> = {
       type: 'list',
       body: { text: bodyText },
-      action: { button: buttonText, sections },
+      action: { 
+        button: buttonText.substring(0, 20), 
+        sections: sanitizedSections 
+      },
     };
-    if (headerText) interactive.header = { type: 'text', text: headerText };
-    if (footerText) interactive.footer = { text: footerText };
+    if (headerText) interactive.header = { type: 'text', text: headerText.substring(0, 60) };
+    if (footerText) interactive.footer = { text: footerText.substring(0, 60) };
 
     const response = await fetch(
       `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
