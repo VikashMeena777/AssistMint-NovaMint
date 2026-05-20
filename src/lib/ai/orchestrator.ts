@@ -826,6 +826,16 @@ async function handleCODOrder(
   customer: { id: string; phone: string; name?: string },
   conversation: { id: string }
 ): Promise<void> {
+  // Check if restaurant is open
+  if (!isRestaurantOpen(restaurant)) {
+    const todayHours = getTodayHoursText(restaurant);
+    const msg = todayHours
+      ? `🕐 *We are not available right now.*\nOur operating hours for today are *${todayHours}*.\nYou can still browse the menu and add items to your cart!`
+      : `🕐 *Sorry, we are not available right now.*\nYou can still browse the menu and add items to your cart!`;
+    await sendBotReply(restaurant, customer, conversation, msg);
+    return;
+  }
+
   const cart = await getOrCreateCart(restaurant.id, customer.id);
   if (cart.items.length === 0) {
     await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to add items.');
@@ -862,6 +872,16 @@ async function handleOnlinePayOrder(
   customer: { id: string; phone: string; name?: string },
   conversation: { id: string }
 ): Promise<void> {
+  // Check if restaurant is open
+  if (!isRestaurantOpen(restaurant)) {
+    const todayHours = getTodayHoursText(restaurant);
+    const msg = todayHours
+      ? `🕐 *We are not available right now.*\nOur operating hours for today are *${todayHours}*.\nYou can still browse the menu and add items to your cart!`
+      : `🕐 *Sorry, we are not available right now.*\nYou can still browse the menu and add items to your cart!`;
+    await sendBotReply(restaurant, customer, conversation, msg);
+    return;
+  }
+
   const cart = await getOrCreateCart(restaurant.id, customer.id);
   if (cart.items.length === 0) {
     await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to add items.');
@@ -1296,6 +1316,16 @@ async function handleReorder(
   customer: { id: string; phone: string },
   conversation: { id: string }
 ): Promise<void> {
+  // Check if restaurant is open
+  if (!isRestaurantOpen(restaurant)) {
+    const todayHours = getTodayHoursText(restaurant);
+    const msg = todayHours
+      ? `🕐 *We are not available right now.*\nOur operating hours for today are *${todayHours}*.\nYou can still browse the menu and add items to your cart!`
+      : `🕐 *Sorry, we are not available right now.*\nYou can still browse the menu and add items to your cart!`;
+    await sendBotReply(restaurant, customer, conversation, msg);
+    return;
+  }
+
   const orders = await getCustomerOrders(customer.id, 1);
 
   if (orders.length === 0) {
