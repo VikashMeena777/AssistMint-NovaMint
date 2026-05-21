@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
@@ -81,10 +82,14 @@ export default function DashboardLayout({
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center justify-between border-b border-sidebar-border/40 px-5">
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm">
-                A
-                <div className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-mint animate-pulse" />
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="relative flex h-8 w-8 overflow-hidden rounded-lg border border-sidebar-border/60 transition-transform group-hover:scale-105">
+                <Image
+                  src="/logo.jpg"
+                  alt="AssistMint Logo"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-base font-bold tracking-tight">
                 Assist<span className="text-sidebar-primary">Mint</span>

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Leaf, LayoutDashboard } from "lucide-react";
+import { Menu, X, LayoutDashboard } from "lucide-react";
 import { CookieConsent } from "@/components/marketing/cookie-consent";
 import { createClient } from "@/lib/supabase/client";
 
@@ -34,22 +35,41 @@ export default function MarketingLayout({
 function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       setIsLoggedIn(!!user);
     });
+
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        scrolled
+          ? "border-b border-border/80 bg-background/80 backdrop-blur-xl shadow-sm"
+          : "border-b border-transparent bg-transparent"
+      }`}
+    >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <nav className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Leaf className="h-4 w-4 text-primary-foreground" />
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="relative flex h-8 w-8 overflow-hidden rounded-lg border border-border/60 transition-transform group-hover:scale-105">
+              <Image
+                src="/logo.jpg"
+                alt="AssistMint Logo"
+                fill
+                className="object-cover"
+                priority
+              />
             </div>
             <span className="text-lg font-bold tracking-tight">
               Assist<span className="text-primary">Mint</span>
@@ -62,7 +82,7 @@ function Navbar() {
               <a
                 key={link.href}
                 href={link.href}
-                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary/40"
               >
                 {link.label}
               </a>
@@ -74,7 +94,7 @@ function Navbar() {
             {isLoggedIn ? (
               <Link
                 href="/dashboard"
-                className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm gap-2"
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.98] shadow-sm gap-2"
               >
                 <LayoutDashboard className="h-4 w-4" />
                 Dashboard
@@ -89,7 +109,7 @@ function Navbar() {
                 </Link>
                 <Link
                   href="/signup"
-                  className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+                  className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all active:scale-[0.98] shadow-sm"
                 >
                   Get Started Free
                 </Link>
@@ -99,7 +119,7 @@ function Navbar() {
 
           {/* Mobile Toggle */}
           <button
-            className="md:hidden p-2 -mr-2"
+            className="md:hidden p-2 -mr-2 text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Toggle menu"
           >
@@ -208,9 +228,14 @@ function Footer() {
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           {/* Brand */}
           <div className="col-span-2 sm:col-span-1">
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <Leaf className="h-4 w-4 text-primary-foreground" />
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="relative flex h-8 w-8 overflow-hidden rounded-lg border border-border/60 transition-transform group-hover:scale-105">
+                <Image
+                  src="/logo.jpg"
+                  alt="AssistMint Logo"
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="text-lg font-bold">
                 Assist<span className="text-primary">Mint</span>
