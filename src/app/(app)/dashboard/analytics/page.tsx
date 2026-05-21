@@ -8,7 +8,6 @@ import {
   Users,
   ShoppingCart,
   CreditCard,
-  Loader2,
   Activity,
   UtensilsCrossed,
   Clock,
@@ -16,6 +15,7 @@ import {
   Repeat2,
   IndianRupee,
 } from "lucide-react";
+import { motion, Variants, AnimatePresence } from "framer-motion";
 import {
   getDashboardStats,
   getOrderTrend,
@@ -29,6 +29,86 @@ import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyData = Record<string, any>;
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 15 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] },
+  },
+};
+
+function AnalyticsSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Header Skeleton */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-2">
+          <div className="h-8 w-48 animate-pulse rounded-xl bg-muted/60" />
+          <div className="h-4 w-72 animate-pulse rounded-lg bg-muted/40" />
+        </div>
+        <div className="h-9 w-32 animate-pulse rounded-xl bg-muted/40 border border-border/20" />
+      </div>
+
+      {/* Row 1 Stats Skeleton */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="glass rounded-2xl p-5 border border-border/40 space-y-3">
+            <div className="h-5 w-5 animate-pulse rounded-lg bg-primary/20" />
+            <div className="h-8 w-20 animate-pulse rounded-lg bg-muted/60" />
+            <div className="h-4 w-32 animate-pulse rounded-md bg-muted/40" />
+            <div className="h-3.5 w-24 animate-pulse rounded-md bg-muted/30" />
+          </div>
+        ))}
+      </div>
+
+      {/* Row 2 Stats Skeleton */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="glass rounded-2xl p-5 border border-border/40 space-y-3">
+            <div className="h-5 w-5 animate-pulse rounded-lg bg-muted/50" />
+            <div className="h-8 w-16 animate-pulse rounded-lg bg-muted/60" />
+            <div className="h-4 w-28 animate-pulse rounded-md bg-muted/45" />
+            <div className="h-3.5 w-20 animate-pulse rounded-md bg-muted/30" />
+          </div>
+        ))}
+      </div>
+
+      {/* Charts Skeleton */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="glass rounded-2xl p-6 border border-border/40 space-y-4">
+          <div className="h-5 w-40 animate-pulse rounded-lg bg-muted/60" />
+          <div className="h-48 animate-pulse rounded-xl bg-muted/20 border border-dashed border-border/30" />
+        </div>
+        <div className="glass rounded-2xl p-6 border border-border/40 space-y-4">
+          <div className="h-5 w-32 animate-pulse rounded-lg bg-muted/60" />
+          <div className="space-y-3">
+            {[...Array(3)].map((_, j) => (
+              <div key={j} className="h-14 animate-pulse rounded-xl bg-muted/25" />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Peak Hours Skeleton */}
+      <div className="glass rounded-2xl p-6 border border-border/40 space-y-4">
+        <div className="h-5 w-48 animate-pulse rounded-lg bg-muted/60" />
+        <div className="h-40 animate-pulse rounded-xl bg-muted/20 border border-dashed border-border/30" />
+      </div>
+    </div>
+  );
+}
 
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
@@ -75,13 +155,7 @@ export default function AnalyticsPage() {
     if (restaurantId) loadData();
   }, [restaurantId, loadData]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      </div>
-    );
-  }
+
 
   // Find max revenue for the bar chart scaling
   const maxRevenue = Math.max(...trend.map((d) => d.revenue || 0), 1);
@@ -93,93 +167,128 @@ export default function AnalyticsPage() {
   const maxPeakCount = Math.max(...businessHours.map((h) => h.count || 0), 1);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <AnimatePresence mode="wait">
+      {loading ? (
+        <motion.div
+          key="skeleton"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2 }}
+        >
+          <AnalyticsSkeleton />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="content"
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="space-y-6"
+        >
+      <motion.div
+        variants={itemVariants}
+        className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+      >
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
           <p className="text-sm text-muted-foreground">
             Insights into orders, revenue, customers, and AI performance.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-1.5 text-sm">
+        <div className="flex items-center gap-2 rounded-xl border border-border/40 glass px-3 py-1.5 text-sm">
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <span>Last 7 days</span>
         </div>
-      </div>
+      </motion.div>
 
       {/* KPIs Row 1 */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="rounded-2xl border border-border/50 bg-card p-5">
+      <motion.div
+        variants={itemVariants}
+        className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+      >
+        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <ShoppingCart className="h-5 w-5 text-primary" />
           </div>
-          <p className="text-2xl font-bold">{stats.todayOrders || 0}</p>
+          <p className="text-2xl font-bold font-mono tracking-tight">{stats.todayOrders || 0}</p>
           <p className="text-sm text-muted-foreground">Total Orders (Today)</p>
-          <p className="text-xs text-muted-foreground mt-1">{stats.weekOrders || 0} this week</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            <span className="font-mono">{stats.weekOrders || 0}</span> this week
+          </p>
         </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5">
+        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <CreditCard className="h-5 w-5 text-primary" />
           </div>
-          <p className="text-2xl font-bold">₹{((stats.todayRevenue || 0) / 100).toLocaleString("en-IN")}</p>
+          <p className="text-2xl font-bold font-mono tracking-tight">₹{((stats.todayRevenue || 0) / 100).toLocaleString("en-IN")}</p>
           <p className="text-sm text-muted-foreground">Revenue (Today)</p>
-          <p className="text-xs text-muted-foreground mt-1">{stats.activeOrders || 0} active orders</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            <span className="font-mono">{stats.activeOrders || 0}</span> active orders
+          </p>
         </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5">
+        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <Users className="h-5 w-5 text-primary" />
           </div>
-          <p className="text-2xl font-bold">{stats.totalCustomers || 0}</p>
+          <p className="text-2xl font-bold font-mono tracking-tight">{stats.totalCustomers || 0}</p>
           <p className="text-sm text-muted-foreground">Customers</p>
-          <p className="text-xs text-muted-foreground mt-1">{stats.newCustomers || 0} new this week</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            <span className="font-mono">{stats.newCustomers || 0}</span> new this week
+          </p>
         </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5">
+        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <TrendingUp className="h-5 w-5 text-primary" />
           </div>
-          <p className="text-2xl font-bold">{stats.activeConversations || 0}</p>
+          <p className="text-2xl font-bold font-mono tracking-tight">{stats.activeConversations || 0}</p>
           <p className="text-sm text-muted-foreground">AI Conversations</p>
-          <p className="text-xs text-muted-foreground mt-1">{stats.menuItems || 0} menu items live</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            <span className="font-mono">{stats.menuItems || 0}</span> menu items live
+          </p>
         </div>
-      </div>
+      </motion.div>
 
       {/* KPIs Row 2 — Insights */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="rounded-2xl border border-border/50 bg-card p-5">
+      <motion.div
+        variants={itemVariants}
+        className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+      >
+        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <IndianRupee className="h-5 w-5 text-emerald-500" />
           </div>
-          <p className="text-2xl font-bold">
+          <p className="text-2xl font-bold font-mono tracking-tight">
             ₹{((insights.avgOrderValue || 0) / 100).toFixed(0)}
           </p>
           <p className="text-sm text-muted-foreground">Avg Order Value</p>
           <p className="text-xs text-muted-foreground mt-1">
-            {insights.totalDelivered || 0} delivered (30d)
+            <span className="font-mono">{insights.totalDelivered || 0}</span> delivered (30d)
           </p>
         </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5">
+        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <Repeat2 className="h-5 w-5 text-blue-500" />
           </div>
-          <p className="text-2xl font-bold">{insights.repeatRate || 0}%</p>
+          <p className="text-2xl font-bold font-mono tracking-tight">{insights.repeatRate || 0}%</p>
           <p className="text-sm text-muted-foreground">Repeat Rate</p>
           <p className="text-xs text-muted-foreground mt-1">
-            {insights.repeatCustomers || 0} of {insights.totalCustomers || 0} customers
+            <span className="font-mono">{insights.repeatCustomers || 0}</span> of <span className="font-mono">{insights.totalCustomers || 0}</span> customers
           </p>
         </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5">
+        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <Star className="h-5 w-5 text-amber-500" />
           </div>
-          <p className="text-2xl font-bold">{insights.avgRating || 'N/A'}</p>
+          <p className="text-2xl font-bold font-mono tracking-tight">{insights.avgRating || 'N/A'}</p>
           <p className="text-sm text-muted-foreground">Avg Rating</p>
           <p className="text-xs text-muted-foreground mt-1">From customer feedback</p>
         </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5">
+        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <Clock className="h-5 w-5 text-violet-500" />
           </div>
-          <p className="text-2xl font-bold">
+          <p className="text-2xl font-bold font-mono tracking-tight">
             {businessHours.length > 0
               ? businessHours.reduce((best, h) => (h.count > best.count ? h : best), businessHours[0]).hour
               : 'N/A'}
@@ -187,18 +296,21 @@ export default function AnalyticsPage() {
           <p className="text-sm text-muted-foreground">Peak Hour</p>
           <p className="text-xs text-muted-foreground mt-1">Most orders placed</p>
         </div>
-      </div>
+      </motion.div>
 
       {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <motion.div
+        variants={itemVariants}
+        className="grid grid-cols-1 gap-6 lg:grid-cols-2"
+      >
         {/* Revenue Trend (simple bar chart) */}
-        <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <div className="glass rounded-2xl p-6 border border-border/40">
           <h3 className="text-sm font-semibold mb-4">Revenue Trend (7 Days)</h3>
           {trend.length > 0 && trend.some((d) => d.revenue > 0) ? (
             <div className="flex items-end gap-2 h-48">
               {trend.map((day, i) => (
                 <div key={i} className="flex flex-col items-center flex-1 gap-1">
-                  <span className="text-[10px] text-muted-foreground font-medium">
+                  <span className="text-[10px] text-muted-foreground font-mono font-medium">
                     ₹{(day.revenue || 0).toLocaleString("en-IN")}
                   </span>
                   <div
@@ -214,7 +326,7 @@ export default function AnalyticsPage() {
               ))}
             </div>
           ) : (
-            <div className="flex h-48 items-center justify-center rounded-xl bg-muted/30 border border-dashed border-border">
+            <div className="flex h-48 items-center justify-center rounded-xl bg-muted/10 border border-dashed border-border/30">
               <div className="text-center">
                 <BarChart3 className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">
@@ -226,24 +338,24 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Top Menu Items */}
-        <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <div className="glass rounded-2xl p-6 border border-border/40">
           <h3 className="text-sm font-semibold mb-4">Top Menu Items</h3>
           {topItems.length > 0 ? (
             <div className="space-y-3">
               {topItems.map((item, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between rounded-xl bg-muted/30 p-3"
+                  className="flex items-center justify-between rounded-xl bg-muted/20 border border-border/10 p-3"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary font-mono">
                       {i + 1}
                     </span>
                     <span className="text-sm font-medium">{item.name}</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-semibold">{item.count} sold</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm font-semibold font-mono">{item.count} sold</p>
+                    <p className="text-xs text-muted-foreground font-mono">
                       ₹{(item.revenue || 0).toLocaleString("en-IN")}
                     </p>
                   </div>
@@ -251,7 +363,7 @@ export default function AnalyticsPage() {
               ))}
             </div>
           ) : (
-            <div className="flex h-48 items-center justify-center rounded-xl bg-muted/30 border border-dashed border-border">
+            <div className="flex h-48 items-center justify-center rounded-xl bg-muted/10 border border-dashed border-border/30">
               <div className="text-center">
                 <UtensilsCrossed className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">
@@ -261,10 +373,13 @@ export default function AnalyticsPage() {
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* Peak Hours Chart */}
-      <div className="rounded-2xl border border-border/50 bg-card p-6">
+      <motion.div
+        variants={itemVariants}
+        className="glass rounded-2xl p-6 border border-border/40"
+      >
         <div className="flex items-center gap-2 mb-4">
           <Clock className="h-4 w-4 text-violet-500" />
           <h3 className="text-sm font-semibold">Peak Ordering Hours (Last 30 Days)</h3>
@@ -273,7 +388,7 @@ export default function AnalyticsPage() {
           <div className="flex items-end gap-1 h-40">
             {businessHours.map((h, i) => (
               <div key={i} className="flex flex-col items-center flex-1 gap-1">
-                <span className="text-[9px] text-muted-foreground font-medium">
+                <span className="text-[9px] text-muted-foreground font-mono font-medium">
                   {h.count > 0 ? h.count : ''}
                 </span>
                 <div
@@ -294,7 +409,7 @@ export default function AnalyticsPage() {
             ))}
           </div>
         ) : (
-          <div className="flex h-40 items-center justify-center rounded-xl bg-muted/30 border border-dashed border-border">
+          <div className="flex h-40 items-center justify-center rounded-xl bg-muted/10 border border-dashed border-border/30">
             <div className="text-center">
               <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">
@@ -303,11 +418,14 @@ export default function AnalyticsPage() {
             </div>
           </div>
         )}
-      </div>
+      </motion.div>
 
       {/* Payment Method Breakdown + Order Summary */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-border/50 bg-card p-6">
+      <motion.div
+        variants={itemVariants}
+        className="grid grid-cols-1 gap-6 lg:grid-cols-2"
+      >
+        <div className="glass rounded-2xl p-6 border border-border/40">
           <div className="flex items-center gap-2 mb-4">
             <CreditCard className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Revenue by Payment Method (30 Days)</h3>
@@ -320,18 +438,20 @@ export default function AnalyticsPage() {
                     <div className="h-3 w-3 rounded-full bg-emerald-500" />
                     <span className="text-sm font-medium">💵 Cash on Delivery</span>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right font-mono">
                     <span className="text-sm font-bold">₹{((paymentBreakdown.cod?.revenue || 0) / 100).toLocaleString('en-IN')}</span>
                     <span className="text-xs text-muted-foreground ml-2">({paymentBreakdown.codPercentage}%)</span>
                   </div>
                 </div>
-                <div className="h-2.5 w-full rounded-full bg-muted/50 overflow-hidden">
+                <div className="h-2.5 w-full rounded-full bg-muted/30 overflow-hidden">
                   <div
                     className="h-full rounded-full bg-emerald-500 transition-all"
                     style={{ width: `${paymentBreakdown.codPercentage || 0}%` }}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">{paymentBreakdown.cod?.count || 0} orders</p>
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-mono">{paymentBreakdown.cod?.count || 0}</span> orders
+                </p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -339,26 +459,28 @@ export default function AnalyticsPage() {
                     <div className="h-3 w-3 rounded-full bg-blue-500" />
                     <span className="text-sm font-medium">💳 Online Payment</span>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right font-mono">
                     <span className="text-sm font-bold">₹{((paymentBreakdown.online?.revenue || 0) / 100).toLocaleString('en-IN')}</span>
                     <span className="text-xs text-muted-foreground ml-2">({paymentBreakdown.onlinePercentage}%)</span>
                   </div>
                 </div>
-                <div className="h-2.5 w-full rounded-full bg-muted/50 overflow-hidden">
+                <div className="h-2.5 w-full rounded-full bg-muted/30 overflow-hidden">
                   <div
                     className="h-full rounded-full bg-blue-500 transition-all"
                     style={{ width: `${paymentBreakdown.onlinePercentage || 0}%` }}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">{paymentBreakdown.online?.count || 0} orders</p>
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-mono">{paymentBreakdown.online?.count || 0}</span> orders
+                </p>
               </div>
-              <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
+              <div className="mt-3 pt-3 border-t border-border/30 flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Revenue</span>
-                <span className="text-sm font-bold">₹{((paymentBreakdown.totalRevenue || 0) / 100).toLocaleString('en-IN')}</span>
+                <span className="text-sm font-bold font-mono">₹{((paymentBreakdown.totalRevenue || 0) / 100).toLocaleString('en-IN')}</span>
               </div>
             </div>
           ) : (
-            <div className="flex h-40 items-center justify-center rounded-xl bg-muted/30 border border-dashed border-border">
+            <div className="flex h-40 items-center justify-center rounded-xl bg-muted/10 border border-dashed border-border/30">
               <div className="text-center">
                 <CreditCard className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">
@@ -369,46 +491,49 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <div className="glass rounded-2xl p-6 border border-border/40">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Order Summary (30 Days)</h3>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-xl bg-muted/30 p-4 text-center">
-              <p className="text-2xl font-bold text-primary">{insights.totalDelivered || 0}</p>
+            <div className="rounded-xl bg-muted/20 border border-border/10 p-4 text-center">
+              <p className="text-2xl font-bold text-primary font-mono">{insights.totalDelivered || 0}</p>
               <p className="text-xs text-muted-foreground mt-1">Delivered</p>
             </div>
-            <div className="rounded-xl bg-muted/30 p-4 text-center">
-              <p className="text-2xl font-bold text-emerald-500">₹{((insights.avgOrderValue || 0) / 100).toFixed(0)}</p>
+            <div className="rounded-xl bg-muted/20 border border-border/10 p-4 text-center">
+              <p className="text-2xl font-bold text-emerald-500 font-mono">₹{((insights.avgOrderValue || 0) / 100).toFixed(0)}</p>
               <p className="text-xs text-muted-foreground mt-1">Avg Order</p>
             </div>
-            <div className="rounded-xl bg-muted/30 p-4 text-center">
-              <p className="text-2xl font-bold text-blue-500">{insights.repeatRate || 0}%</p>
+            <div className="rounded-xl bg-muted/20 border border-border/10 p-4 text-center">
+              <p className="text-2xl font-bold text-blue-500 font-mono">{insights.repeatRate || 0}%</p>
               <p className="text-xs text-muted-foreground mt-1">Repeat Rate</p>
             </div>
-            <div className="rounded-xl bg-muted/30 p-4 text-center">
-              <p className="text-2xl font-bold text-amber-500">{insights.avgRating || 'N/A'}</p>
+            <div className="rounded-xl bg-muted/20 border border-border/10 p-4 text-center">
+              <p className="text-2xl font-bold text-amber-500 font-mono">{insights.avgRating || 'N/A'}</p>
               <p className="text-xs text-muted-foreground mt-1">Avg Rating</p>
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Activity Feed */}
-      <div className="rounded-2xl border border-border/50 bg-card p-6">
+      <motion.div
+        variants={itemVariants}
+        className="glass rounded-2xl p-6 border border-border/40"
+      >
         <h3 className="text-sm font-semibold mb-4">Recent Activity</h3>
         {activity.length > 0 ? (
           <div className="space-y-2">
             {activity.map((a) => (
               <div
                 key={a.id}
-                className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/20 transition-colors"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/10 transition-colors"
               >
                 <Activity className="h-4 w-4 text-primary shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{a.action}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground font-mono">
                     {a.actor_type} ·{" "}
                     {new Date(a.created_at).toLocaleString("en-IN", {
                       hour: "2-digit",
@@ -422,11 +547,14 @@ export default function AnalyticsPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground py-8 text-center">
+          <p className="text-sm text-muted-foreground py-8 text-center font-mono">
             No activity logged yet. Actions will appear here as they happen.
           </p>
         )}
-      </div>
-    </div>
+      </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
+

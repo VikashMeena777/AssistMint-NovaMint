@@ -97,7 +97,7 @@ export default async function DashboardPage() {
     // Recent orders (top 5)
     const { data: orders } = await supabase
       .from("orders")
-      .select("*, customers(name, phone)")
+      .select("*, customers(saved_name, whatsapp_name, phone)")
       .eq("restaurant_id", restaurantId)
       .order("created_at", { ascending: false })
       .limit(5);

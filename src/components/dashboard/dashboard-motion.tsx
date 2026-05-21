@@ -118,7 +118,7 @@ export function RecentOrdersList({ recentOrders }: RecentOrdersListProps) {
             <div>
               <p className="text-sm font-medium">
                 <span className="font-mono">#{order.order_number}</span> ·{" "}
-                {order.customers?.name || "Customer"}
+                {order.customers?.saved_name || order.customers?.whatsapp_name || "Customer"}
               </p>
               <p className="text-xs text-muted-foreground flex items-center gap-1 font-mono">
                 <Clock className="h-3 w-3" />
