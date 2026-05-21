@@ -9,11 +9,28 @@ import { CookieConsent } from "@/components/marketing/cookie-consent";
 import { createClient } from "@/lib/supabase/client";
 
 const navLinks = [
-  { label: "Features", href: "#features" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "FAQ", href: "#faq" },
+  { label: "Features", href: "/#features" },
+  { label: "How It Works", href: "/#how-it-works" },
+  { label: "Pricing", href: "/#pricing" },
+  { label: "FAQ", href: "/#faq" },
 ];
+
+const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+  if (href.startsWith("/#") || href.startsWith("#")) {
+    const targetId = href.replace("/#", "").replace("#", "");
+    if (window.location.pathname === "/") {
+      e.preventDefault();
+      const element = document.getElementById(targetId);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth" });
+        window.history.pushState(null, "", href);
+      }
+    } else {
+      e.preventDefault();
+      window.location.href = href;
+    }
+  }
+};
 
 export default function MarketingLayout({
   children,
@@ -82,6 +99,7 @@ function Navbar() {
               <a
                 key={link.href}
                 href={link.href}
+                onClick={(e) => handleNavClick(e, link.href)}
                 className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary/40"
               >
                 {link.label}
@@ -147,7 +165,10 @@ function Navbar() {
                 <a
                   key={link.href}
                   href={link.href}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(e) => {
+                    setMobileOpen(false);
+                    handleNavClick(e, link.href);
+                  }}
                   className="block px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
                 >
                   {link.label}
@@ -196,10 +217,10 @@ function Footer() {
     {
       title: "Product",
       links: [
-        { label: "Features", href: "#features" },
-        { label: "Pricing", href: "#pricing" },
-        { label: "How It Works", href: "#how-it-works" },
-        { label: "FAQ", href: "#faq" },
+        { label: "Features", href: "/#features" },
+        { label: "Pricing", href: "/#pricing" },
+        { label: "How It Works", href: "/#how-it-works" },
+        { label: "FAQ", href: "/#faq" },
       ],
     },
     {
@@ -256,6 +277,7 @@ function Footer() {
                   <li key={link.label}>
                     <Link
                       href={link.href}
+                      onClick={(e) => handleNavClick(e, link.href)}
                       className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                     >
                       {link.label}

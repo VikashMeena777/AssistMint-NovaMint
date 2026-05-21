@@ -59,6 +59,19 @@ const salesData = [
 ];
 
 export default function HomePage() {
+  useEffect(() => {
+    if (window.location.hash) {
+      const id = window.location.hash.substring(1);
+      const element = document.getElementById(id);
+      if (element) {
+        const timer = setTimeout(() => {
+          element.scrollIntoView({ behavior: "smooth" });
+        }, 150);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, []);
+
   return (
     <div className="overflow-hidden bg-background">
       <HeroSection />
@@ -188,7 +201,7 @@ function HeroSection() {
                 href="/signup"
                 className="inline-flex h-12 w-full sm:w-auto items-center justify-center rounded-xl bg-primary px-8 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/95 hover:shadow-primary/30 transition-all active:scale-[0.98] gap-2 group cursor-pointer"
               >
-                Start Your Free Trial
+                Try Starter Plan Free
                 <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
               </Link>
               <a
@@ -216,7 +229,7 @@ function HeroSection() {
               <span className="text-border/60 hidden sm:inline">•</span>
               <span>Trusted by <span className="text-foreground font-bold">500+ Restaurants</span></span>
               <span className="text-border/60 hidden sm:inline">•</span>
-              <span>14-Day Free Trial</span>
+              <span>14-Day Starter Free Trial</span>
             </motion.div>
           </div>
 
@@ -768,11 +781,19 @@ function FeaturesSection() {
               </p>
             </div>
 
-            {/* Coupon widget mockup */}
-            <div className="mt-6 p-2 rounded-xl bg-primary/5 border border-primary/20 border-dashed text-center">
-              <span className="text-[10px] font-bold text-primary tracking-wide">
-                USE CODE: MINT50 (₹50 OFF)
-              </span>
+            {/* Loyalty points card mockup */}
+            <div className="mt-6 p-3 rounded-xl bg-secondary/50 border border-border/60 shadow-sm relative overflow-hidden flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full tracking-wider uppercase">
+                  Loyalty Campaign
+                </span>
+                <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  🌿 +50 Points
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed text-left font-medium">
+                Welcome back! Order your usual today to redeem ₹50 off instantly!
+              </p>
             </div>
           </div>
 
@@ -887,7 +908,7 @@ function PricingSection() {
         "Max 200 menu items",
         "3 active staff logins",
       ],
-      cta: "Start Free Trial",
+      cta: "Start 14-Day Free Trial",
       popular: false,
     },
     {
@@ -906,7 +927,7 @@ function PricingSection() {
         "10 active staff logins",
         "Priority 24/7 client support",
       ],
-      cta: "Start Free Trial",
+      cta: "Get Started Now",
       popular: true,
     },
     {
@@ -943,7 +964,7 @@ function PricingSection() {
               Flexible Plans to Scale Profits
             </h2>
             <p className="mt-4 text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Start direct ordering completely free for 14 days. Zero commission commitments. Cancel anytime.
+              Try our Starter Plan completely free for 14 days. Save 20% on yearly billing. Zero commission commitments.
             </p>
           </div>
         </SectionReveal>
@@ -997,14 +1018,14 @@ function PricingSection() {
               <StaggerItem key={plan.name} className="h-full">
                 <div className={`relative rounded-2xl border p-7 h-full flex flex-col justify-between transition-all duration-400 hover:-translate-y-1 shadow-sm ${
                   plan.popular
-                    ? "border-primary bg-card scale-[1.03] lg:scale-[1.04] shadow-md shadow-primary/5 relative z-10 overflow-hidden"
+                    ? "border-primary bg-card scale-[1.03] lg:scale-[1.04] shadow-md shadow-primary/5 relative z-10"
                     : "border-border bg-card hover:border-primary/20"
                 }`}>
                   
                   {/* Decorative glowing gradient borders for popular card */}
                   {plan.popular && (
                     <>
-                      <div className="absolute top-0 inset-x-0 h-[3px] bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 animate-gradient" />
+                      <div className="absolute top-0 inset-x-0 h-[3px] rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 animate-gradient" />
                       <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-primary px-4 py-1 text-[10px] font-black text-primary-foreground shadow-sm uppercase tracking-widest">
                         <Star className="h-2.5 w-2.5 fill-current" />
                         RECOMMENDED
@@ -1333,7 +1354,7 @@ function CTASection() {
                   type="submit"
                   className="inline-flex h-12 w-full sm:w-auto shrink-0 items-center justify-center rounded-xl bg-primary px-6 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/95 transition-all duration-300 gap-1.5 active:scale-95 cursor-pointer uppercase tracking-wider"
                 >
-                  Start Free Trial
+                  Start Starter Trial
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </form>

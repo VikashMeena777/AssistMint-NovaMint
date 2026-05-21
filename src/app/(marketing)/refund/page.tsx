@@ -20,7 +20,7 @@ export default function RefundPage() {
           <section>
             <h2 className="text-lg font-semibold text-foreground mb-3">Free Trial</h2>
             <p>
-              All plans include a 14-day free trial. No credit card is required to start your trial.
+              Our Starter Plan includes a 14-day free trial. No credit card is required to start your trial.
               If you do not upgrade to a paid plan, your account will be automatically downgraded at
               the end of the trial period.
             </p>

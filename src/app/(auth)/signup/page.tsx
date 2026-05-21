@@ -164,13 +164,11 @@ export default function SignupPage() {
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Account"}
         </button>
       </form>
-
       <p className="text-center text-xs text-muted-foreground">
         By signing up, you agree to our{" "}
-        <Link href="#" className="underline hover:text-foreground">Terms of Service</Link> and{" "}
-        <Link href="#" className="underline hover:text-foreground">Privacy Policy</Link>.
+        <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link> and{" "}
+        <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>.
       </p>
-
       <p className="text-center text-sm text-muted-foreground">
         Already have an account?{" "}
         <Link href="/login" className="font-medium text-primary hover:underline">
