@@ -184,6 +184,12 @@ export async function handleIncomingMessage(params: {
     return;
   }
 
+  // 6.6 Safety net: Detect menu item names in free-text messages
+  // This catches cases where carousel button clicks arrive as text instead of interactive
+  const rawText = text || '';
+  const handled = await tryMatchTextToAction(restaurant, customer, conversation, rawText);
+  if (handled) return;
+
   // 7. AI-powered response
   await generateAndSendAIResponse(restaurant, customer, conversation, text || '');
 }
@@ -407,6 +413,99 @@ async function handleInteractiveReply(
       }
       break;
   }
+}
+
+// ─── Text-to-Action Safety Net ──────────────
+// Catches free-text messages that contain menu item names
+// or action phrases. This is critical for carousel button clicks
+// that arrive as text instead of interactive payloads.
+
+async function tryMatchTextToAction(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string; loyalty_tier: string; total_orders: number },
+  conversation: { id: string; context: Record<string, unknown> },
+  rawText: string
+): Promise<boolean> {
+  const text = rawText.trim();
+  if (!text || text.length < 2) return false;
+
+  const lower = text.toLowerCase();
+
+  // 1. Check for common action phrases with expanded matching
+  const checkoutPhrases = ['place my order', 'place order', 'confirm order', 'pay now', 'proceed to pay', 'i want to pay', 'lets pay', "let's pay"];
+  const cartPhrases = ['show my cart', 'whats in my cart', "what's in my cart", 'show cart', 'open cart'];
+  const addMorePhrases = ['add more', 'more items', 'show more', 'browse more'];
+
+  if (checkoutPhrases.some(p => lower.includes(p))) {
+    await askForDeliveryAddress(restaurant, customer, conversation);
+    return true;
+  }
+  if (cartPhrases.some(p => lower.includes(p))) {
+    await sendCartSummary(restaurant, customer, conversation);
+    return true;
+  }
+  if (addMorePhrases.some(p => lower.includes(p))) {
+    await sendMenuOverview(restaurant, customer, conversation);
+    return true;
+  }
+
+  // 2. Try to match menu item names in the text
+  const menu = await getFullMenu(restaurant.id);
+  if (!menu) return false;
+
+  const allItems = menu.categories.flatMap(c => c.items).filter(i => i.is_available);
+  if (allItems.length === 0) return false;
+
+  // Strip emoji/special chars for matching
+  const cleanText = lower
+    .replace(/[🛒✅📋🟢🔴⭐·₹\-~]/g, '')
+    .replace(/\d+\s*mins?/gi, '')
+    .replace(/\d+/g, '')
+    .replace(/add to cart/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Try exact item name match first
+  let matchedItem = allItems.find(item =>
+    cleanText === item.name.toLowerCase()
+  );
+
+  // Then try if the text contains the item name
+  if (!matchedItem) {
+    matchedItem = allItems.find(item =>
+      cleanText.includes(item.name.toLowerCase()) ||
+      item.name.toLowerCase().includes(cleanText)
+    );
+  }
+
+  // If we matched an item, add it to cart
+  if (matchedItem) {
+    console.log(`[Orchestrator] Text matched to menu item: "${text}" → ${matchedItem.name} (${matchedItem.id})`);
+    await handleDirectAddToCart(restaurant, customer, conversation, matchedItem.id);
+    return true;
+  }
+
+  // 3. Check if user is confirming the last bot suggestion
+  // e.g. bot said "You can try our Paneer Makhani for ₹199" → user says "ok" / "yes" / "sure" / "add it"
+  const confirmPhrases = ['ok', 'okay', 'yes', 'sure', 'yes please', 'add it', 'go ahead', 'order it', "let's order", 'lets order', 'ok add', 'haan', 'ha', 'theek hai', 'thik hai'];
+  if (confirmPhrases.includes(lower) || confirmPhrases.some(p => lower === p)) {
+    const recentMsgs = await getRecentMessages(conversation.id, 5);
+    const lastBot = [...recentMsgs].reverse().find(m => m.role === 'assistant');
+    if (lastBot) {
+      // Try to extract item name from bot's suggestion
+      const botText = lastBot.content.toLowerCase();
+      const suggestedItem = allItems.find(item =>
+        botText.includes(item.name.toLowerCase())
+      );
+      if (suggestedItem) {
+        console.log(`[Orchestrator] User confirmed suggestion: "${text}" → adding ${suggestedItem.name}`);
+        await handleDirectAddToCart(restaurant, customer, conversation, suggestedItem.id);
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 // ─── Item Details with Add Button ───────────

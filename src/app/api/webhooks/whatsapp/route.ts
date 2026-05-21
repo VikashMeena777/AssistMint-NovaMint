@@ -110,6 +110,15 @@ export async function POST(req: NextRequest) {
         for (const message of messages) {
           const msgId = message.id as string;
 
+          // ── DEBUG: Log raw message structure ──
+          console.log(`[WhatsApp Webhook] RAW MESSAGE type=${message.type} id=${msgId}`, JSON.stringify({
+            type: message.type,
+            text: message.text,
+            interactive: message.interactive,
+            button: message.button,
+            context: message.context,
+          }));
+
           // ── DEDUP CHECK: Skip if already processed ──
           if (processedMessages.has(msgId)) {
             console.log(`[WhatsApp Webhook] Skipping duplicate message: ${msgId}`);
@@ -152,7 +161,7 @@ export async function POST(req: NextRequest) {
     // after response is sent, so we MUST await processing before returning
     for (const { phoneNumberId, message, whatsappName } of messagesToProcess) {
       try {
-        // Parse interactive replies
+        // Parse interactive replies (regular buttons + list replies)
         let interactiveReply: { type: string; id: string; title: string } | undefined;
         if (message.type === 'interactive') {
           const interactive = message.interactive as Record<string, unknown>;
@@ -169,6 +178,20 @@ export async function POST(req: NextRequest) {
               type: 'list',
               id: listReply.id,
               title: listReply.title,
+            };
+          }
+        }
+
+        // Parse carousel quick_reply button clicks
+        // WhatsApp sends these as message.type === 'button' with payload/text
+        if (message.type === 'button') {
+          const button = message.button as Record<string, string> | undefined;
+          if (button) {
+            console.log(`[WhatsApp Webhook] Carousel button click: payload=${button.payload} text=${button.text}`);
+            interactiveReply = {
+              type: 'button',
+              id: button.payload || button.text || '',
+              title: button.text || button.payload || '',
             };
           }
         }
