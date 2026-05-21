@@ -110,14 +110,16 @@ export async function POST(req: NextRequest) {
         for (const message of messages) {
           const msgId = message.id as string;
 
-          // ── DEBUG: Log raw message structure ──
-          console.log(`[WhatsApp Webhook] RAW MESSAGE type=${message.type} id=${msgId}`, JSON.stringify({
-            type: message.type,
-            text: message.text,
-            interactive: message.interactive,
-            button: message.button,
-            context: message.context,
-          }));
+          // ── DEBUG: Log raw message structure (dev only) ──
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[WhatsApp Webhook] RAW MESSAGE type=${message.type} id=${msgId}`, JSON.stringify({
+              type: message.type,
+              text: message.text,
+              interactive: message.interactive,
+              button: message.button,
+              context: message.context,
+            }));
+          }
 
           // ── DEDUP CHECK: Skip if already processed ──
           if (processedMessages.has(msgId)) {

@@ -218,14 +218,14 @@ export async function sendPaymentLinkToCustomer(
   // Get restaurant WhatsApp config
   const { data: restaurant } = await supabase
     .from('restaurants')
-    .select('whatsapp_phone_id, whatsapp_token, name')
+    .select('whatsapp_phone_id, whatsapp_access_token, name')
     .eq('id', restaurantId)
     .single();
 
   if (!restaurant) return { error: 'Restaurant not found' };
 
   const r = restaurant as Record<string, unknown>;
-  if (!r.whatsapp_phone_id || !r.whatsapp_token) {
+  if (!r.whatsapp_phone_id || !r.whatsapp_access_token) {
     return { error: 'WhatsApp not configured' };
   }
 
@@ -235,7 +235,7 @@ export async function sendPaymentLinkToCustomer(
 
   await sendTextMessage({
     phoneNumberId: r.whatsapp_phone_id as string,
-    accessToken: r.whatsapp_token as string,
+    accessToken: r.whatsapp_access_token as string,
     to: customer.phone as string,
     text: `💳 *Payment Request*\n\nOrder: #${o.order_number}\nAmount: ₹${totalAmount}\n\nPay securely here: ${paymentLink}\n\nThank you! 🌿`,
   });

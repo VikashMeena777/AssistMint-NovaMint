@@ -1214,7 +1214,7 @@ async function handleCODOrder(
   await sendBotReply(restaurant, customer, conversation, reply);
 
   // Notify restaurant owner (fire-and-forget)
-  notifyOwnerNewOrder(restaurant.id, orderId).catch(() => {});
+  notifyOwnerNewOrder(restaurant.id, orderId).catch(e => console.error('[Orchestrator] Owner notification failed (COD):', e));
 
   // Receipt will be sent when order is marked 'delivered'
 
@@ -1305,7 +1305,7 @@ async function handleOnlinePayOrder(
   await sendBotReply(restaurant, customer, conversation, reply);
 
   // Notify restaurant owner (fire-and-forget)
-  notifyOwnerNewOrder(restaurant.id, orderId).catch(() => {});
+  notifyOwnerNewOrder(restaurant.id, orderId).catch(e => console.error('[Orchestrator] Owner notification failed (Online):', e));
 
   // Receipt will be sent when order is marked 'delivered'
 
@@ -1535,7 +1535,7 @@ async function executeAction(
 
       await addToCart(cartId, cartItem);
       // Fire-and-forget combo suggestion (non-blocking)
-      sendComboSuggestions(restaurant, customer, conversation, action.itemId).catch(() => {});
+      sendComboSuggestions(restaurant, customer, conversation, action.itemId).catch(e => console.error('[Orchestrator] Combo suggestion failed:', e));
       break;
     }
 

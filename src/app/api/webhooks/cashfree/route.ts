@@ -163,19 +163,19 @@ async function handlePaymentSuccess(data: PaymentData) {
 
       const { data: restaurant } = await supabaseAdmin
         .from('restaurants')
-        .select('id, whatsapp_phone_id, whatsapp_token, name')
+        .select('id, whatsapp_phone_id, whatsapp_access_token, name')
         .eq('id', restaurantId)
         .single();
 
       if (customer && restaurant) {
         const c = customer as Record<string, unknown>;
         const r = restaurant as Record<string, unknown>;
-        if (r.whatsapp_phone_id && r.whatsapp_token) {
+        if (r.whatsapp_phone_id && r.whatsapp_access_token) {
           const { sendTextMessage } = await import('@/lib/whatsapp/client');
           const totalRupees = ((o.total as number) / 100).toFixed(0);
           await sendTextMessage({
             phoneNumberId: r.whatsapp_phone_id as string,
-            accessToken: r.whatsapp_token as string,
+            accessToken: r.whatsapp_access_token as string,
             to: c.phone as string,
             text: `✅ *Payment Received!*\nAmount: ₹${totalRupees} · ${paymentMethod}\nYour order is confirmed and being prepared! 🎉`,
           });
@@ -187,9 +187,9 @@ async function handlePaymentSuccess(data: PaymentData) {
               id: r.id as string,
               name: r.name as string,
               whatsapp_phone_id: r.whatsapp_phone_id as string,
-              whatsapp_token: r.whatsapp_token as string,
+              whatsapp_token: r.whatsapp_access_token as string,
             };
-            sendOrderReceipt(restaurantObj as Parameters<typeof sendOrderReceipt>[0], orderId, c.phone as string).catch(() => {});
+            sendOrderReceipt(restaurantObj as Parameters<typeof sendOrderReceipt>[0], orderId, c.phone as string).catch(e => console.error('[Cashfree] Receipt send failed:', e));
           } catch (receiptErr) {
             console.error('[Cashfree] Receipt send failed:', receiptErr);
           }

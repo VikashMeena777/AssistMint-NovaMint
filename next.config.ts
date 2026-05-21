@@ -1,6 +1,24 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // ─── Image Optimization ────────────────────
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**.r2.dev",
+      },
+      {
+        protocol: "https",
+        hostname: "pub-*.r2.dev",
+      },
+      {
+        protocol: "https",
+        hostname: "**.supabase.co",
+      },
+    ],
+  },
+
   // ─── Security Headers ─────────────────────
   async headers() {
     return [
@@ -28,3 +46,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+

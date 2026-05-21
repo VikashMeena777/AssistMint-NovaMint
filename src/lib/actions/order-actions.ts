@@ -116,7 +116,7 @@ export async function updateOrderStatus(
   });
 
   // Send WhatsApp notification to customer (fire-and-forget)
-  sendOrderStatusWhatsApp(restaurantId, orderId, status).catch(() => {});
+  sendOrderStatusWhatsApp(restaurantId, orderId, status).catch(e => console.error('[Orders] WhatsApp status notification failed:', e));
 
   revalidatePath('/dashboard/orders');
   return { success: true };
@@ -192,11 +192,11 @@ async function sendOrderStatusWhatsApp(
 
       if (fullRestaurant) {
         // Send receipt immediately
-        sendOrderReceipt(fullRestaurant, orderId, order.customer_phone).catch(() => {});
+        sendOrderReceipt(fullRestaurant, orderId, order.customer_phone).catch(e => console.error('[Orders] Receipt send failed:', e));
 
         // Send rating request after 3 seconds
         setTimeout(() => {
-          sendFeedbackRequest(fullRestaurant, orderId, order.customer_phone).catch(() => {});
+          sendFeedbackRequest(fullRestaurant, orderId, order.customer_phone).catch(e => console.error('[Orders] Feedback request failed:', e));
         }, 3000);
       }
     }

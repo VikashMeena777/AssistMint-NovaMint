@@ -294,9 +294,9 @@ export async function handleOwnerReply(
           const { getRestaurantById } = await import('@/lib/services/restaurant-service');
           const fullRestaurant = await getRestaurantById(restaurant.id);
           if (fullRestaurant) {
-            sendOrderReceipt(fullRestaurant, order.id, order.customer_phone as string).catch(() => {});
+            sendOrderReceipt(fullRestaurant, order.id, order.customer_phone as string).catch(e => console.error('[OwnerNotif] Receipt failed:', e));
             setTimeout(() => {
-              sendFeedbackRequest(fullRestaurant, order.id, order.customer_phone as string).catch(() => {});
+              sendFeedbackRequest(fullRestaurant, order.id, order.customer_phone as string).catch(e => console.error('[OwnerNotif] Feedback request failed:', e));
             }, 3000);
           }
         } catch { /* silent */ }

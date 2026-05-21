@@ -1,7 +1,3 @@
--- Add owner_whatsapp column for WhatsApp-based order management
--- This lets restaurant owners receive order alerts and manage orders via WhatsApp replies
-
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS owner_whatsapp TEXT;
-
--- Comment for clarity
-COMMENT ON COLUMN restaurants.owner_whatsapp IS 'Owner personal WhatsApp number for receiving order notifications and managing orders via replies';
+-- ⚠️ DEPRECATED — DO NOT USE
+-- The Supabase database is the source of truth.
+-- Schema changes are managed directly in the Supabase Dashboard or via MCP.
