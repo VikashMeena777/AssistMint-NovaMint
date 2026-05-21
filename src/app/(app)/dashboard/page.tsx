@@ -10,6 +10,23 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import DashboardCharts from "@/components/dashboard/dashboard-charts";
+import { motion, Variants } from "framer-motion";
+
+const statsContainerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.04,
+    },
+  },
+};
+
+const statsItemVariants: Variants = {
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.28, ease: "easeOut" } },
+};
 
 export const metadata = {
   title: "Dashboard",
@@ -49,6 +66,7 @@ export default async function DashboardPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let recentOrders: any[] = [];
+  let chartData: { date: string; sales: number; orders: number; chats: number }[] = [];
 
   if (restaurantId) {
     const today = new Date();
@@ -107,6 +125,70 @@ export default async function DashboardPage() {
       .eq("restaurant_id", restaurantId);
     hasMenu = (menuCount || 0) > 0;
     hasWhatsApp = !!(restaurant as Record<string, unknown>)?.whatsapp_phone_id;
+
+    // Fetch last 7 days of orders & chats for dashboard charts
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const { data: last7DaysOrders } = await supabase
+      .from("orders")
+      .select("created_at, total, status")
+      .eq("restaurant_id", restaurantId)
+      .gte("created_at", sevenDaysAgo.toISOString())
+      .order("created_at", { ascending: true });
+
+    const { data: last7DaysChats } = await supabase
+      .from("conversations")
+      .select("updated_at")
+      .eq("restaurant_id", restaurantId)
+      .gte("updated_at", sevenDaysAgo.toISOString())
+      .order("updated_at", { ascending: true });
+
+    // Process last 7 days metrics
+    chartData = Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      const dateStr = d.toLocaleDateString("en-US", { weekday: "short", day: "numeric" });
+      
+      const dayStart = new Date(d);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(d);
+      dayEnd.setHours(23, 59, 59, 999);
+      
+      const dayOrders = (last7DaysOrders || []).filter(o => {
+        const oDate = new Date(o.created_at);
+        return oDate >= dayStart && oDate <= dayEnd;
+      });
+
+      const dayChats = (last7DaysChats || []).filter(c => {
+        const cDate = new Date(c.updated_at);
+        return cDate >= dayStart && cDate <= dayEnd;
+      });
+
+      const sales = dayOrders
+        .filter(o => o.status === "delivered")
+        .reduce((sum, o) => sum + (o.total || 0) / 100, 0);
+
+      return {
+        date: dateStr,
+        sales,
+        orders: dayOrders.length,
+        chats: dayChats.length,
+      };
+    });
+  } else {
+    // Generate dummy dates so chart looks full/premium on empty state
+    chartData = Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return {
+        date: d.toLocaleDateString("en-US", { weekday: "short", day: "numeric" }),
+        sales: 0,
+        orders: 0,
+        chats: 0,
+      };
+    });
   }
 
   const setupSteps = [
@@ -131,53 +213,62 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-border/50 bg-card p-5 hover:border-border transition-colors">
+      <motion.div
+        variants={statsContainerVariants}
+        initial="hidden"
+        animate="show"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        <motion.div variants={statsItemVariants} className="glass-interactive rounded-2xl p-5 transition-all">
           <div className="flex items-center justify-between">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
               <ShoppingCart className="h-5 w-5 text-primary" />
             </div>
             <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
-          <p className="mt-3 text-2xl font-bold">{todayOrders}</p>
+          <p className="mt-3 text-2xl font-bold font-mono">{todayOrders}</p>
           <p className="mt-0.5 text-sm text-muted-foreground">Today&apos;s Orders</p>
-        </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5 hover:border-border transition-colors">
+        </motion.div>
+        <motion.div variants={statsItemVariants} className="glass-interactive rounded-2xl p-5 transition-all">
           <div className="flex items-center justify-between">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
-              <CreditCard className="h-5 w-5 text-emerald-600" />
+              <CreditCard className="h-5 w-5 text-emerald-500" />
             </div>
             <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
-          <p className="mt-3 text-2xl font-bold">₹{(todayRevenue / 100).toLocaleString("en-IN")}</p>
+          <p className="mt-3 text-2xl font-bold font-mono">₹{(todayRevenue / 100).toLocaleString("en-IN")}</p>
           <p className="mt-0.5 text-sm text-muted-foreground">Revenue</p>
-        </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5 hover:border-border transition-colors">
+        </motion.div>
+        <motion.div variants={statsItemVariants} className="glass-interactive rounded-2xl p-5 transition-all">
           <div className="flex items-center justify-between">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
-              <MessageSquare className="h-5 w-5 text-blue-600" />
+              <MessageSquare className="h-5 w-5 text-blue-500" />
             </div>
             <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
-          <p className="mt-3 text-2xl font-bold">{activeChats}</p>
+          <p className="mt-3 text-2xl font-bold font-mono">{activeChats}</p>
           <p className="mt-0.5 text-sm text-muted-foreground">Active Chats</p>
-        </div>
-        <div className="rounded-2xl border border-border/50 bg-card p-5 hover:border-border transition-colors">
+        </motion.div>
+        <motion.div variants={statsItemVariants} className="glass-interactive rounded-2xl p-5 transition-all">
           <div className="flex items-center justify-between">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10">
-              <Users className="h-5 w-5 text-amber-600" />
+              <Users className="h-5 w-5 text-amber-500" />
             </div>
             <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
-          <p className="mt-3 text-2xl font-bold">{totalCustomers}</p>
+          <p className="mt-3 text-2xl font-bold font-mono">{totalCustomers}</p>
           <p className="mt-0.5 text-sm text-muted-foreground">Customers</p>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
+
+      {/* Interactive Charts Dashboard Component */}
+      <DashboardCharts data={chartData} />
+
 
       {/* Quick Actions + Setup Checklist */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Quick Actions */}
-        <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <div className="glass rounded-2xl p-6">
           <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
             {[
@@ -189,7 +280,7 @@ export default async function DashboardPage() {
               <Link
                 key={action.label}
                 href={action.href}
-                className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/30 p-3.5 hover:bg-muted/60 hover:border-border transition-colors group"
+                className="flex items-center gap-3 rounded-xl border border-border/30 bg-muted/25 p-3.5 hover:bg-muted/50 hover:border-border transition-colors group"
               >
                 <span className="text-xl">{action.icon}</span>
                 <span className="text-sm font-medium">{action.label}</span>
@@ -200,7 +291,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Setup Checklist */}
-        <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <div className="glass rounded-2xl p-6">
           <h2 className="text-lg font-semibold mb-4">Setup Checklist</h2>
           <div className="space-y-3">
             {setupSteps.map((item) => (
@@ -209,7 +300,7 @@ export default async function DashboardPage() {
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm"
               >
                 {item.done ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                 ) : (
                   <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 shrink-0" />
                 )}
@@ -231,14 +322,14 @@ export default async function DashboardPage() {
               style={{ width: `${(completedSteps / setupSteps.length) * 100}%` }}
             />
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground font-mono">
             {completedSteps} of {setupSteps.length} steps complete
           </p>
         </div>
       </div>
 
       {/* Recent Orders */}
-      <div className="rounded-2xl border border-border/50 bg-card p-6">
+      <div className="glass rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Recent Orders</h2>
           <Link
@@ -250,11 +341,17 @@ export default async function DashboardPage() {
         </div>
 
         {recentOrders.length > 0 ? (
-          <div className="divide-y divide-border/50">
+          <motion.div
+            variants={statsContainerVariants}
+            initial="hidden"
+            animate="show"
+            className="divide-y divide-border/50"
+          >
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             {recentOrders.map((order: any) => (
-              <div
+              <motion.div
                 key={order.id}
+                variants={statsItemVariants}
                 className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
               >
                 <div className="flex items-center gap-3">
@@ -263,10 +360,10 @@ export default async function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium">
-                      #{order.order_number} ·{" "}
+                      <span className="font-mono">#{order.order_number}</span> ·{" "}
                       {order.customers?.name || "Customer"}
                     </p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 font-mono">
                       <Clock className="h-3 w-3" />
                       {new Date(order.created_at).toLocaleString("en-IN", {
                         hour: "2-digit",
@@ -278,7 +375,7 @@ export default async function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold">
+                  <p className="text-sm font-semibold font-mono">
                     ₹{(order.total || 0).toLocaleString("en-IN")}
                   </p>
                   <span
@@ -293,9 +390,9 @@ export default async function DashboardPage() {
                     {order.status}
                   </span>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted mb-4">

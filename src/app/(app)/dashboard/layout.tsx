@@ -23,6 +23,7 @@ import {
   Layers,
   ChevronDown,
 } from "lucide-react";
+import PageTransition from "@/components/dashboard/page-transition";
 
 const sidebarItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -73,19 +74,19 @@ export default function DashboardLayout({
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 border-r border-sidebar-border bg-sidebar transform transition-transform duration-200 lg:relative lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-all duration-300 lg:relative lg:translate-x-0 lg:my-4 lg:ml-4 lg:mr-0 lg:h-[calc(100vh-2rem)] lg:rounded-2xl lg:border lg:border-sidebar-border/40 lg:shadow-xl lg:shadow-black/5 lg:bg-sidebar/60 lg:backdrop-blur-xl ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
+          <div className="flex h-16 items-center justify-between border-b border-sidebar-border/40 px-5">
             <Link href="/" className="flex items-center gap-2.5">
               <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm">
                 A
                 <div className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-mint animate-pulse" />
               </div>
-              <span className="text-base font-bold">
+              <span className="text-base font-bold tracking-tight">
                 Assist<span className="text-sidebar-primary">Mint</span>
               </span>
             </Link>
@@ -98,7 +99,7 @@ export default function DashboardLayout({
           </div>
 
           {/* Nav */}
-          <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+          <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 scrollbar-thin">
             {sidebarItems.map((item) => (
               <SidebarLink
                 key={item.href}
@@ -111,7 +112,7 @@ export default function DashboardLayout({
           </nav>
 
           {/* Bottom */}
-          <div className="border-t border-sidebar-border p-3">
+          <div className="border-t border-sidebar-border/40 p-4">
             <LogoutButton />
           </div>
         </div>
@@ -120,7 +121,7 @@ export default function DashboardLayout({
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top Bar */}
-        <header className="flex h-16 items-center gap-4 border-b border-border bg-background px-4 lg:px-6">
+        <header className="flex h-16 items-center gap-4 border-b border-border/20 bg-background/50 backdrop-blur-md px-4 lg:px-8">
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden text-muted-foreground hover:text-foreground"
@@ -133,18 +134,20 @@ export default function DashboardLayout({
           {/* Restaurant Selector → links to Settings */}
           <Link
             href="/dashboard/settings"
-            className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+            className="hidden sm:flex items-center gap-2.5 rounded-xl border border-border/30 bg-muted/20 px-3.5 py-1.5 text-xs font-semibold hover:bg-muted/40 hover:border-border/60 transition-all active:scale-[0.98]"
           >
-            <div className="h-5 w-5 rounded bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
+            <div className="h-5 w-5 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">
               {restaurantName.charAt(0).toUpperCase()}
             </div>
-            <span className="font-medium max-w-[150px] truncate">{restaurantName}</span>
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="font-semibold max-w-[150px] truncate">{restaurantName}</span>
+            <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </Link>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+          <PageTransition>{children}</PageTransition>
+        </main>
       </div>
     </div>
   );
@@ -170,16 +173,16 @@ function SidebarLink({
     <Link
       href={href}
       onClick={onClick}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
         isActive
-          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+          ? "bg-primary/10 text-primary border border-primary/15 shadow-sm shadow-primary/5"
+          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground hover:translate-x-0.5"
       }`}
     >
-      <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-sidebar-primary" : ""}`} />
-      {label}
+      <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : "text-sidebar-foreground/60"}`} />
+      <span className="truncate">{label}</span>
       {isActive && (
-        <div className="ml-auto h-1.5 w-1.5 rounded-full bg-sidebar-primary" />
+        <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
       )}
     </Link>
   );

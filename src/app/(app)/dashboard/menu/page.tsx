@@ -1,6 +1,22 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { motion, Variants } from "framer-motion";
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.04,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 15 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.25, 0.8, 0.25, 1] } },
+};
 import {
   Plus,
   Search,
@@ -508,13 +524,13 @@ export default function MenuPage() {
       )}
 
       {/* Menu Items */}
-      <div className="rounded-2xl border border-border/50 bg-card">
+      <div className="w-full">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+          <div className="flex flex-col items-center justify-center py-20 text-center px-4 rounded-2xl border border-border/50 bg-card">
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 mb-6">
               <UtensilsCrossed className="h-9 w-9 text-primary" />
             </div>
@@ -524,31 +540,95 @@ export default function MenuPage() {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-border/50">
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          >
             {filtered.map((item) => (
-              <div
+              <motion.div
                 key={item.id}
-                className={`flex items-center justify-between p-4 hover:bg-muted/20 transition-colors ${!item.is_available ? "opacity-50" : ""}`}
+                variants={itemVariants}
+                layout
+                className={`glass glass-interactive rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden transition-all duration-300 ${
+                  !item.is_available ? "opacity-60 bg-muted/20 border-dashed" : ""
+                }`}
               >
-                <div className="flex items-center gap-4 min-w-0 flex-1">
+                {/* Header Content */}
+                <div>
+                  {/* Image / Placeholder */}
                   {item.image_url ? (
-                    <img
-                      src={item.image_url}
-                      alt={item.name}
-                      className="h-10 w-10 rounded-xl object-cover shrink-0 border border-border/50"
-                    />
+                    <div className="relative group overflow-hidden rounded-xl border border-border/50 mb-4 h-40">
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
+                      />
+                      {!item.is_available && (
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center">
+                          <span className="text-white text-xs font-semibold uppercase tracking-wider bg-black/40 px-3 py-1 rounded-full border border-white/20">
+                            Unavailable
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/30 shrink-0 text-lg">
-                      {item.is_veg ? "🟢" : "🔴"}
+                    <div className={`relative rounded-xl mb-4 h-40 flex flex-col items-center justify-center border border-border/40 ${
+                      item.is_veg 
+                        ? "bg-gradient-to-br from-emerald-500/10 to-teal-500/5 dark:from-emerald-500/20 dark:to-teal-500/10" 
+                        : "bg-gradient-to-br from-red-500/10 to-orange-500/5 dark:from-red-500/20 dark:to-orange-500/10"
+                    }`}>
+                      <div className="text-4xl filter drop-shadow-md mb-2">
+                        {item.is_veg ? "🌿" : "🍖"}
+                      </div>
+                      <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${
+                        item.is_veg 
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" 
+                          : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                      }`}>
+                        {item.is_veg ? "Veg" : "Non-Veg"}
+                      </span>
+                      {!item.is_available && (
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center rounded-xl">
+                          <span className="text-white text-xs font-semibold uppercase tracking-wider bg-black/40 px-3 py-1 rounded-full border border-white/20">
+                            Unavailable
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold truncate">{item.name}</p>
-                      {/* Tag pills */}
+
+                  {/* Title & Info */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                        {item.menu_categories?.name || "Uncategorized"}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {item.is_veg ? (
+                          <span className="h-2 w-2 rounded-full bg-emerald-500" title="Veg" />
+                        ) : (
+                          <span className="h-2 w-2 rounded-full bg-red-500" title="Non-Veg" />
+                        )}
+                      </div>
+                    </div>
+
+                    <h3 className="text-base font-bold text-foreground line-clamp-1">
+                      {item.name}
+                    </h3>
+
+                    {item.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed min-h-[2rem]">
+                        {item.description}
+                      </p>
+                    )}
+
+                    {/* Tag pills */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
                       {item.is_bestseller && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                          <Star className="h-2.5 w-2.5" /> Bestseller
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 border border-amber-500/20">
+                          <Star className="h-2.5 w-2.5 fill-current" /> Bestseller
                         </span>
                       )}
                       {(item.tags as string[] || []).filter((t: string) => t !== 'bestseller').map((tag: string) => {
@@ -556,33 +636,49 @@ export default function MenuPage() {
                         if (!tagDef) return null;
                         const Icon = tagDef.icon;
                         return (
-                          <span key={tag} className="inline-flex items-center gap-0.5 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          <span key={tag} className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary border border-primary/20">
                             <Icon className={`h-2.5 w-2.5 ${tagDef.color}`} /> {tagDef.label}
                           </span>
                         );
                       })}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {item.menu_categories?.name || "Uncategorized"} · ₹{(item.price / 100).toFixed(0)}
-                      {item.prep_time_minutes ? ` · ${item.prep_time_minutes} min` : ''}
-                    </p>
+                  </div>
+                </div>
 
-                    {/* Inline edit for this item */}
-                    {editingItemId === item.id && (
-                      <div className="mt-2 flex flex-wrap gap-2 items-center p-2 bg-muted/30 rounded-lg">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-muted-foreground" />
-                          <input
-                            type="number"
-                            defaultValue={item.prep_time_minutes || 15}
-                            min="1"
-                            max="120"
-                            onChange={(e) => setEditValues(v => ({ ...v, prep_time_minutes: parseInt(e.target.value) }))}
-                            className="h-7 w-16 rounded-md border border-input bg-card px-2 text-xs"
-                          />
-                          <span className="text-xs text-muted-foreground">mins</span>
-                        </div>
-                        <div className="flex gap-1 flex-wrap">
+                {/* Bottom Content & Actions */}
+                <div className="mt-5 pt-4 border-t border-border/40 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-lg font-bold text-foreground font-mono">
+                      ₹{(item.price / 100).toFixed(0)}
+                    </div>
+                    {item.prep_time_minutes && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-lg border border-border/30 font-mono">
+                        <Clock className="h-3 w-3 text-primary" />
+                        <span>{item.prep_time_minutes} min</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Inline editor when editing */}
+                  {editingItemId === item.id ? (
+                    <div className="space-y-3 p-3 bg-muted/45 rounded-xl border border-border/40 animate-slide-up">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                          <Clock className="h-3 w-3" /> Prep Time (Minutes)
+                        </label>
+                        <input
+                          type="number"
+                          defaultValue={item.prep_time_minutes || 15}
+                          min="1"
+                          max="120"
+                          onChange={(e) => setEditValues(v => ({ ...v, prep_time_minutes: parseInt(e.target.value) }))}
+                          className="h-8 w-full rounded-lg border border-input bg-card px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tags</label>
+                        <div className="flex flex-wrap gap-1">
                           {AVAILABLE_TAGS.map(tag => {
                             const currentTags: string[] = (editValues.tags as string[]) ?? (item.tags as string[] || []);
                             const isActive = tag.value === 'bestseller'
@@ -603,7 +699,7 @@ export default function MenuPage() {
                                     setEditValues(v => ({ ...v, tags: newTags }));
                                   }
                                 }}
-                                className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-medium transition-all ${
+                                className={`inline-flex items-center gap-0.5 rounded-full px-2 py-1 text-[10px] font-semibold transition-all ${
                                   isActive ? 'bg-primary/15 text-primary border border-primary/40' : 'bg-card border border-border text-muted-foreground'
                                 }`}
                               >
@@ -613,53 +709,62 @@ export default function MenuPage() {
                             );
                           })}
                         </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-1">
                         <button
                           onClick={() => handleInlineEdit(item.id, editValues)}
                           disabled={saving}
-                          className="inline-flex h-7 items-center gap-1 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                          className="flex-1 inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-primary text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
                         >
-                          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                           Save
                         </button>
                         <button
                           onClick={() => { setEditingItemId(null); setEditValues({}); }}
-                          className="inline-flex h-7 items-center rounded-lg border border-border px-2 text-xs hover:bg-muted"
+                          className="flex-1 inline-flex h-8 items-center justify-center rounded-lg border border-border text-xs hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                         >
                           Cancel
                         </button>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => { setEditingItemId(item.id); setEditValues({}); }}
+                        className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-border hover:bg-muted hover:text-foreground text-muted-foreground text-xs font-semibold transition-all"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Quick Edit
+                      </button>
+                      <button
+                        onClick={() => handleToggle(item.id, item.is_available)}
+                        className={`inline-flex h-9 px-3 items-center justify-center rounded-xl border transition-all ${
+                          item.is_available 
+                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20" 
+                            : "border-border text-muted-foreground hover:bg-muted"
+                        }`}
+                        title={item.is_available ? "Mark unavailable" : "Mark available"}
+                      >
+                        {item.is_available ? (
+                          <ToggleRight className="h-5 w-5" />
+                        ) : (
+                          <ToggleLeft className="h-5 w-5" />
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-500/10 text-red-500 hover:bg-red-500/10 transition-all"
+                        title="Delete item"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    onClick={() => { setEditingItemId(editingItemId === item.id ? null : item.id); setEditValues({}); }}
-                    className="p-1.5 rounded-lg hover:bg-muted transition-colors"
-                    title="Edit item"
-                  >
-                    <Pencil className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                  <button
-                    onClick={() => handleToggle(item.id, item.is_available)}
-                    className="p-1.5 rounded-lg hover:bg-muted transition-colors"
-                    title={item.is_available ? "Mark unavailable" : "Mark available"}
-                  >
-                    {item.is_available ? (
-                      <ToggleRight className="h-5 w-5 text-emerald-600" />
-                    ) : (
-                      <ToggleLeft className="h-5 w-5 text-muted-foreground" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

@@ -98,7 +98,7 @@
 
 /* ─── Dark Theme ─────────────────────────── */
 .dark {
-  --background: #030712;
+  --background: #060814;
   --foreground: #f1f5f9;
   --card: #0a0f1e;
   --card-foreground: #f1f5f9;
@@ -127,7 +127,7 @@
   --chart-3: #fbbf24;
   --chart-4: #a78bfa;
   --chart-5: #fb7185;
-  --sidebar: #060c1a;
+  --sidebar: #050816;
   --sidebar-foreground: #f1f5f9;
   --sidebar-primary: #34d399;
   --sidebar-primary-foreground: #030712;
@@ -239,4 +239,37 @@
 ::selection {
   background: rgba(52, 211, 153, 0.2);
   color: inherit;
+}
+
+/* ─── Glassmorphism ──────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(228, 228, 231, 0.6);
+}
+
+.dark .glass {
+  background: rgba(10, 15, 30, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.glass-interactive {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-interactive:hover {
+  background: rgba(255, 255, 255, 0.65);
+  border-color: rgba(5, 150, 105, 0.3);
+  box-shadow: 0 8px 30px rgba(5, 150, 105, 0.05);
+  transform: translateY(-2px);
+}
+
+.dark .glass-interactive:hover {
+  background: rgba(10, 15, 30, 0.65);
+  border-color: rgba(52, 211, 153, 0.2);
+  box-shadow: 0 8px 30px rgba(52, 211, 153, 0.08);
+  transform: translateY(-2px);
 }
