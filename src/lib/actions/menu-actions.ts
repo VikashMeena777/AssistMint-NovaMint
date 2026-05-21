@@ -8,6 +8,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
+import { checkPlanLimit } from '@/lib/utils/enforce-limits';
 
 // ─── Helper: Verify Restaurant Ownership ────
 
@@ -147,6 +148,10 @@ export async function createMenuItem(
 ) {
   const { supabase, error: authError } = await verifyOwnership(restaurantId);
   if (authError) return { error: authError };
+
+  // ── Plan limit check ──
+  const limitCheck = await checkPlanLimit(restaurantId, 'items');
+  if (!limitCheck.allowed) return { error: limitCheck.message };
 
   const { data, error } = await supabase
     .from('menu_items')

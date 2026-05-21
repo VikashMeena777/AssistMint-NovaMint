@@ -12,6 +12,9 @@ import {
   MessageSquare,
   Webhook,
   Truck,
+  Crown,
+  Check,
+  ArrowUpRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -20,8 +23,11 @@ import {
   updateWhatsAppConfig,
   setupWhatsAppIceBreakers,
 } from "@/lib/actions/restaurant-actions";
+import { getCurrentPlan, getPlanUsage, createPlanCheckout, verifyPlanPayment } from "@/lib/actions/billing-actions";
+import { PLANS, PLAN_ORDER, formatLimit, getAnnualSavings, type PlanSlug, type BillingCycle } from "@/lib/utils/plan-limits";
 
 const SETTINGS_TABS = [
+  { id: "billing", label: "Billing", icon: Crown },
   { id: "restaurant", label: "Restaurant", icon: Store },
   { id: "delivery", label: "Delivery", icon: Truck },
   { id: "whatsapp", label: "WhatsApp", icon: MessageSquare },
@@ -36,7 +42,7 @@ const SETTINGS_TABS = [
 type RestaurantData = Record<string, any>;
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<string>("restaurant");
+  const [activeTab, setActiveTab] = useState<string>("billing");
   const [saving, setSaving] = useState(false);
   const [restaurant, setRestaurant] = useState<RestaurantData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -165,6 +171,9 @@ export default function SettingsPage() {
           )}
           {activeTab === "notifications" && <NotificationSettings />}
           {activeTab === "api" && <APISettings />}
+          {activeTab === "billing" && restaurant?.id && (
+            <BillingSection restaurantId={restaurant.id} />
+          )}
         </div>
       </div>
     </div>
@@ -804,6 +813,319 @@ function DeliverySettings({
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Billing Section
+// ============================================================
+
+function BillingSection({ restaurantId }: { restaurantId: string }) {
+  const [plan, setPlan] = useState<{ plan: string; plan_expires_at: string | null; config: ReturnType<typeof import("@/lib/utils/plan-limits").getPlanConfig> } | null>(null);
+  const [usage, setUsage] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+  const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+
+  useEffect(() => {
+    (async () => {
+      const [planData, usageData] = await Promise.all([
+        getCurrentPlan(restaurantId),
+        getPlanUsage(restaurantId),
+      ]);
+      setPlan(planData);
+      setUsage(usageData);
+      setLoading(false);
+
+      // Check for payment return
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("status") === "success" && params.get("order_id")) {
+        const result = await verifyPlanPayment(restaurantId, params.get("order_id")!);
+        if (result.success) {
+          toast.success("Plan upgraded successfully! 🎉");
+          window.history.replaceState({}, "", "/dashboard/settings?tab=billing");
+          // Reload data
+          const refreshed = await getCurrentPlan(restaurantId);
+          setPlan(refreshed);
+        } else if (result.error) {
+          toast.error(result.error);
+        }
+      }
+    })();
+  }, [restaurantId]);
+
+  const handleUpgrade = async (targetPlan: PlanSlug) => {
+    if (targetPlan === "free") return;
+    setUpgrading(targetPlan);
+
+    const result = await createPlanCheckout(restaurantId, targetPlan, billingCycle);
+    setUpgrading(null);
+
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+
+    if (result.paymentSessionId) {
+      // Redirect to Cashfree checkout
+      const cfEnv = process.env.NEXT_PUBLIC_CASHFREE_ENV === "production" ? "production" : "sandbox";
+      const cfUrl = cfEnv === "production"
+        ? "https://payments.cashfree.com/order/#"
+        : "https://sandbox.cashfree.com/order/#";
+      window.location.href = `${cfUrl}${result.paymentSessionId}`;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const currentPlanSlug = (plan?.plan || "free") as PlanSlug;
+  const currentConfig = plan?.config || PLANS.free;
+
+  const usageItems = [
+    { label: "Orders this month", used: usage.orders || 0, limit: currentConfig.orders, key: "orders" },
+    { label: "Menu items", used: usage.items || 0, limit: currentConfig.items, key: "items" },
+    { label: "Active coupons", used: usage.coupons || 0, limit: currentConfig.coupons, key: "coupons" },
+    { label: "Active combos", used: usage.combos || 0, limit: currentConfig.combos, key: "combos" },
+    { label: "Active rewards", used: usage.rewards || 0, limit: currentConfig.rewards, key: "rewards" },
+    { label: "Campaigns this month", used: usage.campaigns || 0, limit: currentConfig.campaigns, key: "campaigns" },
+    { label: "AI responses this month", used: usage.ai || 0, limit: currentConfig.ai, key: "ai" },
+  ];
+
+  const PLAN_COLORS: Record<PlanSlug, string> = {
+    free: "border-border",
+    starter: "border-blue-500/50",
+    growth: "border-primary/50",
+    enterprise: "border-purple-500/50",
+  };
+
+  const PLAN_BADGE_COLORS: Record<PlanSlug, string> = {
+    free: "bg-muted text-muted-foreground",
+    starter: "bg-blue-500/10 text-blue-600",
+    growth: "bg-primary/10 text-primary",
+    enterprise: "bg-purple-500/10 text-purple-600",
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Current Plan Card */}
+      <div className={`rounded-2xl border-2 ${PLAN_COLORS[currentPlanSlug]} bg-card p-6`}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Crown className="h-5 w-5 text-primary" />
+              <h2 className="text-xl font-bold">{currentConfig.name} Plan</h2>
+              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${PLAN_BADGE_COLORS[currentPlanSlug]}`}>
+                Current
+              </span>
+            </div>
+            {plan?.plan_expires_at ? (
+              <p className="text-sm text-muted-foreground">
+                Renews on{" "}
+                {new Date(plan.plan_expires_at).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {currentPlanSlug === "free" ? "Free forever — upgrade anytime" : "No expiry set"}
+              </p>
+            )}
+          </div>
+          {currentPlanSlug !== "enterprise" && (
+            <button
+              onClick={() => {
+                document.getElementById("plan-comparison")?.scrollIntoView({ behavior: "smooth" });
+              }}
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 transition-all"
+            >
+              <ArrowUpRight className="h-4 w-4" />
+              Upgrade Plan
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Usage */}
+      <div className="rounded-2xl border border-border/50 bg-card p-6 space-y-4">
+        <h3 className="text-sm font-semibold">Current Usage</h3>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {usageItems.map((item) => {
+            const isUnlimited = item.limit === -1;
+            const percentage = isUnlimited ? 0 : item.limit > 0 ? Math.min((item.used / item.limit) * 100, 100) : 0;
+            const isNearLimit = percentage >= 80;
+
+            return (
+              <div key={item.key} className="space-y-1.5">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">{item.label}</span>
+                  <span className={`font-mono font-semibold ${isNearLimit ? "text-amber-500" : "text-foreground"}`}>
+                    {item.used} / {formatLimit(item.limit)}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      isUnlimited ? "bg-primary/30" : isNearLimit ? "bg-amber-500" : "bg-primary"
+                    }`}
+                    style={{ width: isUnlimited ? "5%" : `${Math.max(percentage, 2)}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Billing Cycle Toggle */}
+      <div id="plan-comparison" className="flex items-center justify-center gap-3">
+        <span className={`text-sm font-medium ${billingCycle === "monthly" ? "text-foreground" : "text-muted-foreground"}`}>
+          Monthly
+        </span>
+        <button
+          onClick={() => setBillingCycle(billingCycle === "monthly" ? "annual" : "monthly")}
+          className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${
+            billingCycle === "annual" ? "bg-primary" : "bg-muted"
+          }`}
+        >
+          <span
+            className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+              billingCycle === "annual" ? "translate-x-8" : "translate-x-1"
+            }`}
+          />
+        </button>
+        <span className={`text-sm font-medium ${billingCycle === "annual" ? "text-foreground" : "text-muted-foreground"}`}>
+          Annual
+        </span>
+        {billingCycle === "annual" && (
+          <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600">
+            Save up to 17%
+          </span>
+        )}
+      </div>
+
+      {/* Plan Comparison Grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {PLAN_ORDER.map((slug) => {
+          const cfg = PLANS[slug];
+          const isCurrent = slug === currentPlanSlug;
+          const price = billingCycle === "annual" ? cfg.annual : cfg.monthly;
+          const savings = getAnnualSavings(slug);
+          const currentIdx = PLAN_ORDER.indexOf(currentPlanSlug);
+          const thisIdx = PLAN_ORDER.indexOf(slug);
+          const isUpgrade = thisIdx > currentIdx;
+          const isDowngrade = thisIdx < currentIdx;
+
+          return (
+            <div
+              key={slug}
+              className={`rounded-2xl border-2 p-5 space-y-4 transition-all ${
+                isCurrent
+                  ? `${PLAN_COLORS[slug]} bg-card ring-2 ring-primary/20`
+                  : "border-border/50 bg-card hover:border-border"
+              }`}
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold">{cfg.name}</h3>
+                  {isCurrent && (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                      Current
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2">
+                  {price === 0 ? (
+                    <span className="text-2xl font-bold">Free</span>
+                  ) : (
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-bold">₹{price.toLocaleString()}</span>
+                      <span className="text-sm text-muted-foreground">
+                        /{billingCycle === "annual" ? "yr" : "mo"}
+                      </span>
+                    </div>
+                  )}
+                  {billingCycle === "annual" && savings > 0 && (
+                    <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                      Save ₹{savings.toLocaleString()}/year
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Features */}
+              <div className="space-y-2 text-xs">
+                {[
+                  { label: `${formatLimit(cfg.orders)} orders/mo` },
+                  { label: `${formatLimit(cfg.items)} menu items` },
+                  { label: `${formatLimit(cfg.ai)} AI responses/mo` },
+                  { label: `${formatLimit(cfg.campaigns)} campaigns/mo` },
+                  { label: cfg.campaignContacts > 0 ? `${formatLimit(cfg.campaignContacts)} contacts/send` : null },
+                  { label: `${formatLimit(cfg.coupons)} coupons` },
+                  { label: `${formatLimit(cfg.combos)} combos` },
+                  { label: `${formatLimit(cfg.rewards)} rewards` },
+                  { label: `${cfg.team === 1 ? "1 team member" : `${formatLimit(cfg.team)} team members`}` },
+                  { label: cfg.loyalty ? "Loyalty program" : null },
+                  { label: cfg.payments ? "Online payments" : null },
+                  { label: cfg.aiPersona ? (cfg.multiPersona ? "Multi AI personas" : "Custom AI persona") : null },
+                  { label: `${cfg.languages === -1 ? "All" : cfg.languages} languages` },
+                  { label: cfg.prioritySupport !== "none" ? `Priority support (${cfg.prioritySupport})` : null },
+                ].filter((f) => f.label).map((f, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <Check className="h-3 w-3 text-primary flex-shrink-0" />
+                    <span className="text-muted-foreground">{f.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Action Button */}
+              <div>
+                {isCurrent ? (
+                  <div className="h-10 flex items-center justify-center rounded-xl border border-primary/20 bg-primary/5 text-sm font-semibold text-primary">
+                    Current Plan
+                  </div>
+                ) : isUpgrade ? (
+                  <button
+                    onClick={() => handleUpgrade(slug)}
+                    disabled={upgrading === slug}
+                    className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 disabled:opacity-50 transition-all"
+                  >
+                    {upgrading === slug ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ArrowUpRight className="h-4 w-4" />
+                    )}
+                    Upgrade
+                  </button>
+                ) : isDowngrade && slug !== "free" ? (
+                  <button
+                    disabled
+                    className="w-full h-10 inline-flex items-center justify-center rounded-xl border border-border text-sm font-medium text-muted-foreground cursor-not-allowed"
+                  >
+                    Contact Support
+                  </button>
+                ) : (
+                  <div className="h-10" />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Info */}
+      <p className="text-center text-xs text-muted-foreground">
+        All plans include WhatsApp bot, order management, and customer management.
+        Downgrade requests are processed within 24 hours.
+      </p>
     </div>
   );
 }

@@ -8,6 +8,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
+import { checkPlanLimit } from '@/lib/utils/enforce-limits';
 
 // ─── Get Coupons ────────────────────────────
 
@@ -43,6 +44,10 @@ export async function createCoupon(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'Unauthorized' };
 
+  // ── Plan limit check ──
+  const limitCheck = await checkPlanLimit(restaurantId, 'coupons');
+  if (!limitCheck.allowed) return { error: limitCheck.message };
+
   // Check code uniqueness within restaurant
   const { data: existing } = await supabase
     .from('coupons')
@@ -65,7 +70,7 @@ export async function createCoupon(
       min_order_amount: coupon.min_order_amount || 0,
       max_discount: coupon.max_discount || null,
       max_uses: coupon.max_uses || null,
-      current_uses: 0,
+      used_count: 0,
       valid_from: coupon.valid_from || new Date().toISOString(),
       valid_until: coupon.valid_until || null,
       is_active: true,
@@ -168,7 +173,7 @@ export async function validateCoupon(
   }
 
   // Check usage limit
-  if (coupon.max_uses && (coupon.current_uses as number) >= (coupon.max_uses as number)) {
+  if (coupon.max_uses && (coupon.used_count as number) >= (coupon.max_uses as number)) {
     return { valid: false, error: 'This coupon has reached its usage limit.' };
   }
 

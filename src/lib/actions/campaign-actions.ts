@@ -8,6 +8,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
+import { checkPlanLimit, checkCampaignContactsLimit } from '@/lib/utils/enforce-limits';
 
 // ─── Get Campaigns ──────────────────────────
 
@@ -39,6 +40,10 @@ export async function createCampaign(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'Unauthorized' };
+
+  // ── Plan limit check ──
+  const limitCheck = await checkPlanLimit(restaurantId, 'campaigns');
+  if (!limitCheck.allowed) return { error: limitCheck.message };
 
   // Count target audience
   let countQuery = supabase
@@ -157,6 +162,10 @@ export async function sendCampaign(restaurantId: string, campaignId: string) {
   if (!customers || customers.length === 0) {
     return { error: 'No customers match the target audience' };
   }
+
+  // ── Campaign contacts limit check ──
+  const contactsCheck = await checkCampaignContactsLimit(restaurantId, customers.length);
+  if (!contactsCheck.allowed) return { error: contactsCheck.message };
 
   // Send messages (with 1 second delay between each for rate limiting)
   const { sendTextMessage } = await import('@/lib/whatsapp/client');

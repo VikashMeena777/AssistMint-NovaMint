@@ -115,14 +115,16 @@ export default function ConversationsPage() {
   const refreshMessages = useCallback(async (phone: string) => {
     if (!restaurantId) return;
     const supabase = createClient();
+    // Load latest 100 messages (descending) then reverse for chronological display
     const { data } = await supabase
       .from("conversations")
       .select("*")
       .eq("restaurant_id", restaurantId)
       .eq("customer_phone", phone)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(100);
-    setMessages(data || []);
+    // Reverse to show oldest-first in the chat panel
+    setMessages((data || []).reverse());
   }, [restaurantId]);
 
   const loadMessages = async (session: ConversationSession) => {

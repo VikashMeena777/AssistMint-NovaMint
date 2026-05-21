@@ -14,6 +14,7 @@ import { createBotPaymentLink } from '@/lib/services/bot-payment';
 import { notifyOwnerNewOrder } from '@/lib/services/owner-notifications';
 import { sendTextMessage, sendReplyButtons, sendListMessage, sendImageMessage, sendDocumentMessage, sendCarouselMessage, type ListSection, type CarouselCard } from '@/lib/whatsapp/client';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
+import { checkAiLimit, logAiUsage } from '@/lib/utils/enforce-limits';
 
 // ─── Main Orchestrator ──────────────────────
 
@@ -1326,6 +1327,14 @@ async function generateAndSendAIResponse(
   conversation: { id: string; context: Record<string, unknown> },
   userMessage: string
 ): Promise<void> {
+  // ── Plan limit check: AI responses ──
+  const aiCheck = await checkAiLimit(restaurant.id);
+  if (!aiCheck.allowed) {
+    await sendBotReply(restaurant, customer, conversation,
+      '⚠️ We\'ve reached our AI response limit for this month. Please contact the restaurant directly for assistance.');
+    return;
+  }
+
   // Load menu context
   const menu = await getFullMenu(restaurant.id);
   const menuContext = menu ? buildMenuContext(menu) : 'Menu is being set up.';
@@ -1385,6 +1394,9 @@ async function generateAndSendAIResponse(
   } else {
     await sendBotReply(restaurant, customer, conversation, reply);
   }
+
+  // Log AI usage (fire-and-forget)
+  logAiUsage(restaurant.id, customer.id).catch(() => {});
 
   // Log activity (fire-and-forget)
   logActivity({

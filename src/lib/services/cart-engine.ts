@@ -4,6 +4,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js';
+import { getPlanConfig, isUnlimited } from '@/lib/utils/plan-limits';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -369,6 +370,30 @@ export async function convertCartToOrder(
       .single();
     if (sessionData && sessionData.metadata) {
       finalAddress = (sessionData.metadata as any).delivery_address || undefined;
+    }
+  }
+
+  // ── Plan limit check: orders per month ──
+  const { data: restaurant } = await supabaseAdmin
+    .from('restaurants')
+    .select('plan')
+    .eq('id', cart.restaurant_id)
+    .single();
+  const planSlug = (restaurant as Record<string, unknown>)?.plan as string || 'free';
+  const planConfig = getPlanConfig(planSlug);
+  if (!isUnlimited(planConfig.orders)) {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+    const { count: orderCount } = await supabaseAdmin
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('restaurant_id', cart.restaurant_id)
+      .gte('created_at', monthStart)
+      .lte('created_at', monthEnd);
+    if ((orderCount || 0) >= planConfig.orders) {
+      console.warn(`[CartEngine] Order limit reached for restaurant ${cart.restaurant_id} (${orderCount}/${planConfig.orders})`);
+      return '';
     }
   }
 
