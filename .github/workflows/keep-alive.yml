@@ -1,0 +1,36 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # Run every 4 days at 6 AM UTC (11:30 AM IST)
+    # Supabase pauses free-tier projects after 7 days of inactivity
+    - cron: '0 6 */4 * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping AssistMint Supabase
+        run: |
+          echo "🏓 Pinging AssistMint Supabase..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            "https://bteglumliyemeoupbimk.supabase.co/rest/v1/restaurants?select=count&limit=1" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0ZWdsdW1saXllbWVvdXBiaW1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MzQzMTUsImV4cCI6MjA5MjAxMDMxNX0.Bwo-sja4zTTpFh5bgWVnF7AL3jcHA5s-WGJYbtKNe6o" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0ZWdsdW1saXllbWVvdXBiaW1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MzQzMTUsImV4cCI6MjA5MjAxMDMxNX0.Bwo-sja4zTTpFh5bgWVnF7AL3jcHA5s-WGJYbtKNe6o")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "Status: $HTTP_CODE"
+          echo "Body: $BODY"
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ AssistMint Supabase is alive!"
+          else
+            echo "❌ AssistMint ping failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          echo "================================================"
+          echo "🎉 Keep-alive ping completed at $(date -u)"
+          echo "================================================"
