@@ -69,7 +69,21 @@ export default function SettingsPage() {
       return;
     }
     setSaving(true);
-    const result = await updateRestaurantSettings(restaurant.id, formData);
+
+    // Destructure to exclude fields that are managed by separate tabs and saved via their own buttons
+    const {
+      notification_email,
+      notify_new_order,
+      notify_payment,
+      notify_human_handoff,
+      notify_daily_summary,
+      whatsapp_phone_id,
+      whatsapp_access_token,
+      whatsapp_waba_id,
+      ...savePayload
+    } = formData;
+
+    const result = await updateRestaurantSettings(restaurant.id, savePayload);
     setSaving(false);
     if (result.error) {
       toast.error(result.error);
@@ -651,6 +665,7 @@ function NotificationSettings({ restaurantId }: { restaurantId: string }) {
     });
     setSaving(false);
     if (result.error) {
+      console.error("[NotificationSettings] Save failed:", result.error);
       toast.error(result.error);
     } else {
       toast.success("Notification preferences saved");
