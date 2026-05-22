@@ -459,8 +459,7 @@ export default function AnalyticsPage() {
               </svg>
             </div>
           );
-        })()
-        ) : (
+        })() : (
           <div className="flex h-40 items-center justify-center rounded-xl bg-muted/10 border border-dashed border-border/30">
             <div className="text-center">
               <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
