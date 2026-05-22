@@ -174,7 +174,7 @@ export async function getLoyaltyTransactions(
   const supabase = await createClient();
   let query = supabase
     .from('loyalty_transactions')
-    .select('*, customers(name, phone)', { count: 'exact' })
+    .select('*, customers(whatsapp_name, phone)', { count: 'exact' })
     .eq('restaurant_id', restaurantId)
     .order('created_at', { ascending: false });
 
