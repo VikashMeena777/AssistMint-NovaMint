@@ -12,6 +12,7 @@
     "@ai-sdk/openai-compatible": "^2.0.41",
     "@aws-sdk/client-s3": "^3.1031.0",
     "@base-ui/react": "^1.4.0",
+    "@cashfreepayments/cashfree-js": "^1.0.7",
     "@hookform/resolvers": "^5.2.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",

@@ -185,7 +185,6 @@ export async function createPlanCheckout(
 
     return {
       paymentSessionId: data.payment_session_id,
-      paymentLink: data.payment_link,
       cfOrderId: orderId,
     };
   } catch (error) {

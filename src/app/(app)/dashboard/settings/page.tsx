@@ -985,16 +985,24 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
-    if (result.paymentLink) {
-      // Direct payment link from Cashfree (most reliable)
-      window.location.href = result.paymentLink;
-    } else if (result.paymentSessionId) {
-      // Fallback: redirect to Cashfree hosted checkout
-      const cfEnv = process.env.NEXT_PUBLIC_CASHFREE_ENV === "production" ? "production" : "sandbox";
-      const cfUrl = cfEnv === "production"
-        ? "https://payments.cashfree.com/pgbillpay/sessions/"
-        : "https://sandbox.cashfree.com/pgbillpay/sessions/";
-      window.location.href = `${cfUrl}${result.paymentSessionId}`;
+    if (result.paymentSessionId) {
+      // Use Cashfree JS SDK to open PG checkout
+      try {
+        const { load } = await import("@cashfreepayments/cashfree-js");
+        const cashfree = await load({
+          mode: process.env.NEXT_PUBLIC_CASHFREE_ENV === "production" ? "production" : "sandbox",
+        });
+        const checkoutResult = await cashfree.checkout({
+          paymentSessionId: result.paymentSessionId,
+          redirectTarget: "_self",
+        });
+        if (checkoutResult.error) {
+          toast.error(checkoutResult.error.message || "Payment failed");
+        }
+      } catch (sdkError) {
+        console.error("[Billing] Cashfree SDK error:", sdkError);
+        toast.error("Failed to load payment gateway. Please try again.");
+      }
     }
   };
 
