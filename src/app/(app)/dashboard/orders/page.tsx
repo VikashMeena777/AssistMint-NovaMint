@@ -12,9 +12,13 @@ import {
   Package,
   Loader2,
   RefreshCw,
+  Download,
+  Filter,
+  CalendarDays,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getOrders, updateOrderStatus, getOrderStats } from "@/lib/actions/order-actions";
+import { getOrders, updateOrderStatus, getOrderStats, exportOrdersCsv } from "@/lib/actions/order-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
 
 const ORDER_TABS = [
@@ -48,6 +52,12 @@ export default function OrdersPage() {
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -64,18 +74,21 @@ export default function OrdersPage() {
       getOrders(restaurantId, {
         status: activeTab !== "all" ? activeTab : undefined,
         search: search || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        paymentStatus: paymentFilter !== "all" ? paymentFilter : undefined,
         limit: 50,
       }),
       getOrderStats(restaurantId),
     ]);
     setOrders(orderResult.data || []);
+    setTotalCount(orderResult.count || 0);
     setStats(statsResult.counts || {});
     setLoading(false);
-  }, [restaurantId, activeTab, search]);
+  }, [restaurantId, activeTab, search, dateFrom, dateTo, paymentFilter]);
 
   useEffect(() => {
     if (restaurantId) loadOrders();
-    // Auto-refresh orders every 30 seconds
     const interval = setInterval(() => {
       if (restaurantId) loadOrders();
     }, 30000);
@@ -98,6 +111,49 @@ export default function OrdersPage() {
     }
   };
 
+  const handleExportCsv = async () => {
+    if (!restaurantId) return;
+    setExporting(true);
+    try {
+      const result = await exportOrdersCsv(restaurantId, {
+        status: activeTab !== "all" ? activeTab : undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        paymentStatus: paymentFilter !== "all" ? paymentFilter : undefined,
+      });
+
+      if (result.error || !result.csv) {
+        toast.error(result.error || "Export failed");
+        return;
+      }
+
+      // Download CSV
+      const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `orders_${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Orders exported successfully!");
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setDateFrom("");
+    setDateTo("");
+    setPaymentFilter("all");
+    setSearch("");
+  };
+
+  const hasActiveFilters = dateFrom || dateTo || paymentFilter !== "all";
+
   const getNextStatus = (
     current: string
   ): "confirmed" | "preparing" | "ready" | "delivered" | null => {
@@ -113,21 +169,117 @@ export default function OrdersPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
           <p className="text-sm text-muted-foreground">
             Track and manage all customer orders in real-time.
+            {totalCount > 0 && (
+              <span className="ml-1 font-mono text-foreground">{totalCount} total</span>
+            )}
           </p>
         </div>
-        <button
-          onClick={loadOrders}
-          className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/50 bg-card px-3 text-sm font-medium hover:bg-muted/50 transition-colors"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
+              showFilters || hasActiveFilters
+                ? "border-primary/50 bg-primary/5 text-primary"
+                : "border-border/50 bg-card hover:bg-muted/50"
+            }`}
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Filters
+            {hasActiveFilters && (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+                !
+              </span>
+            )}
+          </button>
+          <button
+            onClick={handleExportCsv}
+            disabled={exporting || orders.length === 0}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/50 bg-card px-3 text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
+          >
+            {exporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            Export CSV
+          </button>
+          <button
+            onClick={loadOrders}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/50 bg-card px-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {/* Advanced Filters Panel */}
+      {showFilters && (
+        <div className="glass rounded-2xl border border-border/50 p-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <Filter className="h-4 w-4 text-primary" />
+              Advanced Filters
+            </h3>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
+              >
+                <X className="h-3 w-3" />
+                Clear All
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Date From */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <CalendarDays className="h-3 w-3" />
+                From Date
+              </label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            {/* Date To */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <CalendarDays className="h-3 w-3" />
+                To Date
+              </label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            {/* Payment Status */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Payment Status</label>
+              <select
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value)}
+                className="flex h-9 w-full rounded-lg border border-input bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <option value="all">All Payments</option>
+                <option value="paid">💳 Paid</option>
+                <option value="cod_pending">💵 COD Pending</option>
+                <option value="pending">⏳ Unpaid</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Order Status Tabs */}
       <div className="flex gap-1 overflow-x-auto rounded-xl border border-border/50 bg-muted/30 p-1">
@@ -159,7 +311,7 @@ export default function OrdersPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by order #..."
+          placeholder="Search by order # or phone number..."
           className="flex h-10 w-full rounded-xl border border-input bg-card pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
         />
       </div>
@@ -192,10 +344,20 @@ export default function OrdersPage() {
             </div>
             <h3 className="text-lg font-semibold">No orders found</h3>
             <p className="mt-2 text-sm text-muted-foreground max-w-md">
-              {activeTab !== "all"
+              {hasActiveFilters
+                ? "No orders match your filters. Try adjusting the date range or clearing filters."
+                : activeTab !== "all"
                 ? `No ${activeTab} orders right now.`
                 : "Orders will appear here once your WhatsApp bot starts receiving them."}
             </p>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-border/50">
@@ -204,7 +366,7 @@ export default function OrdersPage() {
               return (
                 <div
                   key={order.id}
-                  className="flex items-center justify-between p-4 hover:bg-muted/20 transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-muted/20 transition-colors gap-3"
                 >
                   <div className="flex items-center gap-4 min-w-0">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 shrink-0">
@@ -214,7 +376,7 @@ export default function OrdersPage() {
                       <p className="text-sm font-semibold">
                         #{order.order_number} · {order.customers?.saved_name || order.customers?.whatsapp_name || "Customer"}
                       </p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
                         <Clock className="h-3 w-3" />
                         {new Date(order.created_at).toLocaleString("en-IN", {
                           hour: "2-digit",
@@ -222,16 +384,26 @@ export default function OrdersPage() {
                           day: "numeric",
                           month: "short",
                         })}
+                        {order.customers?.phone && (
+                          <span className="ml-1 font-mono text-[10px]">
+                            · {order.customers.phone}
+                          </span>
+                        )}
                         {order.delivery_type && (
                           <span className="ml-1">
                             · {order.delivery_type === "dine_in" ? "Dine-in" : "Delivery"}
+                          </span>
+                        )}
+                        {order.rating > 0 && (
+                          <span className="ml-1 text-amber-500">
+                            · {"⭐".repeat(Math.min(order.rating, 5))}
                           </span>
                         )}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap pl-14 sm:pl-0">
                     <p className="text-sm font-semibold">
                       ₹{((order.total || 0) / 100).toLocaleString("en-IN")}
                     </p>

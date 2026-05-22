@@ -23,6 +23,7 @@ import {
   Tag,
   Layers,
   ChevronDown,
+  Star,
 } from "lucide-react";
 import PageTransition from "@/components/dashboard/page-transition";
 import OrderRealtimeListener from "@/components/dashboard/order-realtime-listener";
@@ -38,6 +39,7 @@ const sidebarItems = [
   { href: "/dashboard/combos", label: "Combos", icon: Layers },
   { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/dashboard/loyalty", label: "Loyalty", icon: Gift },
+  { href: "/dashboard/feedback", label: "Feedback", icon: Star },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
 ];
 

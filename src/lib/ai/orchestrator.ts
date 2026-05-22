@@ -651,6 +651,106 @@ async function sendGreeting(
   }
 
   await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+
+  // ── AI Recommendation for returning customers (3+ orders) ──
+  if (isReturning && (customer.total_orders || 0) >= 3) {
+    sendPersonalizedRecommendation(restaurant, customer, conversation).catch(e =>
+      console.warn('[Orchestrator] Recommendation failed:', e)
+    );
+  }
+}
+
+// ─── AI-Powered Personalized Recommendations ──
+
+async function sendPersonalizedRecommendation(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string },
+  conversation: { id: string }
+): Promise<void> {
+  if (!restaurant.whatsapp_token || !restaurant.whatsapp_phone_id) return;
+
+  try {
+    // Wait a beat so it comes after the greeting
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Get customer's past order items
+    const pastOrders = await getCustomerOrders(customer.id, 10);
+    if (pastOrders.length === 0) return;
+
+    // Count item frequency from past orders
+    const itemFrequency = new Map<string, { name: string; count: number; menuItemId?: string }>();
+    for (const order of pastOrders) {
+      const items = (order.items as Array<Record<string, unknown>>) || [];
+      for (const item of items) {
+        const name = item.item_name as string;
+        const menuItemId = item.menu_item_id as string | undefined;
+        if (!name) continue;
+        const existing = itemFrequency.get(name) || { name, count: 0, menuItemId };
+        existing.count += (item.quantity as number) || 1;
+        if (menuItemId) existing.menuItemId = menuItemId;
+        itemFrequency.set(name, existing);
+      }
+    }
+
+    // Get top 3 most-ordered items
+    const favorites = Array.from(itemFrequency.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
+    if (favorites.length === 0) return;
+
+    // Get current menu to check availability and find IDs
+    const menu = await getFullMenu(restaurant.id);
+    if (!menu) return;
+
+    const allMenuItems = menu.categories.flatMap(c => c.items);
+
+    // Match favorites to available menu items
+    const availableRecs: { name: string; id: string; price: number; count: number }[] = [];
+    for (const fav of favorites) {
+      // Try exact match by ID first, then by name
+      const menuItem = fav.menuItemId
+        ? allMenuItems.find(m => m.id === fav.menuItemId && m.is_available)
+        : allMenuItems.find(m =>
+            m.name.toLowerCase() === fav.name.toLowerCase() && m.is_available
+          );
+      if (menuItem) {
+        availableRecs.push({
+          name: menuItem.name,
+          id: menuItem.id,
+          price: menuItem.price,
+          count: fav.count,
+        });
+      }
+    }
+
+    if (availableRecs.length === 0) return;
+
+    // Build recommendation message
+    const recList = availableRecs
+      .map((r, i) => `${i + 1}. *${r.name}* — ₹${(r.price / 100).toFixed(0)} (ordered ${r.count}x)`)
+      .join('\n');
+
+    const recText = `🎯 *Your Favorites*\nBased on your past orders:\n\n${recList}\n\nQuick add below! 👇`;
+
+    // Send as reply buttons (max 3)
+    const recButtons = availableRecs.slice(0, 3).map(r => ({
+      id: `add_${r.id}`,
+      title: `➕ ${r.name.substring(0, 16)}`,
+    }));
+
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText: recText,
+      buttons: recButtons,
+    });
+
+    await saveMessage(conversation.id, restaurant.id, 'bot', recText, undefined, { phone: customer.phone });
+  } catch (e) {
+    console.warn('[Orchestrator] Personalized recommendation error:', e);
+  }
 }
 
 // ─── Menu Overview (Category Picker) ────────

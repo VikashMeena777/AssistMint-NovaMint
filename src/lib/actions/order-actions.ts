@@ -18,6 +18,9 @@ export async function getOrders(
     limit?: number;
     offset?: number;
     search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    paymentStatus?: string;
   }
 ) {
   const supabase = await createClient();
@@ -31,7 +34,20 @@ export async function getOrders(
     query = query.eq('status', filters.status);
   }
   if (filters?.search) {
-    query = query.ilike('order_number', `%${filters.search}%`);
+    // Search by order number OR customer phone
+    query = query.or(`order_number.ilike.%${filters.search}%,customer_phone.ilike.%${filters.search}%`);
+  }
+  if (filters?.dateFrom) {
+    query = query.gte('created_at', filters.dateFrom);
+  }
+  if (filters?.dateTo) {
+    // Add 1 day to dateTo so it includes the entire end date
+    const end = new Date(filters.dateTo);
+    end.setDate(end.getDate() + 1);
+    query = query.lt('created_at', end.toISOString());
+  }
+  if (filters?.paymentStatus && filters.paymentStatus !== 'all') {
+    query = query.eq('payment_status', filters.paymentStatus);
   }
 
   const limit = filters?.limit || 20;
@@ -239,4 +255,81 @@ export async function getOrderStats(restaurantId: string) {
   );
 
   return { counts, todayRevenue, totalActive: counts.pending + counts.confirmed + counts.preparing + counts.ready };
+}
+
+// ─── Export Orders as CSV ────────────────────
+
+export async function exportOrdersCsv(
+  restaurantId: string,
+  filters?: {
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    paymentStatus?: string;
+  }
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized', csv: null };
+
+  let query = supabase
+    .from('orders')
+    .select('order_number, customer_phone, items, subtotal, tax_amount, delivery_fee, total, payment_method, payment_status, status, delivery_type, delivery_address, rating, feedback, created_at, delivered_at, customers(saved_name, whatsapp_name, phone)')
+    .eq('restaurant_id', restaurantId)
+    .order('created_at', { ascending: false });
+
+  if (filters?.status && filters.status !== 'all') {
+    query = query.eq('status', filters.status);
+  }
+  if (filters?.dateFrom) {
+    query = query.gte('created_at', filters.dateFrom);
+  }
+  if (filters?.dateTo) {
+    const end = new Date(filters.dateTo);
+    end.setDate(end.getDate() + 1);
+    query = query.lt('created_at', end.toISOString());
+  }
+  if (filters?.paymentStatus && filters.paymentStatus !== 'all') {
+    query = query.eq('payment_status', filters.paymentStatus);
+  }
+
+  const { data, error } = await query.limit(5000);
+  if (error) return { error: error.message, csv: null };
+
+  // Build CSV
+  const headers = [
+    'Order #', 'Date', 'Customer', 'Phone', 'Items', 'Subtotal (₹)', 'Tax (₹)',
+    'Delivery Fee (₹)', 'Total (₹)', 'Payment Method', 'Payment Status',
+    'Order Status', 'Type', 'Address', 'Rating', 'Feedback', 'Delivered At',
+  ];
+
+  const rows = (data || []).map((o: Record<string, unknown>) => {
+    const cust = o.customers as Record<string, string> | null;
+    const items = (o.items as Array<Record<string, unknown>> || []).map(
+      (i) => `${i.quantity}x ${i.item_name}`
+    ).join('; ');
+
+    return [
+      o.order_number || '',
+      new Date(o.created_at as string).toLocaleString('en-IN'),
+      cust?.saved_name || cust?.whatsapp_name || '',
+      cust?.phone || o.customer_phone || '',
+      `"${items.replace(/"/g, '""')}"`,
+      ((o.subtotal as number || 0) / 100).toFixed(2),
+      ((o.tax_amount as number || 0) / 100).toFixed(2),
+      ((o.delivery_fee as number || 0) / 100).toFixed(2),
+      ((o.total as number || 0) / 100).toFixed(2),
+      o.payment_method || 'cod',
+      o.payment_status || '',
+      o.status || '',
+      o.delivery_type || '',
+      `"${((o.delivery_address as string) || '').replace(/"/g, '""')}"`,
+      o.rating || '',
+      `"${((o.feedback as string) || '').replace(/"/g, '""')}"`,
+      o.delivered_at ? new Date(o.delivered_at as string).toLocaleString('en-IN') : '',
+    ].join(',');
+  });
+
+  const csv = [headers.join(','), ...rows].join('\n');
+  return { csv, error: null };
 }
