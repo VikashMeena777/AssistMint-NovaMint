@@ -311,7 +311,7 @@ export default function AnalyticsPage() {
               {trend.map((day, i) => (
                 <div key={i} className="flex flex-col items-center flex-1 gap-1">
                   <span className="text-[10px] text-muted-foreground font-mono font-medium">
-                    ₹{(day.revenue || 0).toLocaleString("en-IN")}
+                    ₹{((day.revenue || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                   </span>
                   <div
                     className="w-full rounded-t-lg bg-primary/80 transition-all min-h-[4px]"
@@ -356,7 +356,7 @@ export default function AnalyticsPage() {
                   <div className="text-right">
                     <p className="text-sm font-semibold font-mono">{item.count} sold</p>
                     <p className="text-xs text-muted-foreground font-mono">
-                      ₹{(item.revenue || 0).toLocaleString("en-IN")}
+                      ₹{((item.revenue || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                     </p>
                   </div>
                 </div>
@@ -385,28 +385,63 @@ export default function AnalyticsPage() {
           <h3 className="text-sm font-semibold">Peak Ordering Hours (Last 30 Days)</h3>
         </div>
         {businessHours.some((h) => h.count > 0) ? (
-          <div className="flex items-end gap-1 h-40">
-            {businessHours.map((h, i) => (
-              <div key={i} className="flex flex-col items-center flex-1 gap-1">
-                <span className="text-[9px] text-muted-foreground font-mono font-medium">
-                  {h.count > 0 ? h.count : ''}
-                </span>
-                <div
-                  className="w-full rounded-t-md transition-all min-h-[2px]"
-                  style={{
-                    height: `${Math.max((h.count / maxPeakCount) * 120, 2)}px`,
-                    backgroundColor: h.count === maxPeakCount
-                      ? 'hsl(var(--primary))'
-                      : h.count > maxPeakCount * 0.6
-                        ? 'hsl(var(--primary) / 0.7)'
-                        : 'hsl(var(--primary) / 0.3)',
-                  }}
-                />
-                <span className="text-[8px] text-muted-foreground -rotate-45 origin-top-left whitespace-nowrap">
-                  {h.hour}
-                </span>
-              </div>
-            ))}
+          <div className="relative">
+            {/* SVG Line overlay */}
+            <svg className="absolute inset-0 w-full h-40 pointer-events-none" preserveAspectRatio="none">
+              <polyline
+                fill="none"
+                stroke="hsl(var(--primary))"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                points={
+                  businessHours.map((h, i) => {
+                    const x = ((i + 0.5) / businessHours.length) * 100;
+                    const y = 100 - ((h.count / maxPeakCount) * 75);
+                    return `${x}%,${y}%`;
+                  }).join(' ')
+                }
+                vectorEffect="non-scaling-stroke"
+              />
+              {businessHours.map((h, i) => {
+                const cx = ((i + 0.5) / businessHours.length) * 100;
+                const cy = 100 - ((h.count / maxPeakCount) * 75);
+                return h.count > 0 ? (
+                  <circle
+                    key={i}
+                    cx={`${cx}%`}
+                    cy={`${cy}%`}
+                    r="3"
+                    fill="hsl(var(--primary))"
+                    stroke="hsl(var(--background))"
+                    strokeWidth="1.5"
+                  />
+                ) : null;
+              })}
+            </svg>
+            <div className="flex items-end gap-1 h-40">
+              {businessHours.map((h, i) => (
+                <div key={i} className="flex flex-col items-center flex-1 gap-1">
+                  <span className="text-[9px] text-muted-foreground font-mono font-medium">
+                    {h.count > 0 ? h.count : ''}
+                  </span>
+                  <div
+                    className="w-full rounded-t-md transition-all min-h-[2px]"
+                    style={{
+                      height: `${Math.max((h.count / maxPeakCount) * 120, 2)}px`,
+                      backgroundColor: h.count === maxPeakCount
+                        ? 'hsl(var(--primary))'
+                        : h.count > maxPeakCount * 0.6
+                          ? 'hsl(var(--primary) / 0.7)'
+                          : 'hsl(var(--primary) / 0.3)',
+                    }}
+                  />
+                  <span className="text-[8px] text-muted-foreground -rotate-45 origin-top-left whitespace-nowrap">
+                    {h.hour}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl bg-muted/10 border border-dashed border-border/30">

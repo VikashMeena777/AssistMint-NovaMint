@@ -115,6 +115,7 @@ export async function getOrderTrend(restaurantId: string) {
       .from('orders')
       .select('total', { count: 'exact' })
       .eq('restaurant_id', restaurantId)
+      .eq('status', 'delivered')
       .gte('created_at', dayStart.toISOString())
       .lt('created_at', dayEnd.toISOString());
 
