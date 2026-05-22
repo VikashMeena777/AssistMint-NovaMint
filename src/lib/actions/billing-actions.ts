@@ -126,25 +126,26 @@ export async function createPlanCheckout(
 
   const restaurantName = (restaurant as Record<string, unknown>)?.name || 'Restaurant';
 
-  // Create Cashfree order
+  // Create Cashfree order via standard PG Orders API
   const cfApiBase = process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production'
     ? 'https://api.cashfree.com'
     : 'https://sandbox.cashfree.com';
 
   const orderId = `PLAN_${restaurantId.substring(0, 8)}_${Date.now()}`;
+  const returnUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?tab=billing&status=success&order_id=${orderId}`;
 
   const orderPayload = {
     order_id: orderId,
     order_amount: amount,
     order_currency: 'INR',
-    order_note: `Plan:${planSlug}:${billingCycle}`,
+    order_note: `${planConfig.name} Plan (${billingCycle}) for ${restaurantName}`,
     customer_details: {
       customer_id: user.id.substring(0, 50),
       customer_email: user.email || 'user@assistmint.com',
       customer_phone: '9999999999',
     },
     order_meta: {
-      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings?tab=billing&status=success&order_id=${orderId}`,
+      return_url: `${returnUrl}&cf_id={order_id}`,
       notify_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/cashfree`,
     },
   };
@@ -154,7 +155,7 @@ export async function createPlanCheckout(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-version': process.env.CASHFREE_API_VERSION || '2023-08-01',
+        'x-api-version': process.env.CASHFREE_API_VERSION || '2025-01-01',
         'x-client-id': process.env.CASHFREE_CLIENT_ID || '',
         'x-client-secret': process.env.CASHFREE_CLIENT_SECRET || '',
       },
@@ -164,8 +165,8 @@ export async function createPlanCheckout(
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('[Billing] Cashfree order creation failed:', data);
-      return { error: 'Payment initialization failed. Please try again.' };
+      console.error('[Billing] Cashfree order creation failed:', JSON.stringify(data));
+      return { error: data.message || 'Payment initialization failed. Please try again.' };
     }
 
     // Store pending plan upgrade
@@ -184,6 +185,7 @@ export async function createPlanCheckout(
 
     return {
       paymentSessionId: data.payment_session_id,
+      paymentLink: data.payment_link,
       cfOrderId: orderId,
     };
   } catch (error) {

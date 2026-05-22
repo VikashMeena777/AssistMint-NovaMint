@@ -39,7 +39,6 @@ const sidebarItems = [
   { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/dashboard/loyalty", label: "Loyalty", icon: Gift },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 export default function DashboardLayout({
@@ -124,8 +123,14 @@ export default function DashboardLayout({
             ))}
           </nav>
 
-          {/* Bottom */}
-          <div className="border-t border-sidebar-border/40 p-4">
+          {/* Bottom — Settings + Sign Out (pinned) */}
+          <div className="border-t border-sidebar-border/40 p-4 space-y-1.5">
+            <SidebarLink
+              href="/dashboard/settings"
+              label="Settings"
+              icon={Settings}
+              onClick={() => setSidebarOpen(false)}
+            />
             <LogoutButton />
           </div>
         </div>

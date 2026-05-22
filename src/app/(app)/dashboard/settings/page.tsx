@@ -985,8 +985,11 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
       return;
     }
 
-    if (result.paymentSessionId) {
-      // Redirect to Cashfree hosted checkout page
+    if (result.paymentLink) {
+      // Direct payment link from Cashfree (most reliable)
+      window.location.href = result.paymentLink;
+    } else if (result.paymentSessionId) {
+      // Fallback: redirect to Cashfree hosted checkout
       const cfEnv = process.env.NEXT_PUBLIC_CASHFREE_ENV === "production" ? "production" : "sandbox";
       const cfUrl = cfEnv === "production"
         ? "https://payments.cashfree.com/pgbillpay/sessions/"
