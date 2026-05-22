@@ -211,7 +211,7 @@ export async function verifyPlanPayment(restaurantId: string, cfOrderId: string)
   if (!payment) return { error: 'Payment not found.' };
   const p = payment as Record<string, unknown>;
 
-  if (p.status === 'paid') {
+  if (p.status === 'completed') {
     return { success: true, message: 'Payment already verified.' };
   }
 
@@ -253,11 +253,11 @@ export async function verifyPlanPayment(restaurantId: string, cfOrderId: string)
         })
         .eq('id', restaurantId);
 
-      // Mark payment as paid
+      // Mark payment as completed
       await supabase
         .from('payments')
-        .update({ status: 'paid' })
-            .eq('cashfree_order_id', cfOrderId);
+        .update({ status: 'completed' })
+        .eq('cashfree_order_id', cfOrderId);
 
       return { success: true, plan: planSlug, expires_at: expiresAt.toISOString() };
     }
