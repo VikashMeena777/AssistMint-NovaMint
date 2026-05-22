@@ -152,10 +152,10 @@ async function sendOrderStatusWhatsApp(
     { auth: { persistSession: false } }
   );
 
-  // Get order + customer phone
+  // Get order + customer phone + email + items
   const { data: order } = await supabaseAdmin
     .from('orders')
-    .select('order_number, customer_phone, total')
+    .select('order_number, customer_phone, total, items, customers(saved_name, whatsapp_name, email)')
     .eq('id', orderId)
     .single();
 
@@ -169,6 +169,21 @@ async function sendOrderStatusWhatsApp(
     .single();
 
   if (!restaurant?.whatsapp_phone_id || !restaurant?.whatsapp_access_token) return;
+
+  // Send email notification to customer if they have an email address
+  const customer = order?.customers as any;
+  if (customer?.email) {
+    const { sendOrderStatusEmail } = await import('@/lib/email/email-service');
+    sendOrderStatusEmail({
+      customerEmail: customer.email,
+      customerName: customer.saved_name || customer.whatsapp_name || 'Valued Customer',
+      orderNumber: order.order_number || orderId,
+      restaurantName: restaurant.name || 'AssistMint Partner',
+      status,
+      total: order.total || 0,
+      items: (order.items as any) || [],
+    }).catch(e => console.error('[Orders] Email status notification failed:', e));
+  }
 
   const statusMessages: Record<string, string> = {
     confirmed: '✅ *Order #ORDER confirmed!*\nWe\'re getting it ready for you.',

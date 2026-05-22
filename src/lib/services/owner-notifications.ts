@@ -6,7 +6,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { sendTextMessage, sendReplyButtons, sanitizeWhatsAppNumber } from '@/lib/whatsapp/client';
-import { sendNewOrderEmail, sendDailySummaryEmail } from '@/lib/email/email-service';
+import { sendNewOrderEmail, sendDailySummaryEmail, sendOrderStatusEmail } from '@/lib/email/email-service';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -206,7 +206,7 @@ export async function handleOwnerReply(
     // Find the most recent actionable order
     const { data: order } = await supabaseAdmin
       .from('orders')
-      .select('id, order_number, customer_phone, status, total')
+      .select('id, order_number, customer_phone, status, total, items, customers(saved_name, whatsapp_name, email)')
       .eq('restaurant_id', restaurant.id)
       .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery'])
       .order('created_at', { ascending: false })
@@ -342,6 +342,20 @@ export async function handleOwnerReply(
             await sendFeedbackRequest(fullRestaurant, order.id, order.customer_phone as string).catch(e => console.error('[OwnerNotif] Feedback request failed:', e));
           }
         } catch { /* silent */ }
+      }
+
+      // If customer has email, send email notification
+      const customer = order.customers as any;
+      if (customer?.email) {
+        sendOrderStatusEmail({
+          customerEmail: customer.email,
+          customerName: customer.saved_name || customer.whatsapp_name || 'Valued Customer',
+          orderNumber: order.order_number || order.id,
+          restaurantName: restaurant.name || 'AssistMint Partner',
+          status: newStatus,
+          total: order.total || 0,
+          items: (order.items as any) || [],
+        }).catch(e => console.error('[OwnerNotif] Email status notification failed:', e));
       }
     }
 

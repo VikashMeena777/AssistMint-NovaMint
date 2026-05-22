@@ -1906,9 +1906,9 @@ export async function sendFeedbackRequest(
       to: customerPhone,
       bodyText,
       buttons: [
-        { id: `rate_5_${orderId}`, title: '⭐⭐⭐⭐⭐ Great!' },
-        { id: `rate_3_${orderId}`, title: '⭐⭐⭐ Okay' },
-        { id: `rate_1_${orderId}`, title: '⭐ Poor' },
+        { id: `rate_5_${orderId}`, title: '⭐⭐⭐⭐⭐' },
+        { id: `rate_3_${orderId}`, title: '⭐⭐⭐' },
+        { id: `rate_1_${orderId}`, title: '⭐' },
       ],
     });
   } catch (e) {
