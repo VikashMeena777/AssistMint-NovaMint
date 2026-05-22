@@ -3,7 +3,17 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Blog",
-  description: "AssistMint Blog — Tips, updates, and insights for restaurant owners.",
+  description: "AssistMint Blog — Tips, updates, and insights for restaurant owners on AI ordering and WhatsApp automation.",
+  openGraph: {
+    title: "AssistMint Blog — Restaurant AI Tips & Insights",
+    description: "Tips, updates, and insights for restaurant owners on AI ordering and WhatsApp automation.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "AssistMint Blog",
+    description: "Tips, updates, and insights for restaurant owners.",
+  },
 };
 
 export default function BlogPage() {

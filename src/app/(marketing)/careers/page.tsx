@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Careers",
-  description: "Join the AssistMint team — Help us build the future of restaurant automation.",
+  description: "Join the AssistMint team — Help us build the future of AI-powered restaurant automation in India.",
+  openGraph: {
+    title: "Careers at AssistMint",
+    description: "Join us in building AI-powered restaurant automation for India.",
+    type: "website",
+  },
 };
 
 export default function CareersPage() {

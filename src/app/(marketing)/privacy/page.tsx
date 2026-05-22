@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "AssistMint Privacy Policy — How we collect, use, and protect your data.",
+  description: "AssistMint Privacy Policy — How we collect, use, and protect your data. GDPR and Indian IT Act compliant.",
+  openGraph: {
+    title: "Privacy Policy | AssistMint",
+    description: "How we collect, use, and protect your data.",
+    type: "website",
+  },
 };
 
 export default function PrivacyPage() {

@@ -3,6 +3,11 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Contact Us",
   description: "Get in touch with the AssistMint team for sales, support, or partnership inquiries.",
+  openGraph: {
+    title: "Contact AssistMint",
+    description: "Get in touch with the AssistMint team for sales, support, or partnership inquiries.",
+    type: "website",
+  },
 };
 
 export default function ContactPage() {

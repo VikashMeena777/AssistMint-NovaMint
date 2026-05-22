@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleIncomingMessage } from '@/lib/ai/orchestrator';
 import { handleOwnerReply } from '@/lib/services/owner-notifications';
+import { webhookLimiter, checkRateLimit } from '@/lib/utils/rate-limiter';
 import crypto from 'crypto';
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'assistmint-verify';
@@ -66,6 +67,13 @@ function markProcessed(msgId: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit check
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anonymous';
+    const rl = await checkRateLimit(webhookLimiter, `wh:${ip}`);
+    if (!rl.success) {
+      return NextResponse.json({ error: 'Rate limited' }, { status: 429 });
+    }
+
     // Read raw body for signature verification
     const rawBody = await req.text();
 

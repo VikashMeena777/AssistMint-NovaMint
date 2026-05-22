@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "AssistMint Terms of Service — Rules and guidelines for using our platform.",
+  description: "AssistMint Terms of Service — Rules and guidelines for using our AI-powered restaurant automation platform.",
+  openGraph: {
+    title: "Terms of Service | AssistMint",
+    description: "Rules and guidelines for using our AI-powered restaurant automation platform.",
+    type: "website",
+  },
 };
 
 export default function TermsPage() {

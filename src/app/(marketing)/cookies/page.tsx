@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Cookie Policy",
-  description: "AssistMint Cookie Policy — How and why we use cookies.",
+  description: "AssistMint Cookie Policy — How and why we use cookies on our platform.",
+  robots: { index: false, follow: true },
 };
 
 export default function CookiesPage() {

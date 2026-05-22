@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { webhookLimiter, checkRateLimit } from '@/lib/utils/rate-limiter';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,6 +15,13 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit check
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anonymous';
+    const rl = await checkRateLimit(webhookLimiter, `cf:${ip}`);
+    if (!rl.success) {
+      return NextResponse.json({ message: 'Rate limited' }, { status: 200 });
+    }
+
     const body = await req.text();
     const signature = req.headers.get('x-webhook-signature') || '';
     const timestamp = req.headers.get('x-webhook-timestamp') || '';

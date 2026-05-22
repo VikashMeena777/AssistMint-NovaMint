@@ -4,6 +4,16 @@ export const metadata: Metadata = {
   title: "About Us",
   description:
     "Learn about AssistMint — the AI-powered WhatsApp ordering platform for restaurants in India.",
+  openGraph: {
+    title: "About AssistMint — AI Restaurant Automation",
+    description: "Learn how AssistMint is transforming restaurant ordering in India with AI-powered WhatsApp chatbots.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "About AssistMint",
+    description: "Learn how AssistMint is transforming restaurant ordering in India.",
+  },
 };
 
 export default function AboutPage() {

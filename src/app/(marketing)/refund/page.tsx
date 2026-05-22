@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Refund Policy",
-  description: "AssistMint Refund Policy — Our refund and cancellation guidelines.",
+  description: "AssistMint Refund Policy — Our refund and cancellation guidelines for subscription plans.",
+  openGraph: {
+    title: "Refund Policy | AssistMint",
+    description: "Our refund and cancellation guidelines for subscription plans.",
+    type: "website",
+  },
 };
 
 export default function RefundPage() {
