@@ -14,17 +14,18 @@ export async function getCurrentPlan(restaurantId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('restaurants')
-    .select('plan, plan_expires_at')
+    .select('plan, plan_expires_at, trial_used')
     .eq('id', restaurantId)
     .single();
 
-  if (error || !data) return { plan: 'free', plan_expires_at: null, config: getPlanConfig('free') };
+  if (error || !data) return { plan: 'free', plan_expires_at: null, trial_used: false, config: getPlanConfig('free') };
 
   const d = data as Record<string, unknown>;
   const planSlug = (d.plan as string) || 'free';
   return {
     plan: planSlug,
     plan_expires_at: d.plan_expires_at as string | null,
+    trial_used: (d.trial_used as boolean) || false,
     config: getPlanConfig(planSlug),
   };
 }
