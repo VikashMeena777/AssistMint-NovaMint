@@ -870,11 +870,11 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
     }
 
     if (result.paymentSessionId) {
-      // Redirect to Cashfree checkout
+      // Redirect to Cashfree hosted checkout page
       const cfEnv = process.env.NEXT_PUBLIC_CASHFREE_ENV === "production" ? "production" : "sandbox";
       const cfUrl = cfEnv === "production"
-        ? "https://payments.cashfree.com/order/#"
-        : "https://sandbox.cashfree.com/order/#";
+        ? "https://payments.cashfree.com/pgbillpay/sessions/"
+        : "https://sandbox.cashfree.com/pgbillpay/sessions/";
       window.location.href = `${cfUrl}${result.paymentSessionId}`;
     }
   };

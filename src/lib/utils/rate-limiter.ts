@@ -5,12 +5,13 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
-// Initialize Redis — will gracefully handle missing env vars
-const redis = process.env.UPSTASH_REDIS_REST_URL
-  ? new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    })
+// Initialize Redis — only if valid URL is provided (not "NA" or empty)
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL || '';
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || '';
+const isRedisConfigured = redisUrl.startsWith('https://') && redisToken.length > 0;
+
+const redis = isRedisConfigured
+  ? new Redis({ url: redisUrl, token: redisToken })
   : null;
 
 // ─── Rate Limiters ──────────────────────────

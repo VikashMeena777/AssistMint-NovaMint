@@ -171,7 +171,7 @@ export async function createPlanCheckout(
     // Store pending plan upgrade
     await supabase.from('payments').insert({
       restaurant_id: restaurantId,
-      cf_order_id: orderId,
+      cashfree_order_id: orderId,
       amount: amount * 100, // store in paise
       status: 'pending',
       type: 'subscription',
@@ -203,7 +203,7 @@ export async function verifyPlanPayment(restaurantId: string, cfOrderId: string)
   const { data: payment } = await supabase
     .from('payments')
     .select('*')
-    .eq('cf_order_id', cfOrderId)
+    .eq('cashfree_order_id', cfOrderId)
     .eq('restaurant_id', restaurantId)
     .single();
 
@@ -256,7 +256,7 @@ export async function verifyPlanPayment(restaurantId: string, cfOrderId: string)
       await supabase
         .from('payments')
         .update({ status: 'paid' })
-        .eq('cf_order_id', cfOrderId);
+            .eq('cashfree_order_id', cfOrderId);
 
       return { success: true, plan: planSlug, expires_at: expiresAt.toISOString() };
     }
