@@ -34,8 +34,21 @@ export async function getOrders(
     query = query.eq('status', filters.status);
   }
   if (filters?.search) {
-    // Search by order number OR customer phone
-    query = query.or(`order_number.ilike.%${filters.search}%,customer_phone.ilike.%${filters.search}%`);
+    let searchTrim = filters.search.trim();
+    if (searchTrim.startsWith('#')) {
+      searchTrim = searchTrim.substring(1).trim();
+    }
+    const isNumeric = /^\d+$/.test(searchTrim);
+    if (isNumeric) {
+      const searchNum = parseInt(searchTrim, 10);
+      if (!isNaN(searchNum)) {
+        query = query.or(`order_number.eq.${searchNum},customer_phone.ilike.%${searchTrim}%`);
+      } else {
+        query = query.or(`customer_phone.ilike.%${searchTrim}%`);
+      }
+    } else {
+      query = query.or(`customer_phone.ilike.%${searchTrim}%`);
+    }
   }
   if (filters?.dateFrom) {
     query = query.gte('created_at', filters.dateFrom);
