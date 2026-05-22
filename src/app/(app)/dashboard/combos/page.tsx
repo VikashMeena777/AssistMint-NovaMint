@@ -171,7 +171,7 @@ export default function CombosPage() {
   };
 
   // Group menu items by category
-  const itemsByCategory = categories.map((cat) => ({
+  const itemsByCategory: (AnyData & { items: AnyData[] })[] = categories.map((cat) => ({
     ...cat,
     items: menuItems.filter((item) => item.category_id === cat.id),
   })).filter((cat) => cat.items.length > 0);
