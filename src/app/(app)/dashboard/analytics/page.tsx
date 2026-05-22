@@ -384,65 +384,82 @@ export default function AnalyticsPage() {
           <Clock className="h-4 w-4 text-violet-500" />
           <h3 className="text-sm font-semibold">Peak Ordering Hours (Last 30 Days)</h3>
         </div>
-        {businessHours.some((h) => h.count > 0) ? (
-          <div className="relative">
-            {/* SVG Line overlay */}
-            <svg className="absolute inset-0 w-full h-40 pointer-events-none" preserveAspectRatio="none">
-              <polyline
-                fill="none"
-                stroke="hsl(var(--primary))"
-                strokeWidth="2"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                points={
-                  businessHours.map((h, i) => {
-                    const x = ((i + 0.5) / businessHours.length) * 100;
-                    const y = 100 - ((h.count / maxPeakCount) * 75);
-                    return `${x}%,${y}%`;
-                  }).join(' ')
-                }
-                vectorEffect="non-scaling-stroke"
-              />
-              {businessHours.map((h, i) => {
-                const cx = ((i + 0.5) / businessHours.length) * 100;
-                const cy = 100 - ((h.count / maxPeakCount) * 75);
-                return h.count > 0 ? (
-                  <circle
-                    key={i}
-                    cx={`${cx}%`}
-                    cy={`${cy}%`}
-                    r="3"
-                    fill="hsl(var(--primary))"
-                    stroke="hsl(var(--background))"
-                    strokeWidth="1.5"
-                  />
-                ) : null;
-              })}
-            </svg>
-            <div className="flex items-end gap-1 h-40">
-              {businessHours.map((h, i) => (
-                <div key={i} className="flex flex-col items-center flex-1 gap-1">
-                  <span className="text-[9px] text-muted-foreground font-mono font-medium">
-                    {h.count > 0 ? h.count : ''}
-                  </span>
-                  <div
-                    className="w-full rounded-t-md transition-all min-h-[2px]"
-                    style={{
-                      height: `${Math.max((h.count / maxPeakCount) * 120, 2)}px`,
-                      backgroundColor: h.count === maxPeakCount
-                        ? 'hsl(var(--primary))'
-                        : h.count > maxPeakCount * 0.6
-                          ? 'hsl(var(--primary) / 0.7)'
-                          : 'hsl(var(--primary) / 0.3)',
-                    }}
-                  />
-                  <span className="text-[8px] text-muted-foreground -rotate-45 origin-top-left whitespace-nowrap">
-                    {h.hour}
-                  </span>
-                </div>
-              ))}
+        {businessHours.some((h) => h.count > 0) ? (() => {
+          const chartW = 800;
+          const chartH = 160;
+          const padL = 35;
+          const padR = 10;
+          const padT = 15;
+          const padB = 30;
+          const plotW = chartW - padL - padR;
+          const plotH = chartH - padT - padB;
+          const n = businessHours.length;
+
+          const points = businessHours.map((h, i) => ({
+            x: padL + (i / (n - 1)) * plotW,
+            y: padT + plotH - (h.count / maxPeakCount) * plotH,
+            count: h.count,
+            hour: h.hour,
+          }));
+
+          const lineD = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+          const areaD = `${lineD} L${points[n - 1].x},${padT + plotH} L${points[0].x},${padT + plotH} Z`;
+
+          // Grid lines
+          const gridLines = [0, 0.25, 0.5, 0.75, 1];
+
+          return (
+            <div className="w-full overflow-x-auto">
+              <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full h-auto min-h-[180px]" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                  <linearGradient id="peakAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.02" />
+                  </linearGradient>
+                </defs>
+
+                {/* Grid lines */}
+                {gridLines.map((pct, i) => {
+                  const y = padT + plotH - pct * plotH;
+                  return (
+                    <g key={i}>
+                      <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke="hsl(var(--border))" strokeWidth="0.5" strokeDasharray={pct > 0 ? "4,4" : "0"} />
+                      <text x={padL - 5} y={y + 3} textAnchor="end" fontSize="8" fill="hsl(var(--muted-foreground))" fontFamily="monospace">
+                        {Math.round(maxPeakCount * pct)}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Area fill */}
+                <path d={areaD} fill="url(#peakAreaGrad)" />
+
+                {/* Line */}
+                <path d={lineD} fill="none" stroke="hsl(var(--primary))" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+
+                {/* Dots + hour labels */}
+                {points.map((p, i) => (
+                  <g key={i}>
+                    {p.count > 0 && (
+                      <>
+                        <circle cx={p.x} cy={p.y} r="4" fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth="2" />
+                        <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="7.5" fill="hsl(var(--muted-foreground))" fontFamily="monospace" fontWeight="600">
+                          {p.count}
+                        </text>
+                      </>
+                    )}
+                    {/* Show every other label to avoid overlap */}
+                    {i % 2 === 0 && (
+                      <text x={p.x} y={chartH - 5} textAnchor="middle" fontSize="7.5" fill="hsl(var(--muted-foreground))">
+                        {p.hour}
+                      </text>
+                    )}
+                  </g>
+                ))}
+              </svg>
             </div>
-          </div>
+          );
+        })()
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl bg-muted/10 border border-dashed border-border/30">
             <div className="text-center">
