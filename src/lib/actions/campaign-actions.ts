@@ -139,7 +139,7 @@ export async function sendCampaign(restaurantId: string, campaignId: string) {
   // Build target query
   let targetQuery = supabase
     .from('customers')
-    .select('phone, name')
+    .select('phone, whatsapp_name')
     .eq('restaurant_id', restaurantId)
     .eq('is_blocked', false);
 
@@ -176,7 +176,7 @@ export async function sendCampaign(restaurantId: string, campaignId: string) {
     const customer = cust as Record<string, unknown>;
     try {
       const personalizedMessage = template
-        .replace('{{name}}', (customer.name as string) || 'there')
+        .replace('{{name}}', (customer.whatsapp_name as string) || 'there')
         .replace('{{restaurant}}', r.name as string);
 
       await sendTextMessage({
