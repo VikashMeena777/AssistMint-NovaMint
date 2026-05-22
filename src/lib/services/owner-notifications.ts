@@ -152,7 +152,26 @@ export async function notifyOwnerNewOrder(restaurantId: string, orderId: string)
         paymentMethod: payment,
         deliveryAddress: address,
         orderId,
-      }).catch(e => console.error('[OwnerNotify] Email failed:', e));
+      }).catch(async (e) => {
+        console.error('[OwnerNotify] Email failed:', e);
+        // Log failure to database so the owner can debug env vars easily
+        void supabaseAdmin
+          .from('activity_log')
+          .insert({
+            restaurant_id: restaurantId,
+            actor_type: 'system',
+            action: 'email.failed',
+            details: {
+              error: e instanceof Error ? e.message : String(e),
+              recipient: rest.notification_email,
+              order_number: order.order_number,
+              order_id: orderId,
+            },
+          })
+          .then(({ error }) => {
+            if (error) console.error('[OwnerNotify] Failed to write failure log:', error.message);
+          });
+      });
     }
   } catch (e) {
     console.error('[OwnerNotify] Error notifying owner:', e);
@@ -414,7 +433,24 @@ export async function sendDailySummary(restaurantId: string): Promise<void> {
         cancelledOrders: cancelledOrders || 0,
         revenue,
         uniqueCustomers,
-      }).catch(e => console.error('[OwnerNotify] Email daily summary failed:', e));
+      }).catch(async (e) => {
+        console.error('[OwnerNotify] Email daily summary failed:', e);
+        void supabaseAdmin
+          .from('activity_log')
+          .insert({
+            restaurant_id: restaurantId,
+            actor_type: 'system',
+            action: 'email.failed',
+            details: {
+              error: e instanceof Error ? e.message : String(e),
+              recipient: rest.notification_email,
+              type: 'daily_summary',
+            },
+          })
+          .then(({ error }) => {
+            if (error) console.error('[OwnerNotify] Failed to write daily summary failure log:', error.message);
+          });
+      });
     }
   } catch (e) {
     console.error('[OwnerNotify] Error sending daily summary:', e);

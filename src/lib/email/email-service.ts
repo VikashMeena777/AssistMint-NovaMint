@@ -28,8 +28,7 @@ interface OrderEmailData {
 
 export async function sendNewOrderEmail(data: OrderEmailData): Promise<void> {
   if (!resend) {
-    console.log('[Email] Resend not configured, skipping email');
-    return;
+    throw new Error('RESEND_API_KEY is not configured in the server environment variables.');
   }
 
   const totalRupees = (data.total / 100).toFixed(0);
@@ -132,7 +131,9 @@ interface DailySummaryEmailData {
 }
 
 export async function sendDailySummaryEmail(data: DailySummaryEmailData): Promise<void> {
-  if (!resend) return;
+  if (!resend) {
+    throw new Error('RESEND_API_KEY is not configured in the server environment variables.');
+  }
 
   const revenueRupees = (data.revenue / 100).toFixed(0);
 
@@ -215,7 +216,9 @@ interface PaymentEmailData {
 }
 
 export async function sendPaymentReceivedEmail(data: PaymentEmailData): Promise<void> {
-  if (!resend) return;
+  if (!resend) {
+    throw new Error('RESEND_API_KEY is not configured in the server environment variables.');
+  }
 
   const amountRupees = (data.amount / 100).toFixed(0);
 
