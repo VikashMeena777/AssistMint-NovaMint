@@ -895,59 +895,84 @@ function PricingSection() {
 
   const plans = [
     {
-      name: "Starter Plan",
-      priceMonthly: 999,
-      priceYearly: 799,
-      description: "Ideal for small restaurants starting direct ordering.",
+      name: "Free",
+      priceMonthly: 0,
+      priceYearly: 0,
+      description: "Get started with AI ordering at zero cost. Perfect to explore.",
+      badge: null,
       features: [
-        "1,000 AI conversations/mo",
-        "Full menu management",
-        "Order management queue",
-        "Basic analytics widget",
-        "2 languages (English + Hindi)",
-        "Max 200 menu items",
-        "3 active staff logins",
+        "50 orders/month",
+        "20 menu items",
+        "500 AI bot responses/month",
+        "2 active coupons & combos",
+        "Basic loyalty (points only)",
+        "Online payments (Cashfree)",
+        "1 custom AI persona",
+        "2 languages (EN + HI)",
+      ],
+      cta: "Get Started Free",
+      popular: false,
+      trial: false,
+    },
+    {
+      name: "Starter",
+      priceMonthly: 499,
+      priceYearly: Math.round(4999 / 12),
+      description: "For growing restaurants ready to scale their WhatsApp orders.",
+      badge: "14-DAY FREE TRIAL",
+      features: [
+        "300 orders/month",
+        "75 menu items",
+        "2,000 AI bot responses/month",
+        "3 campaigns/month (100 contacts)",
+        "10 active coupons & combos",
+        "5 loyalty rewards",
+        "2 team members",
+        "30-day analytics",
       ],
       cta: "Start 14-Day Free Trial",
       popular: false,
+      trial: true,
     },
     {
-      name: "Growth Plan",
-      priceMonthly: 2499,
-      priceYearly: 1999,
-      description: "Full conversational marketing & payment integration.",
+      name: "Growth",
+      priceMonthly: 999,
+      priceYearly: Math.round(9999 / 12),
+      description: "Full-featured plan with campaigns, loyalty tiers & priority support.",
+      badge: null,
       features: [
-        "Unlimited AI conversations",
-        "Everything in Starter",
-        "Cashfree Payment collection",
-        "Direct WhatsApp campaign manager",
-        "Loyalty & points manager",
-        "Combo & meal suggestions",
-        "8+ native languages",
-        "10 active staff logins",
-        "Priority 24/7 client support",
+        "1,000 orders/month",
+        "200 menu items",
+        "10,000 AI bot responses/month",
+        "15 campaigns/month (500 contacts)",
+        "50 active coupons & combos",
+        "Full loyalty (tiers + rewards)",
+        "5 team members",
+        "90-day analytics + email support",
       ],
       cta: "Get Started Now",
       popular: true,
+      trial: false,
     },
     {
-      name: "Enterprise Plan",
-      priceMonthly: 4999,
-      priceYearly: 3999,
-      description: "Tailored for multi-outlet chains and top volumes.",
+      name: "Enterprise",
+      priceMonthly: 2499,
+      priceYearly: Math.round(24999 / 12),
+      description: "Unlimited everything for high-volume and multi-outlet chains.",
+      badge: null,
       features: [
-        "Everything in Growth",
-        "Multi-branch outlet support",
-        "Custom staff roles",
-        "Live Kitchen Display module",
-        "Merchant API access",
-        "White-label bot branding",
-        "Custom LLM prompts tuning",
-        "Unlimited staff logins",
-        "Dedicated Account Director",
+        "Unlimited orders & menu items",
+        "Unlimited AI responses",
+        "Unlimited campaigns & contacts",
+        "Unlimited coupons, combos & rewards",
+        "Full loyalty + custom tiers",
+        "Multi-persona AI bots",
+        "Unlimited team members",
+        "Full history + WhatsApp support",
       ],
       cta: "Talk to Sales",
       popular: false,
+      trial: false,
     },
   ];
 
@@ -1010,65 +1035,86 @@ function PricingSection() {
         </div>
 
         {/* Pricing Cards Grid */}
-        <StaggerContainer className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-6xl mx-auto items-stretch" staggerDelay={0.08}>
+        <StaggerContainer className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 max-w-7xl mx-auto items-stretch" staggerDelay={0.06}>
           {plans.map((plan) => {
             const activePrice = billingPeriod === "monthly" ? plan.priceMonthly : plan.priceYearly;
 
             return (
               <StaggerItem key={plan.name} className="h-full">
-                <div className={`relative rounded-2xl border p-7 h-full flex flex-col justify-between transition-all duration-400 hover:-translate-y-1 shadow-sm ${
+                <div className={`relative rounded-2xl border p-6 h-full flex flex-col justify-between transition-all duration-400 hover:-translate-y-1 shadow-sm ${
                   plan.popular
-                    ? "border-primary bg-card scale-[1.03] lg:scale-[1.04] shadow-md shadow-primary/5 relative z-10"
+                    ? "border-primary bg-card scale-[1.02] lg:scale-[1.03] shadow-md shadow-primary/5 relative z-10"
                     : "border-border bg-card hover:border-primary/20"
                 }`}>
                   
-                  {/* Decorative glowing gradient borders for popular card */}
+                  {/* Decorative gradient for popular card */}
                   {plan.popular && (
                     <>
                       <div className="absolute top-0 inset-x-0 h-[3px] rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 animate-gradient" />
                       <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-primary px-4 py-1 text-[10px] font-black text-primary-foreground shadow-sm uppercase tracking-widest">
                         <Star className="h-2.5 w-2.5 fill-current" />
-                        RECOMMENDED
+                        BEST VALUE
                       </div>
                     </>
+                  )}
+
+                  {/* Trial badge for Starter */}
+                  {plan.trial && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-amber-500 px-4 py-1 text-[10px] font-black text-white shadow-sm uppercase tracking-widest">
+                      <Sparkles className="h-2.5 w-2.5" />
+                      {plan.badge}
+                    </div>
                   )}
 
                   <div>
                     <h3 className="text-base font-bold text-foreground tracking-tight font-heading">
                       {plan.name}
                     </h3>
-                    <div className="mt-4 flex items-baseline gap-1">
-                      <span className="text-4xl font-extrabold tracking-tight font-heading">
-                        ₹{activePrice.toLocaleString("en-IN")}
-                      </span>
-                      <span className="text-xs text-muted-foreground font-semibold">/month</span>
+                    <div className="mt-3 flex items-baseline gap-1">
+                      {plan.priceMonthly === 0 ? (
+                        <span className="text-3xl font-extrabold tracking-tight font-heading">Free</span>
+                      ) : (
+                        <>
+                          <span className="text-3xl font-extrabold tracking-tight font-heading">
+                            ₹{activePrice.toLocaleString("en-IN")}
+                          </span>
+                          <span className="text-xs text-muted-foreground font-semibold">/month</span>
+                        </>
+                      )}
                     </div>
-                    {billingPeriod === "yearly" && (
-                      <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block mt-2">
-                        Billed annually (Save ₹{(plan.priceMonthly - plan.priceYearly) * 12} / year)
+                    {plan.priceMonthly === 0 && (
+                      <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block mt-1.5">
+                        Free forever — no credit card needed
                       </span>
                     )}
-                    <p className="mt-3 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                    {billingPeriod === "yearly" && plan.priceMonthly > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block mt-1.5">
+                        Billed annually · Save ₹{((plan.priceMonthly * 12) - (plan.priceYearly * 12)).toLocaleString("en-IN")}/yr
+                      </span>
+                    )}
+                    <p className="mt-2.5 text-xs text-muted-foreground leading-relaxed">
                       {plan.description}
                     </p>
 
-                    <ul className="mt-6 space-y-3">
+                    <ul className="mt-5 space-y-2.5">
                       {plan.features.map((feature) => (
-                        <li key={feature} className="flex items-start gap-2.5 text-xs text-muted-foreground">
-                          <Check className="h-4 w-4 mt-0.5 text-emerald-500 shrink-0 bg-emerald-500/10 rounded-full p-0.5" />
+                        <li key={feature} className="flex items-start gap-2 text-xs text-muted-foreground">
+                          <Check className="h-3.5 w-3.5 mt-0.5 text-emerald-500 shrink-0 bg-emerald-500/10 rounded-full p-0.5" />
                           <span className="leading-normal">{feature}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
 
-                  <div className="mt-8 pt-4 border-t border-border/40">
+                  <div className="mt-6 pt-3 border-t border-border/40">
                     <Link
                       href="/signup"
-                      className={`flex h-11 w-full items-center justify-center rounded-xl text-xs font-bold transition-all gap-1.5 group cursor-pointer ${
+                      className={`flex h-10 w-full items-center justify-center rounded-xl text-xs font-bold transition-all gap-1.5 group cursor-pointer ${
                         plan.popular
                           ? "bg-primary text-primary-foreground hover:bg-primary/95 shadow-md shadow-primary/10"
-                          : "border border-border text-foreground hover:bg-secondary hover:border-border/80"
+                          : plan.trial
+                            ? "bg-amber-500 text-white hover:bg-amber-600 shadow-md shadow-amber-500/10"
+                            : "border border-border text-foreground hover:bg-secondary hover:border-border/80"
                       }`}
                     >
                       {plan.cta}
