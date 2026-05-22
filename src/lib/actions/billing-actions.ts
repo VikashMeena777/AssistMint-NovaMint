@@ -175,11 +175,11 @@ export async function createPlanCheckout(
       cashfree_order_id: orderId,
       amount: amount * 100, // store in paise
       status: 'pending',
-      type: 'subscription',
       metadata: {
         plan: planSlug,
         billing_cycle: billingCycle,
         restaurant_name: restaurantName,
+        type: 'subscription',
       },
     });
 
@@ -223,7 +223,7 @@ export async function verifyPlanPayment(restaurantId: string, cfOrderId: string)
   try {
     const response = await fetch(`${cfApiBase}/pg/orders/${cfOrderId}`, {
       headers: {
-        'x-api-version': process.env.CASHFREE_API_VERSION || '2023-08-01',
+        'x-api-version': process.env.CASHFREE_API_VERSION || '2025-01-01',
         'x-client-id': process.env.CASHFREE_CLIENT_ID || '',
         'x-client-secret': process.env.CASHFREE_CLIENT_SECRET || '',
       },
