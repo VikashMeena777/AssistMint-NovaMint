@@ -7,6 +7,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// CRITICAL: Never cache this route — each visit must re-check payment status
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -69,7 +73,7 @@ export async function GET(req: NextRequest) {
 
   // Update DB if paid
   if (paymentStatus === 'paid') {
-    // Idempotency check — skip if already processed to prevent duplicate messages on page reload
+    // Idempotency: check if ALREADY processed (order has payment_status = 'paid')
     const { data: existingOrder } = await supabaseAdmin
       .from('orders')
       .select('payment_status')
@@ -79,13 +83,13 @@ export async function GET(req: NextRequest) {
     const alreadyPaid = existingOrder && (existingOrder as Record<string, unknown>).payment_status === 'paid';
 
     if (!alreadyPaid) {
-      // Update payments table
+      // First time processing — update payments table
       await supabaseAdmin
         .from('payments')
         .update({ status: 'completed' })
         .eq('cashfree_order_id', orderId);
 
-      // Update order directly by payment_id (the cfOrderId stored on the order)
+      // Update order status
       await supabaseAdmin
         .from('orders')
         .update({
@@ -95,14 +99,15 @@ export async function GET(req: NextRequest) {
         })
         .eq('payment_id', orderId);
 
-      // Send WhatsApp payment confirmation — only once
+      // Send WhatsApp payment confirmation — ONLY on first processing
       try {
         await sendPaymentConfirmationWhatsApp(orderId, amountPaid);
+        console.log(`[PaymentReturn] ✅ First-time processing for ${orderId} — WhatsApp sent`);
       } catch (err) {
         console.error('[PaymentReturn] WhatsApp confirmation error:', err);
       }
     } else {
-      console.log(`[PaymentReturn] Order ${orderId} already paid — skipping duplicate WhatsApp message`);
+      console.log(`[PaymentReturn] ⏭️ Order ${orderId} already paid — skipping duplicate processing`);
     }
 
     return renderPage('success', amountPaid, orderId);
@@ -302,6 +307,9 @@ function renderPage(status: 'success' | 'pending' | 'failed' | 'error', amount: 
 
   return new NextResponse(html, {
     status: 200,
-    headers: { 'Content-Type': 'text/html' },
+    headers: {
+      'Content-Type': 'text/html',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    },
   });
 }
