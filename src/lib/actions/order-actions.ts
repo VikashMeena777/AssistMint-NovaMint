@@ -192,12 +192,11 @@ async function sendOrderStatusWhatsApp(
 
       if (fullRestaurant) {
         // Send receipt immediately
-        sendOrderReceipt(fullRestaurant, orderId, order.customer_phone).catch(e => console.error('[Orders] Receipt send failed:', e));
+        await sendOrderReceipt(fullRestaurant, orderId, order.customer_phone).catch(e => console.error('[Orders] Receipt send failed:', e));
 
-        // Send rating request after 3 seconds
-        setTimeout(() => {
-          sendFeedbackRequest(fullRestaurant, orderId, order.customer_phone).catch(e => console.error('[Orders] Feedback request failed:', e));
-        }, 3000);
+        // Wait 3 seconds, then send feedback request (must await — setTimeout dies on serverless)
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await sendFeedbackRequest(fullRestaurant, orderId, order.customer_phone).catch(e => console.error('[Orders] Feedback request failed:', e));
       }
     }
   } catch {

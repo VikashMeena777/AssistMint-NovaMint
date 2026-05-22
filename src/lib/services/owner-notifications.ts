@@ -336,10 +336,10 @@ export async function handleOwnerReply(
           const { getRestaurantById } = await import('@/lib/services/restaurant-service');
           const fullRestaurant = await getRestaurantById(restaurant.id);
           if (fullRestaurant) {
-            sendOrderReceipt(fullRestaurant, order.id, order.customer_phone as string).catch(e => console.error('[OwnerNotif] Receipt failed:', e));
-            setTimeout(() => {
-              sendFeedbackRequest(fullRestaurant, order.id, order.customer_phone as string).catch(e => console.error('[OwnerNotif] Feedback request failed:', e));
-            }, 3000);
+            await sendOrderReceipt(fullRestaurant, order.id, order.customer_phone as string).catch(e => console.error('[OwnerNotif] Receipt failed:', e));
+            // Wait 3 seconds, then send feedback (must await — setTimeout dies on serverless)
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            await sendFeedbackRequest(fullRestaurant, order.id, order.customer_phone as string).catch(e => console.error('[OwnerNotif] Feedback request failed:', e));
           }
         } catch { /* silent */ }
       }
