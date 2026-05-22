@@ -336,10 +336,19 @@ export async function handleOwnerReply(
           const { getRestaurantById } = await import('@/lib/services/restaurant-service');
           const fullRestaurant = await getRestaurantById(restaurant.id);
           if (fullRestaurant) {
-            await sendOrderReceipt(fullRestaurant, order.id, order.customer_phone as string).catch(e => console.error('[OwnerNotif] Receipt failed:', e));
-            // Wait 3 seconds, then send feedback (must await — setTimeout dies on serverless)
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            await sendFeedbackRequest(fullRestaurant, order.id, order.customer_phone as string).catch(e => console.error('[OwnerNotif] Feedback request failed:', e));
+            // Trigger receipt sending
+            const receiptPromise = sendOrderReceipt(fullRestaurant, order.id, order.customer_phone as string)
+              .catch(e => console.error('[OwnerNotif] Receipt failed:', e));
+
+            // Wait 1 second before triggering feedback to ensure proper order on WhatsApp
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Trigger feedback request
+            const feedbackPromise = sendFeedbackRequest(fullRestaurant, order.id, order.customer_phone as string)
+              .catch(e => console.error('[OwnerNotif] Feedback request failed:', e));
+
+            // Await both promises so the serverless execution doesn't freeze them early
+            await Promise.all([receiptPromise, feedbackPromise]);
           }
         } catch { /* silent */ }
       }

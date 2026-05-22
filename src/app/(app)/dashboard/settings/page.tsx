@@ -226,6 +226,21 @@ function RestaurantSettings({
   const [defaultOpen, setDefaultOpen] = useState("10:00");
   const [defaultClose, setDefaultClose] = useState("22:00");
 
+  // Sync apply-to-all inputs with currently configured business hours on mount/data change
+  useEffect(() => {
+    if (data?.business_hours) {
+      const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+      for (const d of days) {
+        const config = data.business_hours[d];
+        if (config && config.open && config.close) {
+          setDefaultOpen(config.open);
+          setDefaultClose(config.close);
+          break;
+        }
+      }
+    }
+  }, [data?.business_hours]);
+
   const applyDefaultToAll = () => {
     const updated: Record<string, any> = {};
     daysOfWeek.forEach((day) => {
