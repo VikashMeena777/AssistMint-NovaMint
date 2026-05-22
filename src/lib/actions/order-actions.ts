@@ -324,6 +324,16 @@ export async function exportOrdersCsv(
       (i) => `${i.quantity}x ${i.item_name}`
     ).join('; ');
 
+    const rawAddress = o.delivery_address;
+    let addressStr = '';
+    if (rawAddress) {
+      if (typeof rawAddress === 'object') {
+        addressStr = (rawAddress as any).raw || (rawAddress as any).full_address || JSON.stringify(rawAddress);
+      } else {
+        addressStr = String(rawAddress);
+      }
+    }
+
     return [
       o.order_number || '',
       new Date(o.created_at as string).toLocaleString('en-IN'),
@@ -338,7 +348,7 @@ export async function exportOrdersCsv(
       o.payment_status || '',
       o.status || '',
       o.delivery_type || '',
-      `"${((o.delivery_address as string) || '').replace(/"/g, '""')}"`,
+      `"${addressStr.replace(/"/g, '""')}"`,
       o.rating || '',
       `"${((o.feedback as string) || '').replace(/"/g, '""')}"`,
       o.delivered_at ? new Date(o.delivered_at as string).toLocaleString('en-IN') : '',
