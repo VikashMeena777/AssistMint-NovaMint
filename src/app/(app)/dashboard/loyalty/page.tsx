@@ -137,8 +137,31 @@ export default function LoyaltyPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-6 w-48 rounded-lg bg-muted animate-pulse" />
+            <div className="h-4 w-72 rounded-lg bg-muted animate-pulse" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-border/50 bg-card p-4 space-y-2">
+              <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
+              <div className="h-6 w-12 rounded-lg bg-muted animate-pulse" />
+              <div className="h-3 w-20 rounded-lg bg-muted animate-pulse" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-border/50 bg-card p-4 space-y-2">
+              <div className="h-4 w-4 rounded bg-muted animate-pulse" />
+              <div className="h-6 w-16 rounded-lg bg-muted animate-pulse" />
+              <div className="h-3 w-24 rounded-lg bg-muted animate-pulse" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -454,7 +477,7 @@ export default function LoyaltyPage() {
                   {transactions.map((tx) => (
                     <tr key={tx.id} className="border-b border-border/30 last:border-0 hover:bg-muted/20">
                       <td className="px-4 py-3 font-medium">
-                        {tx.customers?.name || "Unknown"}
+                        {tx.customers?.whatsapp_name || "Unknown"}
                       </td>
                       <td className="px-4 py-3">
                         {tx.type === "earn" ? (

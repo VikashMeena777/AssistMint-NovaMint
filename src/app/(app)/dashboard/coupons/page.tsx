@@ -420,8 +420,20 @@ export default function CouponsPage() {
       {/* Coupons List */}
       <div className="w-full">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="h-5 w-24 rounded-lg bg-muted animate-pulse" />
+                  <div className="h-6 w-12 rounded-full bg-muted animate-pulse" />
+                </div>
+                <div className="h-3 w-40 rounded-lg bg-muted animate-pulse" />
+                <div className="flex gap-2">
+                  <div className="h-6 w-16 rounded-full bg-muted animate-pulse" />
+                  <div className="h-6 w-20 rounded-full bg-muted animate-pulse" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : coupons.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center px-4 rounded-2xl border border-border/50 bg-card">

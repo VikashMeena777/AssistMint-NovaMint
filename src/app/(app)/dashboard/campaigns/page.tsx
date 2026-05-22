@@ -353,8 +353,20 @@ export default function CampaignsPage() {
       {/* Campaigns List */}
       <div className="w-full">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-2xl border border-border/50 bg-card p-5 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-4 w-36 rounded-lg bg-muted animate-pulse" />
+                  <div className="h-5 w-16 rounded-full bg-muted animate-pulse" />
+                </div>
+                <div className="flex gap-4">
+                  <div className="h-3 w-20 rounded-lg bg-muted animate-pulse" />
+                  <div className="h-3 w-16 rounded-lg bg-muted animate-pulse" />
+                  <div className="h-3 w-14 rounded-lg bg-muted animate-pulse" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : campaigns.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center px-4 rounded-2xl border border-border/50 bg-card">

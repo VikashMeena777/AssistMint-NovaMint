@@ -130,8 +130,22 @@ export default function PaymentsPage() {
 
       <div className="rounded-2xl border border-border/50 bg-card">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="divide-y divide-border/50">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-xl bg-muted animate-pulse" />
+                  <div className="space-y-2">
+                    <div className="h-4 w-36 rounded-lg bg-muted animate-pulse" />
+                    <div className="h-3 w-24 rounded-lg bg-muted animate-pulse" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-4 w-16 rounded-lg bg-muted animate-pulse" />
+                  <div className="h-6 w-14 rounded-full bg-muted animate-pulse" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : payments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center px-4">
