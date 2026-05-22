@@ -289,7 +289,7 @@ export async function exportOrdersCsv(
 
   let query = supabase
     .from('orders')
-    .select('order_number, customer_phone, items, subtotal, tax_amount, delivery_fee, total, payment_method, payment_status, status, delivery_type, delivery_address, rating, feedback, created_at, delivered_at, customers(saved_name, whatsapp_name, phone)')
+    .select('order_number, customer_phone, items, subtotal, tax, delivery_fee, total, payment_method, payment_status, status, delivery_type, delivery_address, rating, feedback, created_at, delivered_at, customers(saved_name, whatsapp_name, phone)')
     .eq('restaurant_id', restaurantId)
     .order('created_at', { ascending: false });
 
@@ -331,7 +331,7 @@ export async function exportOrdersCsv(
       cust?.phone || o.customer_phone || '',
       `"${items.replace(/"/g, '""')}"`,
       ((o.subtotal as number || 0) / 100).toFixed(2),
-      ((o.tax_amount as number || 0) / 100).toFixed(2),
+      ((o.tax as number || 0) / 100).toFixed(2),
       ((o.delivery_fee as number || 0) / 100).toFixed(2),
       ((o.total as number || 0) / 100).toFixed(2),
       o.payment_method || 'cod',
