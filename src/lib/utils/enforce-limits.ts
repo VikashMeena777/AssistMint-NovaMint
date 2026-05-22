@@ -197,23 +197,69 @@ export async function checkCampaignContactsLimit(
   return { allowed: true, current: contactCount, limit, feature: 'campaignContacts', message: '' };
 }
 
+// ─── Admin Client (for webhook/API context) ─
+
+import { createClient as createAdminClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { persistSession: false } }
+);
+
 // ─── Log AI Usage ───────────────────────────
+// Uses admin client because this runs from webhook (no user cookies)
 
 export async function logAiUsage(
   restaurantId: string,
   customerId: string | null,
   tokensUsed: number = 1
 ): Promise<void> {
-  const supabase = await createClient();
-  await supabase.from('ai_usage_log').insert({
+  await supabaseAdmin.from('ai_usage_log').insert({
     restaurant_id: restaurantId,
     customer_id: customerId,
     tokens_used: tokensUsed,
   }).then(() => {});
 }
 
-// ─── Check AI Limit (non-blocking check) ────
+// ─── Check AI Limit (webhook-safe) ──────────
+// Uses admin client because this runs from webhook (no user cookies)
 
 export async function checkAiLimit(restaurantId: string): Promise<LimitCheckResult> {
-  return checkPlanLimit(restaurantId, 'ai');
+  // Get plan
+  const { data: restaurant } = await supabaseAdmin
+    .from('restaurants')
+    .select('plan')
+    .eq('id', restaurantId)
+    .single();
+
+  const planSlug = (restaurant as Record<string, unknown>)?.plan as string || 'free';
+  const config = getPlanConfig(planSlug);
+  const limit = config.ai;
+
+  if (isUnlimited(limit)) {
+    return { allowed: true, current: 0, limit: -1, feature: 'ai', message: '' };
+  }
+
+  const { start: monthStart, end: monthEnd } = getMonthRange();
+  const { count } = await supabaseAdmin
+    .from('ai_usage_log')
+    .select('*', { count: 'exact', head: true })
+    .eq('restaurant_id', restaurantId)
+    .gte('created_at', monthStart)
+    .lte('created_at', monthEnd);
+
+  const current = count || 0;
+
+  if (current >= limit) {
+    return {
+      allowed: false,
+      current,
+      limit,
+      feature: 'ai',
+      message: `AI response limit reached (${current}/${limit}) on the ${config.name} plan. Upgrade for more AI responses.`,
+    };
+  }
+
+  return { allowed: true, current, limit, feature: 'ai', message: '' };
 }

@@ -98,4 +98,8 @@ export const ACTIONS = {
   // Coupons
   COUPON_CREATED: 'coupon.created',
   COUPON_USED: 'coupon.used',
+
+  // Combos
+  COMBO_CREATED: 'combo.created',
+  COMBO_DELETED: 'combo.deleted',
 } as const;

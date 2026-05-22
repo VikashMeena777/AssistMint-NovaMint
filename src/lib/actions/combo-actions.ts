@@ -74,7 +74,7 @@ export async function createCombo(
     restaurantId,
     actorType: 'owner',
     actorId: user.id,
-    action: ACTIONS.COMBO_CREATED || 'combo.created',
+    action: ACTIONS.COMBO_CREATED,
     details: {
       comboName: combo.name,
       itemCount: combo.combo_items.length,
