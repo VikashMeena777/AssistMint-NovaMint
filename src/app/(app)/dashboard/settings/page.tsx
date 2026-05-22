@@ -824,7 +824,7 @@ function DeliverySettings({
 // ============================================================
 
 function BillingSection({ restaurantId }: { restaurantId: string }) {
-  const [plan, setPlan] = useState<{ plan: string; plan_expires_at: string | null; config: ReturnType<typeof import("@/lib/utils/plan-limits").getPlanConfig> } | null>(null);
+  const [plan, setPlan] = useState<{ plan: string; plan_expires_at: string | null; trial_used: boolean; config: ReturnType<typeof import("@/lib/utils/plan-limits").getPlanConfig> } | null>(null);
   const [usage, setUsage] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<string | null>(null);
@@ -951,7 +951,8 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
                   toast.error(result.error as string);
                 } else {
                   toast.success("🎉 14-day Starter trial activated!");
-                  loadSettings();
+                  const refreshed = await getCurrentPlan(restaurantId);
+                  setPlan(refreshed);
                 }
               }}
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white shadow-lg shadow-amber-500/25 hover:bg-amber-600 transition-all"
