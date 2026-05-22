@@ -1,20 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { Eye, EyeOff, Mail, Lock, User, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Loader2, Sparkles } from "lucide-react";
+import { Suspense } from "react";
 
-export default function SignupPage() {
+function SignupForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const planParam = searchParams.get("plan");
   const supabase = createClient();
+
+  // Store selected plan so onboarding can activate trial
+  useEffect(() => {
+    if (planParam === "starter") {
+      localStorage.setItem("assistmint_trial_plan", "starter");
+    }
+  }, [planParam]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +68,15 @@ export default function SignupPage() {
 
   return (
     <div className="w-full space-y-6">
+      {planParam === "starter" && (
+        <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-sm">
+          <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
+          <div>
+            <p className="font-semibold text-amber-600 dark:text-amber-400">14-Day Starter Trial</p>
+            <p className="text-xs text-muted-foreground">Sign up and your Starter plan trial starts automatically — no credit card required.</p>
+          </div>
+        </div>
+      )}
       <div className="text-center">
         <h2 className="text-xl font-semibold">Create your account</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -176,5 +195,18 @@ export default function SignupPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="w-full space-y-6">
+        <div className="h-8 w-48 mx-auto animate-pulse rounded-lg bg-muted/60" />
+        <div className="h-4 w-64 mx-auto animate-pulse rounded-md bg-muted/40" />
+      </div>
+    }>
+      <SignupForm />
+    </Suspense>
   );
 }

@@ -15,6 +15,7 @@ import {
   Crown,
   Check,
   ArrowUpRight,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -22,6 +23,7 @@ import {
   updateRestaurantSettings,
   updateWhatsAppConfig,
   setupWhatsAppIceBreakers,
+  startStarterTrial,
 } from "@/lib/actions/restaurant-actions";
 import { getCurrentPlan, getPlanUsage, createPlanCheckout, verifyPlanPayment } from "@/lib/actions/billing-actions";
 import { PLANS, PLAN_ORDER, formatLimit, getAnnualSavings, type PlanSlug, type BillingCycle } from "@/lib/utils/plan-limits";
@@ -940,6 +942,24 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
               </p>
             )}
           </div>
+          {currentPlanSlug === "free" && !plan?.trial_used && (
+            <button
+              onClick={async () => {
+                if (!restaurantId) return;
+                const result = await startStarterTrial(restaurantId);
+                if (result.error) {
+                  toast.error(result.error as string);
+                } else {
+                  toast.success("🎉 14-day Starter trial activated!");
+                  loadSettings();
+                }
+              }}
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white shadow-lg shadow-amber-500/25 hover:bg-amber-600 transition-all"
+            >
+              <Sparkles className="h-4 w-4" />
+              Start 14-Day Trial
+            </button>
+          )}
           {currentPlanSlug !== "enterprise" && (
             <button
               onClick={() => {

@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createRestaurant, updateWhatsAppConfig } from '@/lib/actions/restaurant-actions';
+import { createRestaurant, updateWhatsAppConfig, startStarterTrial } from '@/lib/actions/restaurant-actions';
 import { createCategory, createMenuItem } from '@/lib/actions/menu-actions';
+import { toast } from 'sonner';
 
 // ─── Types ──────────────────────────────────
 
@@ -88,6 +89,7 @@ export default function OnboardingWizard() {
   });
 
   const [addSampleMenu, setAddSampleMenu] = useState(true);
+  const [trialActivated, setTrialActivated] = useState(false);
 
   const steps = ['Restaurant', 'WhatsApp', 'Menu', 'Launch'];
 
@@ -118,7 +120,24 @@ export default function OnboardingWizard() {
     }
 
     const data = result.data as Record<string, unknown>;
-    setRestaurantId(data.id as string);
+    const newId = data.id as string;
+    setRestaurantId(newId);
+
+    // Auto-activate Starter trial if user selected it on signup
+    try {
+      const trialPlan = localStorage.getItem('assistmint_trial_plan');
+      if (trialPlan === 'starter') {
+        const trialResult = await startStarterTrial(newId);
+        if (trialResult.success) {
+          setTrialActivated(true);
+          toast.success('🎉 14-day Starter trial activated!');
+        }
+        localStorage.removeItem('assistmint_trial_plan');
+      }
+    } catch {
+      // Non-critical — user can activate trial later
+    }
+
     setLoading(false);
     setStep(1);
   };
@@ -446,6 +465,11 @@ export default function OnboardingWizard() {
                 <div className="flex items-center gap-2 text-emerald-400">
                   <span>✅</span> AI assistant active
                 </div>
+                {trialActivated && (
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <span>⭐</span> Starter plan trial active (14 days)
+                  </div>
+                )}
               </div>
 
               <button

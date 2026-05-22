@@ -1108,7 +1108,7 @@ function PricingSection() {
 
                   <div className="mt-6 pt-3 border-t border-border/40">
                     <Link
-                      href="/signup"
+                      href={plan.name === "Enterprise" ? "mailto:support@assistmint.in?subject=Enterprise Plan Inquiry" : `/signup?plan=${plan.name.toLowerCase()}`}
                       className={`flex h-10 w-full items-center justify-center rounded-xl text-xs font-bold transition-all gap-1.5 group cursor-pointer ${
                         plan.popular
                           ? "bg-primary text-primary-foreground hover:bg-primary/95 shadow-md shadow-primary/10"

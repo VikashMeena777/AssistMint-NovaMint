@@ -61,7 +61,7 @@ export async function createRestaurant(formData: {
       cuisine_type: formData.cuisine || null,
       description: formData.description || null,
       is_active: true,
-      plan: 'starter',
+      plan: 'free',
       supported_languages: ['en'],
       ai_persona: `You are a friendly ordering assistant for ${formData.name}. Help customers browse the menu, add items to cart, and place orders. Be warm, concise, and use emojis sparingly.`,
       business_hours: {
@@ -214,4 +214,61 @@ export async function setupWhatsAppIceBreakers(restaurantId: string) {
       'Save changes',
     ],
   };
+}
+
+// ─── Start Starter Plan 14-Day Trial ────────
+
+export async function startStarterTrial(restaurantId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  // Verify ownership + check current plan
+  const { data: restaurant } = await supabase
+    .from('restaurants')
+    .select('owner_id, plan, trial_used')
+    .eq('id', restaurantId)
+    .single();
+
+  if (!restaurant || (restaurant as Record<string, unknown>).owner_id !== user.id) {
+    return { error: 'Not authorized' };
+  }
+
+  const r = restaurant as Record<string, unknown>;
+
+  // Prevent re-trials
+  if (r.trial_used) {
+    return { error: 'You have already used your free trial.' };
+  }
+
+  // If already on a paid plan, skip
+  if (r.plan !== 'free') {
+    return { error: 'You are already on a paid plan.' };
+  }
+
+  // Set plan to starter with 14-day expiry
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 14);
+
+  const { error } = await supabase
+    .from('restaurants')
+    .update({
+      plan: 'starter',
+      plan_expires_at: expiresAt.toISOString(),
+      trial_used: true,
+    })
+    .eq('id', restaurantId);
+
+  if (error) return { error: error.message };
+
+  logActivity({
+    restaurantId,
+    actorType: 'owner',
+    actorId: user.id,
+    action: 'plan.trial_started',
+    details: { plan: 'starter', expires_at: expiresAt.toISOString() },
+  });
+
+  revalidatePath('/dashboard/settings');
+  return { success: true, expiresAt: expiresAt.toISOString() };
 }
