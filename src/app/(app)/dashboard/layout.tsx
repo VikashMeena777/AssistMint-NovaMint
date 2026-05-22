@@ -25,6 +25,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import PageTransition from "@/components/dashboard/page-transition";
+import OrderRealtimeListener from "@/components/dashboard/order-realtime-listener";
 
 const sidebarItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -48,6 +49,7 @@ export default function DashboardLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [restaurantName, setRestaurantName] = useState("My Restaurant");
+  const [restaurantId, setRestaurantId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -56,15 +58,21 @@ export default function DashboardLayout({
       if (!user) return;
       const { data } = await supabase
         .from("restaurants")
-        .select("name")
+        .select("id, name")
         .eq("owner_id", user.id)
         .single();
-      if (data) setRestaurantName((data as Record<string, string>).name);
+      if (data) {
+        const d = data as Record<string, string>;
+        setRestaurantName(d.name);
+        setRestaurantId(d.id);
+      }
     })();
   }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* Real-time order notification listener */}
+      {restaurantId && <OrderRealtimeListener restaurantId={restaurantId} />}
       {/* Mobile Overlay */}
       {sidebarOpen && (
         <div

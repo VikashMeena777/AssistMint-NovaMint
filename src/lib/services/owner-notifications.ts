@@ -6,6 +6,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { sendTextMessage, sendReplyButtons, sanitizeWhatsAppNumber } from '@/lib/whatsapp/client';
+import { sendNewOrderEmail, sendDailySummaryEmail } from '@/lib/email/email-service';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -80,14 +81,17 @@ async function sendWhatsAppWithButtons(
 
 export async function notifyOwnerNewOrder(restaurantId: string, orderId: string): Promise<void> {
   try {
-    // Get restaurant with owner phone
+    // Get restaurant with owner phone + email
     const { data: rest } = await supabaseAdmin
       .from('restaurants')
-      .select('name, owner_whatsapp, whatsapp_phone_id, whatsapp_access_token')
+      .select('name, owner_whatsapp, whatsapp_phone_id, whatsapp_access_token, notification_email, notify_new_order')
       .eq('id', restaurantId)
       .single();
 
-    if (!rest?.owner_whatsapp || !rest?.whatsapp_phone_id || !rest?.whatsapp_access_token) return;
+    if (!rest) return;
+    const hasWhatsApp = rest.owner_whatsapp && rest.whatsapp_phone_id && rest.whatsapp_access_token;
+    const hasEmail = rest.notification_email;
+    if (!hasWhatsApp && !hasEmail) return;
 
     // Get order details
     const { data: order } = await supabaseAdmin
@@ -124,13 +128,32 @@ export async function notifyOwnerNewOrder(restaurantId: string, orderId: string)
 
     const msg = `🔔 *New Order #${order.order_number}*\n👤 ${customerName} (${order.customer_phone})\n📋 Items:\n${itemList}\n💰 ₹${totalRupees} · ${payment}\n📍 ${address}`;
 
-    await sendWhatsAppWithButtons(
-      rest.whatsapp_phone_id,
-      rest.whatsapp_access_token,
-      rest.owner_whatsapp,
-      msg,
-      'pending'
-    );
+    // Send WhatsApp (best-effort, may fail outside 24h window)
+    if (hasWhatsApp) {
+      sendWhatsAppWithButtons(
+        rest.whatsapp_phone_id!,
+        rest.whatsapp_access_token!,
+        rest.owner_whatsapp!,
+        msg,
+        'pending'
+      ).catch(e => console.warn('[OwnerNotify] WhatsApp failed (24h window?):', e));
+    }
+
+    // Send Email (always reliable)
+    if (hasEmail && rest.notify_new_order !== false) {
+      sendNewOrderEmail({
+        restaurantName: rest.name || 'Restaurant',
+        ownerEmail: rest.notification_email!,
+        orderNumber: (order.order_number as string) || orderId,
+        customerName,
+        customerPhone: order.customer_phone as string,
+        items,
+        total: order.total as number,
+        paymentMethod: payment,
+        deliveryAddress: address,
+        orderId,
+      }).catch(e => console.error('[OwnerNotify] Email failed:', e));
+    }
   } catch (e) {
     console.error('[OwnerNotify] Error notifying owner:', e);
   }
@@ -316,11 +339,14 @@ export async function sendDailySummary(restaurantId: string): Promise<void> {
   try {
     const { data: rest } = await supabaseAdmin
       .from('restaurants')
-      .select('name, owner_whatsapp, whatsapp_phone_id, whatsapp_access_token')
+      .select('name, owner_whatsapp, whatsapp_phone_id, whatsapp_access_token, notification_email, notify_daily_summary')
       .eq('id', restaurantId)
       .single();
 
-    if (!rest?.owner_whatsapp || !rest?.whatsapp_phone_id || !rest?.whatsapp_access_token) return;
+    if (!rest) return;
+    const hasWhatsApp = rest.owner_whatsapp && rest.whatsapp_phone_id && rest.whatsapp_access_token;
+    const hasEmail = rest.notification_email;
+    if (!hasWhatsApp && !hasEmail) return;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -371,7 +397,25 @@ export async function sendDailySummary(restaurantId: string): Promise<void> {
 
     const msg = `📊 *Daily Summary — ${rest.name}*\n📅 ${dateStr}\n\n📦 Orders: ${totalOrders || 0}\n✅ Delivered: ${deliveredOrders || 0}\n❌ Cancelled: ${cancelledOrders || 0}\n💰 Revenue: ₹${revenueRupees}\n👥 Customers: ${uniqueCustomers}\n\nGreat work today! 🌟`;
 
-    await sendWhatsApp(rest.whatsapp_phone_id, rest.whatsapp_access_token, rest.owner_whatsapp, msg);
+    // WhatsApp summary (best-effort)
+    if (hasWhatsApp) {
+      sendWhatsApp(rest.whatsapp_phone_id!, rest.whatsapp_access_token!, rest.owner_whatsapp!, msg)
+        .catch(e => console.warn('[OwnerNotify] WhatsApp daily summary failed:', e));
+    }
+
+    // Email summary (always reliable)
+    if (hasEmail && rest.notify_daily_summary !== false) {
+      sendDailySummaryEmail({
+        restaurantName: rest.name || 'Restaurant',
+        ownerEmail: rest.notification_email!,
+        date: dateStr,
+        totalOrders: totalOrders || 0,
+        deliveredOrders: deliveredOrders || 0,
+        cancelledOrders: cancelledOrders || 0,
+        revenue,
+        uniqueCustomers,
+      }).catch(e => console.error('[OwnerNotify] Email daily summary failed:', e));
+    }
   } catch (e) {
     console.error('[OwnerNotify] Error sending daily summary:', e);
   }

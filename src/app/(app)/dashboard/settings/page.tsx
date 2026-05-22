@@ -171,7 +171,7 @@ export default function SettingsPage() {
           {activeTab === "language" && (
             <LanguageSettings data={formData} onChange={handleChange} />
           )}
-          {activeTab === "notifications" && <NotificationSettings />}
+          {activeTab === "notifications" && restaurant?.id && <NotificationSettings restaurantId={restaurant.id} />}
           {activeTab === "api" && <APISettings />}
           {activeTab === "billing" && restaurant?.id && (
             <BillingSection restaurantId={restaurant.id} />
@@ -605,29 +605,145 @@ function LanguageSettings({
   );
 }
 
-function NotificationSettings() {
-  return (
-    <div className="rounded-2xl border border-border/50 bg-card p-6">
-      <h3 className="text-base font-semibold mb-4">Notification Preferences</h3>
-      <div className="space-y-4">
-        {[
-          { label: "New Order Alert", desc: "Get notified when a new order is placed" },
-          { label: "Payment Received", desc: "Alert when a payment is confirmed" },
-          { label: "Human Handoff", desc: "When AI transfers a customer to you" },
-          { label: "Daily Summary", desc: "End-of-day report with orders and revenue" },
-        ].map((n) => (
-          <div key={n.label} className="flex items-center justify-between rounded-xl border border-border/50 p-4">
-            <div>
-              <p className="text-sm font-medium">{n.label}</p>
-              <p className="text-xs text-muted-foreground">{n.desc}</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" defaultChecked className="sr-only peer" />
-              <div className="w-10 h-5 rounded-full bg-muted peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
-            </label>
-          </div>
-        ))}
+function NotificationSettings({ restaurantId }: { restaurantId: string }) {
+  const [email, setEmail] = useState("");
+  const [toggles, setToggles] = useState({
+    notify_new_order: true,
+    notify_payment: true,
+    notify_human_handoff: true,
+    notify_daily_summary: true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const supabase = (await import("@/lib/supabase/client")).createClient();
+      const { data } = await supabase
+        .from("restaurants")
+        .select("notification_email, notify_new_order, notify_payment, notify_human_handoff, notify_daily_summary")
+        .eq("id", restaurantId)
+        .single();
+
+      if (data) {
+        const d = data as Record<string, unknown>;
+        setEmail((d.notification_email as string) || "");
+        setToggles({
+          notify_new_order: d.notify_new_order !== false,
+          notify_payment: d.notify_payment !== false,
+          notify_human_handoff: d.notify_human_handoff !== false,
+          notify_daily_summary: d.notify_daily_summary !== false,
+        });
+      }
+      setLoading(false);
+    })();
+  }, [restaurantId]);
+
+  const handleSave = async () => {
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    setSaving(true);
+    const result = await updateRestaurantSettings(restaurantId, {
+      notification_email: email || null,
+      ...toggles,
+    });
+    setSaving(false);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Notification preferences saved");
+    }
+  };
+
+  const handleToggle = (key: keyof typeof toggles) => {
+    setToggles((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const NOTIFICATION_OPTIONS = [
+    { key: "notify_new_order" as const, label: "New Order Alert", desc: "Email when a new order is placed", icon: "🔔" },
+    { key: "notify_payment" as const, label: "Payment Received", desc: "Email when a payment is confirmed", icon: "💰" },
+    { key: "notify_human_handoff" as const, label: "Human Handoff", desc: "Email when AI transfers a customer to you", icon: "🤝" },
+    { key: "notify_daily_summary" as const, label: "Daily Summary", desc: "End-of-day report with orders and revenue", icon: "📊" },
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Email Configuration */}
+      <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <h3 className="text-base font-semibold mb-1">📧 Email Notifications</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Receive reliable email alerts for orders and business updates. Works even when WhatsApp&apos;s 24-hour window expires.
+        </p>
+
+        <div className="space-y-3">
+          <label className="block text-sm font-medium">Notification Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="owner@restaurant.com"
+            className="w-full rounded-xl border border-border/50 bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <p className="text-xs text-muted-foreground">
+            Leave empty to disable email notifications. WhatsApp notifications will still work within the 24-hour window.
+          </p>
+        </div>
+      </div>
+
+      {/* Notification Toggles */}
+      <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <h3 className="text-base font-semibold mb-4">Notification Preferences</h3>
+        <div className="space-y-3">
+          {NOTIFICATION_OPTIONS.map((n) => (
+            <div key={n.key} className="flex items-center justify-between rounded-xl border border-border/50 p-4 transition-colors hover:bg-muted/30">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">{n.icon}</span>
+                <div>
+                  <p className="text-sm font-medium">{n.label}</p>
+                  <p className="text-xs text-muted-foreground">{n.desc}</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={toggles[n.key]}
+                  onChange={() => handleToggle(n.key)}
+                  className="sr-only peer"
+                />
+                <div className="w-10 h-5 rounded-full bg-muted peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Dashboard Real-time Info */}
+      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6">
+        <h3 className="text-base font-semibold mb-1">🔊 Dashboard Sound Alerts</h3>
+        <p className="text-sm text-muted-foreground">
+          When you have the dashboard open, you&apos;ll automatically hear a chime notification and see a popup for every new order — no setup required.
+        </p>
+      </div>
+
+      {/* Save Button */}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition disabled:opacity-50"
+      >
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        Save Preferences
+      </button>
     </div>
   );
 }
