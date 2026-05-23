@@ -65,6 +65,45 @@ export default function SettingsPage() {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
+  const isDirty = useCallback(() => {
+    if (!restaurant) return false;
+    
+    const keysToCheck = [
+      "name",
+      "phone",
+      "cuisine_type",
+      "city",
+      "gst_number",
+      "min_order_amount",
+      "owner_whatsapp",
+      "address",
+      "business_hours",
+      "delivery_fee_rules",
+      "tax_rate",
+      "ai_persona",
+      "supported_languages",
+    ];
+
+    for (const key of keysToCheck) {
+      const originalValue = restaurant[key];
+      const currentValue = formData[key];
+
+      if (typeof originalValue === "object" && originalValue !== null) {
+        if (JSON.stringify(originalValue) !== JSON.stringify(currentValue)) {
+          return true;
+        }
+      } else {
+        const normalizedOriginal = originalValue === null || originalValue === undefined ? "" : String(originalValue);
+        const normalizedCurrent = currentValue === null || currentValue === undefined ? "" : String(currentValue);
+        if (normalizedOriginal !== normalizedCurrent) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }, [restaurant, formData]);
+
   const handleSave = useCallback(async () => {
     if (!restaurant?.id) {
       toast.error("No restaurant found. Complete onboarding first.");
@@ -91,6 +130,7 @@ export default function SettingsPage() {
       toast.error(result.error);
     } else {
       toast.success("Settings saved successfully! 🌿");
+      setRestaurant({ ...formData });
     }
   }, [restaurant, formData]);
 
@@ -130,18 +170,20 @@ export default function SettingsPage() {
             Configure your restaurant, WhatsApp bot, and integrations.
           </p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 disabled:opacity-50 transition-all"
-        >
-          {saving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          Save Changes
-        </button>
+        {isDirty() && (
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 disabled:opacity-50 transition-all animate-in fade-in zoom-in-95 duration-200"
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            Save Changes
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
