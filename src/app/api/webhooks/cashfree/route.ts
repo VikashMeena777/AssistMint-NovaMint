@@ -27,10 +27,38 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get('x-webhook-signature') || '';
     const timestamp = req.headers.get('x-webhook-timestamp') || '';
 
+    // Parse body early to determine which restaurant this payment belongs to
+    let webhookSecret = process.env.CASHFREE_WEBHOOK_SECRET;
+    try {
+      const parsedData = JSON.parse(body);
+      const cfOrderId = parsedData?.data?.order?.order_id;
+      if (cfOrderId) {
+        const { data: payment } = await supabaseAdmin
+          .from('payments')
+          .select('restaurant_id')
+          .eq('cashfree_order_id', cfOrderId)
+          .single();
+
+        if (payment) {
+          const { data: restaurant } = await supabaseAdmin
+            .from('restaurants')
+            .select('cashfree_webhook_secret')
+            .eq('id', (payment as any).restaurant_id)
+            .single();
+
+          const r = restaurant as Record<string, any> | null;
+          if (r?.cashfree_webhook_secret) {
+            webhookSecret = r.cashfree_webhook_secret;
+          }
+        }
+      }
+    } catch (parseError) {
+      console.error('[Cashfree Webhook] Failed to parse body or fetch dynamic secret:', parseError);
+    }
+
     // Verify webhook signature — ALWAYS required
-    const webhookSecret = process.env.CASHFREE_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      console.error('[Cashfree Webhook] CRITICAL: CASHFREE_WEBHOOK_SECRET not configured');
+      console.error('[Cashfree Webhook] CRITICAL: Webhook secret not configured');
       return NextResponse.json({ message: 'Server misconfigured' }, { status: 200 });
     }
 

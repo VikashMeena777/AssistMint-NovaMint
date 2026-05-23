@@ -272,3 +272,91 @@ export async function startStarterTrial(restaurantId: string) {
   revalidatePath('/dashboard/settings');
   return { success: true, expiresAt: expiresAt.toISOString() };
 }
+
+// ─── Update Restaurant Payment Config (Cashfree Option A) ───
+
+export async function updateRestaurantPaymentConfig(
+  restaurantId: string,
+  config: {
+    cashfree_client_id: string;
+    cashfree_client_secret: string;
+    cashfree_webhook_secret?: string;
+  }
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  // Verify ownership and get existing keys
+  const { data: restaurant } = await supabase
+    .from('restaurants')
+    .select('owner_id, cashfree_client_secret, cashfree_webhook_secret')
+    .eq('id', restaurantId)
+    .single();
+
+  if (!restaurant || (restaurant as Record<string, unknown>).owner_id !== user.id) {
+    return { error: 'Not authorized to update this restaurant' };
+  }
+
+  const r = restaurant as Record<string, any>;
+  
+  // Mask protection: if the user didn't change the masked secret, preserve the database value
+  let finalClientSecret = config.cashfree_client_secret;
+  if (finalClientSecret === '••••••••••••••••••••••••••••••••') {
+    finalClientSecret = r.cashfree_client_secret || '';
+  }
+
+  let finalWebhookSecret = config.cashfree_webhook_secret;
+  if (finalWebhookSecret === '••••••••••••••••••••••••••••••••') {
+    finalWebhookSecret = r.cashfree_webhook_secret || '';
+  }
+
+  const { error } = await supabase
+    .from('restaurants')
+    .update({
+      cashfree_client_id: config.cashfree_client_id || null,
+      cashfree_client_secret: finalClientSecret || null,
+      cashfree_webhook_secret: finalWebhookSecret || null,
+    })
+    .eq('id', restaurantId);
+
+  if (error) return { error: error.message };
+
+  logActivity({
+    restaurantId,
+    actorType: 'owner',
+    actorId: user.id,
+    action: ACTIONS.SETTINGS_UPDATED,
+    details: { updatedKeys: ['cashfree_client_id', 'cashfree_client_secret', 'cashfree_webhook_secret'] },
+  });
+
+  revalidatePath('/dashboard/settings');
+  return { success: true };
+}
+
+// ─── Get Restaurant Payment Config (Masked Securely) ───────
+
+export async function getRestaurantPaymentConfig(restaurantId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
+
+  // Verify ownership
+  const { data: restaurant } = await supabase
+    .from('restaurants')
+    .select('owner_id, cashfree_client_id, cashfree_client_secret, cashfree_webhook_secret')
+    .eq('id', restaurantId)
+    .single();
+
+  if (!restaurant || (restaurant as Record<string, unknown>).owner_id !== user.id) {
+    return { error: 'Not authorized' };
+  }
+
+  const r = restaurant as Record<string, any>;
+  return {
+    success: true,
+    cashfree_client_id: r.cashfree_client_id || '',
+    cashfree_client_secret: r.cashfree_client_secret ? '••••••••••••••••••••••••••••••••' : '',
+    cashfree_webhook_secret: r.cashfree_webhook_secret ? '••••••••••••••••••••••••••••••••' : '',
+  };
+}

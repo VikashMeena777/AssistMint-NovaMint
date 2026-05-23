@@ -33,11 +33,19 @@ export async function createBotPaymentLink(
   totalPaise: number,
   isCart?: boolean
 ): Promise<string | null> {
-  const clientId = process.env.CASHFREE_CLIENT_ID;
-  const clientSecret = process.env.CASHFREE_CLIENT_SECRET;
+  // Fetch dynamic restaurant specific Cashfree credentials
+  const { data: restaurant } = await supabaseAdmin
+    .from('restaurants')
+    .select('cashfree_client_id, cashfree_client_secret')
+    .eq('id', restaurantId)
+    .single();
+
+  const rData = restaurant as Record<string, any> | null;
+  const clientId = rData?.cashfree_client_id || process.env.CASHFREE_CLIENT_ID;
+  const clientSecret = rData?.cashfree_client_secret || process.env.CASHFREE_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    console.error('[BotPayment] Cashfree credentials not configured');
+    console.error(`[BotPayment] Cashfree credentials not configured for restaurant: ${restaurantId}`);
     return null;
   }
 

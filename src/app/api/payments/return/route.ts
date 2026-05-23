@@ -29,9 +29,29 @@ export async function GET(req: NextRequest) {
     return renderPage('error', 'Missing order ID', '');
   }
 
-  // Verify payment with Cashfree
-  const clientId = process.env.CASHFREE_CLIENT_ID;
-  const clientSecret = process.env.CASHFREE_CLIENT_SECRET;
+  // Fetch restaurant_id from payments table using cashfree_order_id to load correct keys
+  const { data: payment } = await supabaseAdmin
+    .from('payments')
+    .select('restaurant_id')
+    .eq('cashfree_order_id', orderId)
+    .single();
+
+  let clientId = process.env.CASHFREE_CLIENT_ID;
+  let clientSecret = process.env.CASHFREE_CLIENT_SECRET;
+
+  if (payment) {
+    const { data: restaurant } = await supabaseAdmin
+      .from('restaurants')
+      .select('cashfree_client_id, cashfree_client_secret')
+      .eq('id', (payment as any).restaurant_id)
+      .single();
+
+    const r = restaurant as Record<string, any> | null;
+    if (r?.cashfree_client_id && r?.cashfree_client_secret) {
+      clientId = r.cashfree_client_id;
+      clientSecret = r.cashfree_client_secret;
+    }
+  }
 
   let paymentStatus = 'unknown';
   let amountPaid = '';

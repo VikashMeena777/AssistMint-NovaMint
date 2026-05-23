@@ -24,6 +24,8 @@ import {
   updateWhatsAppConfig,
   setupWhatsAppIceBreakers,
   startStarterTrial,
+  updateRestaurantPaymentConfig,
+  getRestaurantPaymentConfig,
 } from "@/lib/actions/restaurant-actions";
 import { getCurrentPlan, getPlanUsage, createPlanCheckout, verifyPlanPayment } from "@/lib/actions/billing-actions";
 import { PLANS, PLAN_ORDER, formatLimit, getAnnualSavings, type PlanSlug, type BillingCycle } from "@/lib/utils/plan-limits";
@@ -181,7 +183,7 @@ export default function SettingsPage() {
           {activeTab === "delivery" && (
             <DeliverySettings data={formData} onChange={handleChange} />
           )}
-          {activeTab === "payments" && <PaymentSettings />}
+          {activeTab === "payments" && restaurant?.id && <PaymentSettings restaurantId={restaurant.id} />}
           {activeTab === "language" && (
             <LanguageSettings data={formData} onChange={handleChange} />
           )}
@@ -562,23 +564,123 @@ function AISettings({
   );
 }
 
-function PaymentSettings() {
+function PaymentSettings({ restaurantId }: { restaurantId: string }) {
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const data = await getRestaurantPaymentConfig(restaurantId);
+      if (data && data.success) {
+        setClientId(data.cashfree_client_id || "");
+        setClientSecret(data.cashfree_client_secret || "");
+        setWebhookSecret(data.cashfree_webhook_secret || "");
+      }
+      setLoading(false);
+    })();
+  }, [restaurantId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const result = await updateRestaurantPaymentConfig(restaurantId, {
+      cashfree_client_id: clientId,
+      cashfree_client_secret: clientSecret,
+      cashfree_webhook_secret: webhookSecret,
+    });
+    setSaving(false);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success("Payment credentials saved successfully! 💳");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const isProduction = process.env.NEXT_PUBLIC_CASHFREE_ENV === "production";
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-border/50 bg-card p-6">
-        <h3 className="text-base font-semibold mb-1">Payment Integration</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Payments are managed via your Cashfree dashboard. Configure your{" "}
-          environment variables for integration.
+        <div className="flex items-center justify-between gap-4 mb-1">
+          <h3 className="text-base font-semibold">Payment Integration</h3>
+          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+            isProduction ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" : "bg-blue-500/10 text-blue-600 border border-blue-500/20"
+          }`}>
+            {isProduction ? "Production Mode" : "Sandbox / Test Mode"}
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground mb-6">
+          Enter your restaurant&apos;s specific Cashfree merchant credentials to route customer payments directly to your account.
         </p>
-        <div className="rounded-xl bg-muted/30 border border-border/50 p-4">
-          <p className="text-sm text-muted-foreground">
-            Payment credentials are configured via server environment variables
-            for security. Contact your admin to update CASHFREE_CLIENT_ID and
-            CASHFREE_CLIENT_SECRET.
-          </p>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Cashfree Client ID (App ID)</label>
+            <input
+              type="text"
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              placeholder="e.g., CF123456C789"
+              className="flex h-10 w-full rounded-xl border border-input bg-muted/30 px-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Cashfree Client Secret (Secret Key)</label>
+            <input
+              type="password"
+              value={clientSecret}
+              onChange={(e) => setClientSecret(e.target.value)}
+              placeholder="••••••••••••••••••••••••••••••••"
+              className="flex h-10 w-full rounded-xl border border-input bg-muted/30 px-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Cashfree Webhook Secret Key</label>
+            <input
+              type="password"
+              value={webhookSecret}
+              onChange={(e) => setWebhookSecret(e.target.value)}
+              placeholder="••••••••••••••••••••••••••••••••"
+              className="flex h-10 w-full rounded-xl border border-input bg-muted/30 px-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
+            />
+            <p className="text-xs text-muted-foreground">
+              Required to verify payment success notifications reliably. Find this in Cashfree Dashboard → Developers → Webhook.
+            </p>
+          </div>
         </div>
       </div>
+
+      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-6">
+        <h3 className="text-base font-semibold mb-1 text-primary">💡 Verification Setup</h3>
+        <p className="text-sm text-muted-foreground">
+          In your Cashfree Dashboard under Webhooks, make sure to add the following notification URL for status sync:
+        </p>
+        <code className="mt-3 block rounded-lg bg-background p-3 text-xs font-mono text-muted-foreground break-all border border-border/50">
+          {typeof window !== "undefined" ? window.location.origin : "https://your-domain.com"}/api/webhooks/cashfree
+        </code>
+      </div>
+
+      {/* Save Button */}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition disabled:opacity-50"
+      >
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        Save Payment Credentials
+      </button>
     </div>
   );
 }
