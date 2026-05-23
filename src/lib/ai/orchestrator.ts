@@ -1357,56 +1357,49 @@ async function handleOnlinePayOrder(
     return;
   }
 
-  const orderId = await convertCartToOrder(cart, 'delivery', undefined, undefined, 'online');
-  await updateCustomerOrderStats(customer.id, cart.total);
-
   const totalRupees = (cart.total / 100).toFixed(0);
   const estimatedTime = getEstimatedDeliveryTime(cart.items.length, 'delivery');
   const itemCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
-  const shortId = orderId.substring(0, 8).toUpperCase();
+  const refId = cart.id.substring(0, 8).toUpperCase();
 
-  // Generate Cashfree payment link
+  // Generate Cashfree payment link using cart session
   const paymentLink = await createBotPaymentLink(
     restaurant.id,
-    orderId,
+    cart.id,
     customer.phone,
     customer.name || 'Customer',
-    cart.total
+    cart.total,
+    true
   );
 
   let reply: string;
   if (paymentLink) {
     reply = [
-      `✅ *Order Confirmed!*`,
+      `🛒 *Order Summary*`,
       `━━━━━━━━━━━━━━`,
       `🏪 *${restaurant.name}*`,
-      `🏷️ Order #${shortId}`,
+      `🏷️ Ref #${refId}`,
       `📦 ${itemCount} item${itemCount > 1 ? 's' : ''}`,
       `💳 *₹${totalRupees}* — Pay Online`,
-      `⏱️ Ready in *${estimatedTime}*`,
+      `⏱️ Est. Delivery: *${estimatedTime}*`,
       `━━━━━━━━━━━━━━`,
-      `👉 *Pay here:* ${paymentLink}`,
+      `👉 *Pay here to place your order:* ${paymentLink}`,
       ``,
-      `Complete payment to confirm your order!`,
+      `⚠️ *Note:* Your order will *not* be created until the payment is completed successfully!`,
     ].join('\n');
   } else {
     reply = [
-      `✅ *Order Confirmed!*`,
+      `⚠️ *Payment Link Error*`,
       `━━━━━━━━━━━━━━`,
       `🏪 *${restaurant.name}*`,
-      `🏷️ Order #${shortId}`,
-      `📦 ${itemCount} item${itemCount > 1 ? 's' : ''}`,
       `💰 *₹${totalRupees}*`,
-      `⏱️ Ready in *${estimatedTime}*`,
       `━━━━━━━━━━━━━━`,
-      `⚠️ Our team will contact you for payment.`,
+      `We couldn't generate a payment link at the moment.`,
+      `Please reply with *COD* to place a Cash on Delivery order instead!`,
     ].join('\n');
   }
 
   await sendBotReply(restaurant, customer, conversation, reply);
-
-  // Notify restaurant owner (fire-and-forget)
-  notifyOwnerNewOrder(restaurant.id, orderId).catch(e => console.error('[Orchestrator] Owner notification failed (Online):', e));
 
   // Receipt will be sent when order is marked 'delivered'
 
@@ -1415,7 +1408,7 @@ async function handleOnlinePayOrder(
     actorType: 'customer',
     actorId: customer.id,
     action: ACTIONS.ORDER_PLACED,
-    details: { orderId, totalAmount: cart.total, paymentMethod: 'online', paymentLink, estimatedTime },
+    details: { cartId: cart.id, totalAmount: cart.total, paymentMethod: 'online', paymentLink, estimatedTime },
   });
 }
 

@@ -228,26 +228,23 @@ async function sendOrderStatusWhatsApp(
       }),
     });
 
-    // On delivery: send receipt + feedback request (non-blocking, delayed)
+    // On delivery: send receipt + feedback sequentially with 7 seconds delay
     if (status === 'delivered') {
       const { sendOrderReceipt, sendFeedbackRequest } = await import('@/lib/ai/orchestrator');
       const { getRestaurantById } = await import('@/lib/services/restaurant-service');
       const fullRestaurant = await getRestaurantById(restaurantId);
 
       if (fullRestaurant) {
-        // Trigger receipt sending
-        const receiptPromise = sendOrderReceipt(fullRestaurant, orderId, order.customer_phone)
+        // Await receipt sending
+        await sendOrderReceipt(fullRestaurant, orderId, order.customer_phone)
           .catch(e => console.error('[Orders] Receipt send failed:', e));
 
-        // Wait 1 second before triggering feedback to ensure proper order on WhatsApp
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait 7 seconds before triggering feedback to ensure proper order on WhatsApp
+        await new Promise(resolve => setTimeout(resolve, 7000));
 
-        // Trigger feedback request
-        const feedbackPromise = sendFeedbackRequest(fullRestaurant, orderId, order.customer_phone)
+        // Await feedback request
+        await sendFeedbackRequest(fullRestaurant, orderId, order.customer_phone)
           .catch(e => console.error('[Orders] Feedback request failed:', e));
-
-        // Await both promises so the serverless execution doesn't freeze them early
-        await Promise.all([receiptPromise, feedbackPromise]);
       }
     }
   } catch {

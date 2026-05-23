@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { webhookLimiter, checkRateLimit } from '@/lib/utils/rate-limiter';
+import { processSuccessfulPayment } from '@/lib/services/bot-payment';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -104,143 +105,61 @@ interface PaymentData {
 
 async function handlePaymentSuccess(data: PaymentData) {
   const cfOrderId = data.order.order_id;
-  const amount = data.payment.payment_amount;
   const paymentId = data.payment.cf_payment_id;
   const paymentMethod = data.payment.payment_method.upi
     ? `UPI (${data.payment.payment_method.upi.upi_id})`
     : 'Card';
 
-  console.log(`[Cashfree] Payment SUCCESS: cf_order=${cfOrderId}, amount=₹${amount}`);
+  console.log(`[Cashfree] Payment SUCCESS: cf_order=${cfOrderId}`);
 
-  // Find the payment record by cashfree_order_id
-  const { data: payment } = await supabaseAdmin
-    .from('payments')
-    .select('order_id, restaurant_id, status')
-    .eq('cashfree_order_id', cfOrderId)
-    .single();
-
-  if (!payment) {
-    console.error(`[Cashfree] No payment record found for cf_order=${cfOrderId}`);
-    return;
-  }
-
-  const p = payment as Record<string, unknown>;
-
-  // Idempotency: skip if already processed (prevents duplicate messages when both webhook + return URL fire)
-  if (p.status === 'completed') {
-    console.log(`[Cashfree] Payment ${cfOrderId} already completed — skipping duplicate processing`);
-    return;
-  }
-
-  const orderId = p.order_id as string;
-  const restaurantId = p.restaurant_id as string;
-
-  // Update order status
-  await supabaseAdmin
-    .from('orders')
-    .update({
-      status: 'confirmed',
-      payment_status: 'paid',
-      payment_method: paymentMethod,
-      payment_id: paymentId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId);
-
-  // Update payment record
-  await supabaseAdmin
-    .from('payments')
-    .update({ status: 'completed' })
-    .eq('cashfree_order_id', cfOrderId);
-
-  // Send WhatsApp confirmation + receipt to customer
-  try {
-    const { data: order } = await supabaseAdmin
-      .from('orders')
-      .select('customer_id, total')
-      .eq('id', orderId)
-      .single();
-
-    if (order) {
-      const o = order as Record<string, unknown>;
-      const { data: customer } = await supabaseAdmin
-        .from('customers')
-        .select('phone')
-        .eq('id', o.customer_id as string)
-        .single();
-
-      const { data: restaurant } = await supabaseAdmin
-        .from('restaurants')
-        .select('id, whatsapp_phone_id, whatsapp_access_token, name')
-        .eq('id', restaurantId)
-        .single();
-
-      if (customer && restaurant) {
-        const c = customer as Record<string, unknown>;
-        const r = restaurant as Record<string, unknown>;
-        if (r.whatsapp_phone_id && r.whatsapp_access_token) {
-          const { sendTextMessage } = await import('@/lib/whatsapp/client');
-          const totalRupees = ((o.total as number) / 100).toFixed(0);
-          await sendTextMessage({
-            phoneNumberId: r.whatsapp_phone_id as string,
-            accessToken: r.whatsapp_access_token as string,
-            to: c.phone as string,
-            text: `✅ *Payment Received!*\nAmount: ₹${totalRupees} · ${paymentMethod}\nYour order is confirmed and being prepared! 🎉`,
-          });
-
-          // Send receipt after payment confirmation
-          try {
-            const { sendOrderReceipt } = await import('@/lib/ai/orchestrator');
-            const restaurantObj = {
-              id: r.id as string,
-              name: r.name as string,
-              whatsapp_phone_id: r.whatsapp_phone_id as string,
-              whatsapp_token: r.whatsapp_access_token as string,
-            };
-            sendOrderReceipt(restaurantObj as Parameters<typeof sendOrderReceipt>[0], orderId, c.phone as string).catch(e => console.error('[Cashfree] Receipt send failed:', e));
-          } catch (receiptErr) {
-            console.error('[Cashfree] Receipt send failed:', receiptErr);
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.error('[Cashfree] Failed to send WhatsApp confirmation:', e);
-  }
-
-  // Log activity
-  await supabaseAdmin.from('activity_log').insert({
-    restaurant_id: restaurantId,
-    actor_type: 'system',
-    action: 'payment.received',
-    details: { order_id: orderId, amount, payment_method: paymentMethod, cf_payment_id: paymentId },
-  }).then(() => {});
+  await processSuccessfulPayment(cfOrderId, paymentMethod, paymentId);
 }
 
 async function handlePaymentFailed(data: PaymentData) {
-  const orderId = data.order.order_id;
-  console.log(`[Cashfree] Payment FAILED: order=${orderId}`);
+  const cfOrderId = data.order.order_id;
+  console.log(`[Cashfree] Payment FAILED: cf_order=${cfOrderId}`);
 
-  await supabaseAdmin
-    .from('orders')
-    .update({
-      payment_status: 'failed',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId);
+  // Fetch the payment record to see if order_id is present
+  const { data: payment } = await supabaseAdmin
+    .from('payments')
+    .update({ status: 'failed' })
+    .eq('cashfree_order_id', cfOrderId)
+    .select('order_id')
+    .single();
+
+  const orderId = (payment as any)?.order_id;
+  if (orderId) {
+    await supabaseAdmin
+      .from('orders')
+      .update({
+        payment_status: 'failed',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId);
+  }
 }
 
 async function handlePaymentDropped(data: PaymentData) {
-  const orderId = data.order.order_id;
-  console.log(`[Cashfree] Payment DROPPED: order=${orderId}`);
+  const cfOrderId = data.order.order_id;
+  console.log(`[Cashfree] Payment DROPPED: cf_order=${cfOrderId}`);
 
-  await supabaseAdmin
-    .from('orders')
-    .update({
-      payment_status: 'dropped',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId);
+  const { data: payment } = await supabaseAdmin
+    .from('payments')
+    .update({ status: 'failed' })
+    .eq('cashfree_order_id', cfOrderId)
+    .select('order_id')
+    .single();
+
+  const orderId = (payment as any)?.order_id;
+  if (orderId) {
+    await supabaseAdmin
+      .from('orders')
+      .update({
+        payment_status: 'dropped',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId);
+  }
 }
 
 interface RefundData {
@@ -255,13 +174,20 @@ interface RefundData {
 }
 
 async function handleRefundStatus(data: RefundData) {
-  const orderId = data.order.order_id;
+  const cfOrderId = data.order.order_id;
   const refundStatus = data.refund.refund_status;
   console.log(
     `[Cashfree] Refund ${refundStatus}: refund=${data.refund.refund_id}, amount=₹${data.refund.refund_amount}`
   );
 
-  if (refundStatus === 'SUCCESS') {
+  const { data: payment } = await supabaseAdmin
+    .from('payments')
+    .select('order_id')
+    .eq('cashfree_order_id', cfOrderId)
+    .single();
+
+  const orderId = (payment as any)?.order_id;
+  if (orderId && refundStatus === 'SUCCESS') {
     await supabaseAdmin
       .from('orders')
       .update({

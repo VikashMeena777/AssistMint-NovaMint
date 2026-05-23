@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { processSuccessfulPayment } from '@/lib/services/bot-payment';
 
 // CRITICAL: Never cache this route — each visit must re-check payment status
 export const dynamic = 'force-dynamic';
@@ -73,110 +74,13 @@ export async function GET(req: NextRequest) {
 
   // Update DB if paid
   if (paymentStatus === 'paid') {
-    // Idempotency: check if ALREADY processed (order has payment_status = 'paid')
-    const { data: existingOrder } = await supabaseAdmin
-      .from('orders')
-      .select('payment_status')
-      .eq('payment_id', orderId)
-      .single();
-
-    const alreadyPaid = existingOrder && (existingOrder as Record<string, unknown>).payment_status === 'paid';
-
-    if (!alreadyPaid) {
-      // First time processing — update payments table
-      await supabaseAdmin
-        .from('payments')
-        .update({ status: 'completed' })
-        .eq('cashfree_order_id', orderId);
-
-      // Update order status
-      await supabaseAdmin
-        .from('orders')
-        .update({
-          status: 'confirmed',
-          payment_status: 'paid',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('payment_id', orderId);
-
-      // Send WhatsApp payment confirmation — ONLY on first processing
-      try {
-        await sendPaymentConfirmationWhatsApp(orderId, amountPaid);
-        console.log(`[PaymentReturn] ✅ First-time processing for ${orderId} — WhatsApp sent`);
-      } catch (err) {
-        console.error('[PaymentReturn] WhatsApp confirmation error:', err);
-      }
-    } else {
-      console.log(`[PaymentReturn] ⏭️ Order ${orderId} already paid — skipping duplicate processing`);
-    }
-
-    return renderPage('success', amountPaid, orderId);
+    const { orderId: dbOrderId } = await processSuccessfulPayment(orderId, 'Online');
+    return renderPage('success', amountPaid, dbOrderId || orderId);
   } else if (paymentStatus === 'pending' || paymentStatus === 'active') {
     return renderPage('pending', amountPaid, orderId);
   } else {
     return renderPage('failed', amountPaid, orderId);
   }
-}
-
-// ─── Send WhatsApp Payment Confirmation ─────
-async function sendPaymentConfirmationWhatsApp(cfOrderId: string, amount: string) {
-  // Look up the order and its restaurant
-  const { data: order } = await supabaseAdmin
-    .from('orders')
-    .select('id, order_number, customer_phone, restaurant_id, total')
-    .eq('payment_id', cfOrderId)
-    .single();
-
-  if (!order) return;
-
-  // Get restaurant WhatsApp credentials
-  const { data: restaurant } = await supabaseAdmin
-    .from('restaurants')
-    .select('name, whatsapp_phone_id, whatsapp_access_token')
-    .eq('id', order.restaurant_id)
-    .single();
-
-  if (!restaurant?.whatsapp_phone_id || !restaurant?.whatsapp_access_token) return;
-
-  const phone = order.customer_phone;
-  if (!phone) return;
-
-  const totalRupees = amount || `₹${((order.total || 0) / 100).toFixed(0)}`;
-  const msg = `✅ *Payment Received!*\n\n💰 Amount: ${totalRupees}\n📋 Order: #${order.order_number || '—'}\n\nYour order is *confirmed* and being prepared! 🍳\n\nThank you for ordering from *${restaurant.name}*! 🌿`;
-
-  try {
-    const waRes = await fetch(`https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${restaurant.whatsapp_access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: phone,
-        type: 'text',
-        text: { body: msg },
-      }),
-    });
-    const waBody = await waRes.json();
-    if (!waRes.ok) {
-      console.error('[PaymentReturn] WhatsApp API error:', waRes.status, JSON.stringify(waBody));
-    } else {
-      console.log('[PaymentReturn] WhatsApp confirmation sent successfully to', phone);
-    }
-  } catch (err) {
-    console.error('[PaymentReturn] Failed to send WhatsApp confirmation:', err);
-  }
-
-  // Also save to conversations table for dashboard visibility
-  await supabaseAdmin.from('conversations').insert({
-    restaurant_id: order.restaurant_id,
-    customer_phone: phone,
-    role: 'assistant',
-    content: msg,
-    message_type: 'text',
-    metadata: { type: 'payment_confirmation', payment_id: cfOrderId },
-  });
 }
 
 function renderPage(status: 'success' | 'pending' | 'failed' | 'error', amount: string, orderId: string) {
