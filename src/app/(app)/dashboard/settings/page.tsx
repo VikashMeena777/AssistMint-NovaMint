@@ -478,57 +478,73 @@ function WhatsAppSettings({
 
   // ── Embedded Signup ──
   const handleConnect = () => {
-    // If FB SDK or config not available, go straight to manual entry
-    if (!window.FB || !META_CONFIG_ID) {
+    // Try Embedded Signup first
+    if (!window.FB) {
+      toast.error('Facebook SDK failed to load. Enter credentials manually below.');
+      setShowManual(true);
+      return;
+    }
+
+    if (!META_CONFIG_ID) {
+      toast.error('Embedded Signup config missing. Enter credentials manually below.');
       setShowManual(true);
       return;
     }
 
     setConnecting(true);
 
-    window.FB.login(
-      (response) => {
-        if (response.authResponse?.code) {
-          // Exchange code for token via our API
-          fetch('/api/whatsapp/connect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: response.authResponse.code }),
-          })
-            .then((r) => r.json())
-            .then((result) => {
-              if (result.error) {
-                toast.error(result.error);
-              } else {
-                toast.success('WhatsApp connected successfully! 🎉');
-                onChange('whatsapp_phone_id', result.phone_number_id);
-                onChange('whatsapp_waba_id', result.waba_id);
-                onChange('whatsapp_access_token', 'connected');
-              }
-              setConnecting(false);
+    try {
+      window.FB.login(
+        (response) => {
+          if (response.authResponse?.code) {
+            // Exchange code for token via our API
+            fetch('/api/whatsapp/connect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code: response.authResponse.code }),
             })
-            .catch(() => {
-              toast.error('Connection failed. Please try again.');
-              setConnecting(false);
-            });
-        } else {
-          setConnecting(false);
-          if (response.status !== 'unknown') {
-            toast.error('Login cancelled or failed. Please try again.');
+              .then((r) => r.json())
+              .then((result) => {
+                if (result.error) {
+                  toast.error(result.error);
+                  setShowManual(true);
+                } else {
+                  toast.success('WhatsApp connected successfully! 🎉');
+                  onChange('whatsapp_phone_id', result.phone_number_id);
+                  onChange('whatsapp_waba_id', result.waba_id);
+                  onChange('whatsapp_access_token', 'connected');
+                }
+                setConnecting(false);
+              })
+              .catch(() => {
+                toast.error('Connection failed. Try manual entry below.');
+                setShowManual(true);
+                setConnecting(false);
+              });
+          } else {
+            setConnecting(false);
+            if (response.status !== 'unknown') {
+              toast.error('Login cancelled or failed. Try manual entry below.');
+              setShowManual(true);
+            }
           }
-        }
-      },
-      {
-        config_id: META_CONFIG_ID,
-        response_type: 'code',
-        override_default_response_type: true,
-        extras: {
-          setup: { solutionID: META_CONFIG_ID },
-          featureType: '',
-          sessionInfoVersion: 2,
         },
-      }
-    );
+        {
+          config_id: META_CONFIG_ID,
+          response_type: 'code',
+          override_default_response_type: true,
+          extras: {
+            setup: { solutionID: META_CONFIG_ID },
+            featureType: '',
+            sessionInfoVersion: 2,
+          },
+        }
+      );
+    } catch {
+      toast.error('Embedded Signup failed. Enter credentials manually below.');
+      setShowManual(true);
+      setConnecting(false);
+    }
   };
 
   // ── Disconnect ──
