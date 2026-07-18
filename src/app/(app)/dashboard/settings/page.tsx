@@ -21,8 +21,6 @@ import { toast } from "sonner";
 import {
   getCurrentRestaurant,
   updateRestaurantSettings,
-  updateWhatsAppConfig,
-  setupWhatsAppIceBreakers,
   startStarterTrial,
   updateRestaurantPaymentConfig,
   getRestaurantPaymentConfig,
@@ -457,125 +455,550 @@ function WhatsAppSettings({
   restaurantId: string;
 }) {
   const [saving, setSaving] = useState(false);
-  const [settingUpIce, setSettingUpIce] = useState(false);
-  const [iceManagerUrl, setIceManagerUrl] = useState("");
-  const [iceSteps, setIceSteps] = useState<string[] | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [showIceBreakers, setShowIceBreakers] = useState(false);
 
-  const handleSaveWhatsApp = async () => {
+  // Profile state
+  const [profile, setProfile] = useState({
+    about: '', address: '', description: '', email: '', vertical: '', websites: '' as string,
+  });
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Ice breaker state
+  const [iceBreakers, setIceBreakers] = useState<string[]>([]);
+  const [loadingIce, setLoadingIce] = useState(false);
+  const [savingIce, setSavingIce] = useState(false);
+
+  const isConnected = !!(data.whatsapp_phone_id && data.whatsapp_access_token);
+  const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '';
+
+  // ── Embedded Signup ──
+  const handleConnect = () => {
+    if (!window.FB) {
+      toast.error('Facebook SDK not loaded. Please refresh the page.');
+      return;
+    }
+
+    if (!META_CONFIG_ID) {
+      toast.error('Embedded Signup not configured yet. Use manual entry below.');
+      setShowManual(true);
+      return;
+    }
+
+    setConnecting(true);
+
+    window.FB.login(
+      (response) => {
+        if (response.authResponse?.code) {
+          // Exchange code for token via our API
+          fetch('/api/whatsapp/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: response.authResponse.code }),
+          })
+            .then((r) => r.json())
+            .then((result) => {
+              if (result.error) {
+                toast.error(result.error);
+              } else {
+                toast.success('WhatsApp connected successfully! 🎉');
+                onChange('whatsapp_phone_id', result.phone_number_id);
+                onChange('whatsapp_waba_id', result.waba_id);
+                onChange('whatsapp_access_token', 'connected');
+              }
+              setConnecting(false);
+            })
+            .catch(() => {
+              toast.error('Connection failed. Please try again.');
+              setConnecting(false);
+            });
+        } else {
+          setConnecting(false);
+          if (response.status !== 'unknown') {
+            toast.error('Login cancelled or failed. Please try again.');
+          }
+        }
+      },
+      {
+        config_id: META_CONFIG_ID,
+        response_type: 'code',
+        override_default_response_type: true,
+        extras: {
+          setup: { solutionID: META_CONFIG_ID },
+          featureType: '',
+          sessionInfoVersion: 2,
+        },
+      }
+    );
+  };
+
+  // ── Disconnect ──
+  const handleDisconnect = async () => {
+    if (!confirm('Are you sure? Your bot will stop responding to messages.')) return;
+    setDisconnecting(true);
+    try {
+      const resp = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+      const result = await resp.json();
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success('WhatsApp disconnected');
+        onChange('whatsapp_phone_id', '');
+        onChange('whatsapp_waba_id', '');
+        onChange('whatsapp_access_token', '');
+      }
+    } catch {
+      toast.error('Failed to disconnect');
+    }
+    setDisconnecting(false);
+  };
+
+  // ── Manual Save (fallback) ──
+  const handleSaveManual = async () => {
     setSaving(true);
-    const result = await updateWhatsAppConfig(restaurantId, {
-      whatsapp_phone_id: data.whatsapp_phone_id || "",
-      whatsapp_token: data.whatsapp_access_token || "",
-      whatsapp_business_id: data.whatsapp_waba_id || "",
-    });
+    try {
+      const resp = await fetch('/api/whatsapp/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_token: data.whatsapp_access_token || '',
+          waba_id: data.whatsapp_waba_id || '',
+          phone_number_id: data.whatsapp_phone_id || '',
+        }),
+      });
+      const result = await resp.json();
+      if (result.error) toast.error(result.error);
+      else toast.success('WhatsApp configuration saved!');
+    } catch {
+      toast.error('Failed to save configuration');
+    }
     setSaving(false);
-    if (result.error) toast.error(result.error);
-    else toast.success("WhatsApp configuration saved!");
+  };
+
+  // ── Load Profile ──
+  const loadProfile = async () => {
+    setLoadingProfile(true);
+    try {
+      const resp = await fetch('/api/whatsapp/profile');
+      const result = await resp.json();
+      if (result.profile) {
+        setProfile({
+          about: result.profile.about || '',
+          address: result.profile.address || '',
+          description: result.profile.description || '',
+          email: result.profile.email || '',
+          vertical: result.profile.vertical || '',
+          websites: (result.profile.websites || []).join(', '),
+        });
+      }
+    } catch {
+      toast.error('Failed to load profile');
+    }
+    setLoadingProfile(false);
+  };
+
+  // ── Save Profile ──
+  const saveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      const payload: Record<string, unknown> = { ...profile };
+      if (profile.websites) {
+        payload.websites = profile.websites.split(',').map((w: string) => w.trim()).filter(Boolean);
+      } else {
+        payload.websites = [];
+      }
+      const resp = await fetch('/api/whatsapp/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await resp.json();
+      if (result.error) toast.error(result.error);
+      else toast.success('WhatsApp profile updated!');
+    } catch {
+      toast.error('Failed to update profile');
+    }
+    setSavingProfile(false);
+  };
+
+  // ── Load Ice Breakers ──
+  const loadIceBreakers = async () => {
+    setLoadingIce(true);
+    try {
+      const resp = await fetch('/api/whatsapp/ice-breakers');
+      const result = await resp.json();
+      if (result.ice_breakers) {
+        setIceBreakers(result.ice_breakers.map((ib: { question: string }) => ib.question));
+      }
+    } catch {
+      toast.error('Failed to load ice breakers');
+    }
+    setLoadingIce(false);
+  };
+
+  // ── Save Ice Breakers ──
+  const saveIceBreakers = async () => {
+    setSavingIce(true);
+    try {
+      const resp = await fetch('/api/whatsapp/ice-breakers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ice_breakers: iceBreakers.filter(Boolean).map((q) => ({ question: q })),
+        }),
+      });
+      const result = await resp.json();
+      if (result.error) toast.error(result.error);
+      else toast.success(`Ice breakers saved! (${result.count} active)`);
+    } catch {
+      toast.error('Failed to save ice breakers');
+    }
+    setSavingIce(false);
   };
 
   return (
     <div className="space-y-6">
+      {/* Connection Card */}
       <div className="rounded-2xl border border-border/50 bg-card p-6">
-        <h3 className="text-base font-semibold mb-1">WhatsApp Business API</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Connect your WhatsApp Business account to enable the AI chatbot.
-        </p>
-        <div className="space-y-4">
-          {[
-            { key: "whatsapp_phone_id", label: "Phone Number ID", placeholder: "From Meta Business Suite" },
-            { key: "whatsapp_waba_id", label: "WABA ID", placeholder: "WhatsApp Business Account ID" },
-            { key: "whatsapp_access_token", label: "Access Token", placeholder: "Permanent access token" },
-          ].map((field) => (
-            <div key={field.key} className="space-y-2">
-              <label className="text-sm font-medium">{field.label}</label>
-              <input
-                type="password"
-                value={data[field.key] || ""}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                placeholder={field.placeholder}
-                className="flex h-10 w-full rounded-xl border border-input bg-muted/30 px-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
-              />
+        {isConnected ? (
+          <>
+            {/* Connected State */}
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <h3 className="text-base font-semibold text-emerald-600 dark:text-emerald-400">WhatsApp Connected</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Your bot is live and responding to messages.
+                </p>
+              </div>
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-all"
+              >
+                {disconnecting ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                Disconnect
+              </button>
             </div>
-          ))}
-        </div>
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            onClick={handleSaveWhatsApp}
-            disabled={saving}
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Save WhatsApp Config
-          </button>
-        </div>
-        <div className="mt-4 rounded-xl bg-primary/5 border border-primary/20 p-4">
-          <p className="text-sm text-primary font-medium">Webhook URL</p>
-          <code className="mt-1 block text-xs text-muted-foreground break-all">
-            {typeof window !== "undefined"
-              ? window.location.origin
-              : "https://your-domain.com"}
-            /api/webhooks/whatsapp
-          </code>
-        </div>
-
-        {/* Ice Breakers */}
-        <div className="mt-4 rounded-xl border border-border/50 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <p className="text-sm font-medium">Quick Actions (Ice Breakers)</p>
-              <p className="text-xs text-muted-foreground mt-0.5 mb-3">
-                Clickable prompts shown when a customer opens your chat for the first time.
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">Phone Number ID</p>
+                <p className="text-sm font-mono mt-0.5">{data.whatsapp_phone_id?.slice(0, 6)}••••••</p>
+              </div>
+              <div className="rounded-lg bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">WABA ID</p>
+                <p className="text-sm font-mono mt-0.5">{data.whatsapp_waba_id?.slice(0, 6)}••••••</p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Disconnected State */}
+            <div className="text-center py-4">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
+                <MessageSquare className="h-6 w-6 text-emerald-500" />
+              </div>
+              <h3 className="text-base font-semibold mb-1">Connect Your WhatsApp</h3>
+              <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
+                One-click setup — no technical knowledge needed. Connect your restaurant&apos;s WhatsApp number.
               </p>
-              {settingUpIce && iceSteps && (
-                <div className="space-y-2 mt-2">
-                  <a
-                    href={iceManagerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-all"
-                  >
-                    Open WhatsApp Manager →
-                  </a>
-                  <ol className="space-y-1 text-xs text-muted-foreground list-decimal list-inside">
-                    {iceSteps.map((step, i) => (
-                      <li key={i}>{step}</li>
-                    ))}
-                  </ol>
-                  <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 mt-2">
-                    <p className="text-xs font-medium text-primary mb-1">Recommended Ice Breakers:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {["Browse Menu", "View Cart", "Track Order", "Talk to Us"].map((t) => (
-                        <span key={t} className="inline-flex items-center rounded-full bg-card border border-border px-2.5 py-0.5 text-[11px] font-medium">
-                          {t}
-                        </span>
-                      ))}
+              <button
+                onClick={handleConnect}
+                disabled={connecting}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-600 disabled:opacity-50 transition-all"
+              >
+                {connecting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="h-4 w-4" />
+                )}
+                {connecting ? 'Connecting...' : 'Connect with WhatsApp'}
+              </button>
+              <div className="mt-3 flex items-center justify-center gap-4 text-xs text-muted-foreground">
+                <span>✓ Uses your existing number</span>
+                <span>✓ 2 min setup</span>
+              </div>
+            </div>
+
+            {/* Manual Entry Fallback */}
+            <div className="mt-4 border-t border-border/50 pt-4">
+              <button
+                onClick={() => setShowManual(!showManual)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showManual ? '▾ Hide manual entry' : '▸ Advanced: Enter credentials manually'}
+              </button>
+              {showManual && (
+                <div className="mt-3 space-y-3">
+                  {[
+                    { key: 'whatsapp_phone_id', label: 'Phone Number ID', placeholder: 'From Meta Business Suite' },
+                    { key: 'whatsapp_waba_id', label: 'WABA ID', placeholder: 'WhatsApp Business Account ID' },
+                    { key: 'whatsapp_access_token', label: 'Access Token', placeholder: 'Permanent access token' },
+                  ].map((field) => (
+                    <div key={field.key} className="space-y-1.5">
+                      <label className="text-xs font-medium">{field.label}</label>
+                      <input
+                        type="password"
+                        value={data[field.key] || ''}
+                        onChange={(e) => onChange(field.key, e.target.value)}
+                        placeholder={field.placeholder}
+                        className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors font-mono"
+                      />
                     </div>
-                  </div>
+                  ))}
+                  <button
+                    onClick={handleSaveManual}
+                    disabled={saving}
+                    className="inline-flex h-8 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
+                  >
+                    {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    Save & Connect
+                  </button>
                 </div>
               )}
             </div>
-            <button
-              onClick={async () => {
-                if (settingUpIce) {
-                  setSettingUpIce(false);
-                  return;
-                }
-                const result = await setupWhatsAppIceBreakers(restaurantId) as Record<string, unknown>;
-                if (result.error) {
-                  toast.error(result.error as string);
-                } else {
-                  setIceManagerUrl(result.managerUrl as string);
-                  setIceSteps(result.steps as string[]);
-                  setSettingUpIce(true);
-                }
-              }}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 text-xs font-semibold text-primary hover:bg-primary/10 transition-all shrink-0"
-            >
-              {settingUpIce ? "Hide" : "Setup Guide"}
-            </button>
-          </div>
+          </>
+        )}
+
+        {/* Webhook URL — always visible */}
+        <div className="mt-4 rounded-xl bg-primary/5 border border-primary/20 p-4">
+          <p className="text-sm text-primary font-medium">Webhook URL</p>
+          <code className="mt-1 block text-xs text-muted-foreground break-all">
+            {typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/webhooks/whatsapp
+          </code>
         </div>
       </div>
+
+      {/* WhatsApp Business Profile — only when connected */}
+      {isConnected && (
+        <div className="rounded-2xl border border-border/50 bg-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-base font-semibold">WhatsApp Business Profile</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                How your business appears to customers on WhatsApp.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowProfile(!showProfile);
+                if (!showProfile && !profile.about) loadProfile();
+              }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 text-xs font-medium hover:bg-muted transition-all"
+            >
+              {showProfile ? 'Hide' : 'Edit Profile'}
+            </button>
+          </div>
+          {showProfile && (
+            <div className="space-y-3">
+              {loadingProfile ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium">About (short tagline)</label>
+                      <input
+                        type="text"
+                        value={profile.about}
+                        onChange={(e) => setProfile({ ...profile, about: e.target.value })}
+                        placeholder="Best food in town!"
+                        maxLength={139}
+                        className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium">Email</label>
+                      <input
+                        type="email"
+                        value={profile.email}
+                        onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                        placeholder="info@yourbusiness.com"
+                        className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Description</label>
+                    <textarea
+                      value={profile.description}
+                      onChange={(e) => setProfile({ ...profile, description: e.target.value })}
+                      placeholder="Tell customers about your business..."
+                      rows={3}
+                      maxLength={512}
+                      className="flex w-full rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors resize-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium">Address</label>
+                      <input
+                        type="text"
+                        value={profile.address}
+                        onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                        placeholder="123 Main St, City"
+                        className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium">Category</label>
+                      <select
+                        value={profile.vertical}
+                        onChange={(e) => setProfile({ ...profile, vertical: e.target.value })}
+                        className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                      >
+                        <option value="">Select category</option>
+                        <option value="RESTAURANT">Restaurant</option>
+                        <option value="FOOD">Food & Beverages</option>
+                        <option value="RETAIL">Retail</option>
+                        <option value="HOTEL">Hotel / Hospitality</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Website(s) <span className="text-muted-foreground">(comma-separated)</span></label>
+                    <input
+                      type="text"
+                      value={profile.websites}
+                      onChange={(e) => setProfile({ ...profile, websites: e.target.value })}
+                      placeholder="https://yourbusiness.com"
+                      className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                    />
+                  </div>
+                  <button
+                    onClick={saveProfile}
+                    disabled={savingProfile}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
+                  >
+                    {savingProfile ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save Profile
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Ice Breakers — only when connected */}
+      {isConnected && (
+        <div className="rounded-2xl border border-border/50 bg-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-base font-semibold">❄️ Ice Breakers</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Quick-tap questions shown when customers open your chat (max 4).
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowIceBreakers(!showIceBreakers);
+                if (!showIceBreakers && iceBreakers.length === 0) loadIceBreakers();
+              }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 text-xs font-medium hover:bg-muted transition-all"
+            >
+              {showIceBreakers ? 'Hide' : 'Configure'}
+            </button>
+          </div>
+          {showIceBreakers && (
+            <div className="space-y-3">
+              {loadingIce ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  {iceBreakers.map((q, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-5">{i + 1}.</span>
+                      <input
+                        type="text"
+                        value={q}
+                        onChange={(e) => {
+                          const updated = [...iceBreakers];
+                          updated[i] = e.target.value;
+                          setIceBreakers(updated);
+                        }}
+                        maxLength={80}
+                        placeholder="e.g., Show me the menu"
+                        className="flex-1 h-9 rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
+                      />
+                      <button
+                        onClick={() => setIceBreakers(iceBreakers.filter((_, idx) => idx !== i))}
+                        className="text-muted-foreground hover:text-destructive transition-colors text-lg leading-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {iceBreakers.length < 4 && (
+                    <button
+                      onClick={() => setIceBreakers([...iceBreakers, ''])}
+                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-dashed border-border px-3 text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all"
+                    >
+                      + Add ice breaker
+                    </button>
+                  )}
+                  <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
+                    <p className="text-xs font-medium text-primary mb-1.5">Suggested for restaurants:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['📋 Show me the menu', '🛒 Track my order', '⏰ What are your hours?', '📞 Talk to us'].map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          onClick={() => {
+                            if (iceBreakers.length < 4 && !iceBreakers.includes(suggestion)) {
+                              setIceBreakers([...iceBreakers, suggestion]);
+                            }
+                          }}
+                          disabled={iceBreakers.length >= 4 || iceBreakers.includes(suggestion)}
+                          className="inline-flex items-center rounded-full bg-card border border-border px-2.5 py-0.5 text-[11px] font-medium hover:border-primary/50 disabled:opacity-40 transition-all cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={saveIceBreakers}
+                    disabled={savingIce}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
+                  >
+                    {savingIce ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Save Ice Breakers
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Bot Commands — info only */}
+          <div className="mt-4 border-t border-border/50 pt-4">
+            <p className="text-xs font-medium mb-2">🤖 Bot Commands (auto-handled)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { cmd: 'menu', desc: 'Shows your menu' },
+                { cmd: 'cart', desc: 'Customer cart' },
+                { cmd: 'orders', desc: 'Order history' },
+                { cmd: 'help', desc: 'Help message' },
+              ].map((c) => (
+                <span key={c.cmd} className="inline-flex items-center gap-1.5 rounded-full bg-muted/50 border border-border px-2.5 py-1 text-[11px]">
+                  <code className="font-mono font-semibold">{c.cmd}</code>
+                  <span className="text-muted-foreground">→ {c.desc}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

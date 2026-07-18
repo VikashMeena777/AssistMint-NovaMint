@@ -329,44 +329,114 @@ export default function OnboardingWizard() {
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-white">Connect WhatsApp</h2>
               <p className="text-white/40 text-sm">
-                Enter your Meta Cloud API credentials.{' '}
-                <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline">
-                  Get them here →
-                </a>
+                Connect your WhatsApp Business number so customers can message you directly.
               </p>
 
-              <div>
-                <label className="block text-sm text-white/60 mb-1">Phone Number ID *</label>
-                <input
-                  type="text"
-                  value={whatsapp.whatsapp_phone_id}
-                  onChange={(e) => setWhatsApp({ ...whatsapp, whatsapp_phone_id: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none font-mono text-sm"
-                  placeholder="1234567890"
-                />
+              {/* Embedded Signup Button */}
+              <button
+                onClick={() => {
+                  const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '';
+                  if (!window.FB || !META_CONFIG_ID) {
+                    // Fallback to manual if SDK not available
+                    toast.error('Embedded Signup not available. Use manual entry or skip for now.');
+                    return;
+                  }
+                  setLoading(true);
+                  window.FB.login(
+                    (response) => {
+                      if (response.authResponse?.code) {
+                        fetch('/api/whatsapp/connect', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ code: response.authResponse.code }),
+                        })
+                          .then((r) => r.json())
+                          .then((result) => {
+                            setLoading(false);
+                            if (result.error) {
+                              setError(result.error);
+                            } else {
+                              toast.success('WhatsApp connected! 🎉');
+                              setStep(2);
+                            }
+                          })
+                          .catch(() => {
+                            setLoading(false);
+                            setError('Connection failed. Try again or skip.');
+                          });
+                      } else {
+                        setLoading(false);
+                      }
+                    },
+                    {
+                      config_id: META_CONFIG_ID,
+                      response_type: 'code',
+                      override_default_response_type: true,
+                      extras: {
+                        setup: { solutionID: META_CONFIG_ID },
+                        featureType: '',
+                        sessionInfoVersion: 2,
+                      },
+                    }
+                  );
+                }}
+                disabled={loading}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {loading ? 'Connecting...' : '🟢 Connect with WhatsApp'}
+              </button>
+
+              <div className="flex items-center justify-center gap-3 text-xs text-white/30">
+                <span>✓ One-click setup</span>
+                <span>•</span>
+                <span>✓ Uses your existing number</span>
               </div>
 
-              <div>
-                <label className="block text-sm text-white/60 mb-1">Permanent Access Token *</label>
-                <input
-                  type="password"
-                  value={whatsapp.whatsapp_token}
-                  onChange={(e) => setWhatsApp({ ...whatsapp, whatsapp_token: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none font-mono text-sm"
-                  placeholder="EAAxx..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-white/60 mb-1">Business Account ID (optional)</label>
-                <input
-                  type="text"
-                  value={whatsapp.whatsapp_business_id}
-                  onChange={(e) => setWhatsApp({ ...whatsapp, whatsapp_business_id: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none font-mono text-sm"
-                  placeholder="1234567890"
-                />
-              </div>
+              {/* Manual Entry (collapsible) */}
+              <details className="group">
+                <summary className="text-xs text-white/30 cursor-pointer hover:text-white/50 transition-colors">
+                  ▸ Advanced: Enter credentials manually
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">Phone Number ID *</label>
+                    <input
+                      type="text"
+                      value={whatsapp.whatsapp_phone_id}
+                      onChange={(e) => setWhatsApp({ ...whatsapp, whatsapp_phone_id: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none font-mono text-sm"
+                      placeholder="1234567890"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">Access Token *</label>
+                    <input
+                      type="password"
+                      value={whatsapp.whatsapp_token}
+                      onChange={(e) => setWhatsApp({ ...whatsapp, whatsapp_token: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none font-mono text-sm"
+                      placeholder="EAAxx..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">WABA ID (optional)</label>
+                    <input
+                      type="text"
+                      value={whatsapp.whatsapp_business_id}
+                      onChange={(e) => setWhatsApp({ ...whatsapp, whatsapp_business_id: e.target.value })}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none font-mono text-sm"
+                      placeholder="1234567890"
+                    />
+                  </div>
+                  <button
+                    onClick={handleWhatsAppConfig}
+                    disabled={loading}
+                    className="w-full bg-emerald-500/80 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
+                  >
+                    {loading ? 'Saving...' : 'Save & Continue →'}
+                  </button>
+                </div>
+              </details>
 
               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-300">
                 <strong>Webhook URL:</strong>
@@ -375,21 +445,12 @@ export default function OnboardingWizard() {
                 </code>
               </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setStep(2)}
-                  className="flex-1 bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
-                >
-                  Skip for now
-                </button>
-                <button
-                  onClick={handleWhatsAppConfig}
-                  disabled={loading}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
-                >
-                  {loading ? 'Saving...' : 'Connect →'}
-                </button>
-              </div>
+              <button
+                onClick={() => setStep(2)}
+                className="w-full bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
+              >
+                Skip for now — configure later in Settings
+              </button>
             </div>
           )}
 

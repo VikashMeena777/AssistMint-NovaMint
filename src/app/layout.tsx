@@ -3,6 +3,7 @@ import { Inter, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { PostHogProvider } from "@/lib/analytics/posthog-provider";
+import Script from "next/script";
 import "./globals.css";
 
 const inter = Inter({
@@ -85,6 +86,21 @@ export default function RootLayout({
             }}
           />
         </ThemeProvider>
+        {/* Facebook SDK for WhatsApp Embedded Signup */}
+        {process.env.NEXT_PUBLIC_META_APP_ID && (
+          <Script
+            src="https://connect.facebook.net/en_US/sdk.js"
+            strategy="lazyOnload"
+            onLoad={() => {
+              window.FB?.init({
+                appId: process.env.NEXT_PUBLIC_META_APP_ID!,
+                cookie: true,
+                xfbml: false,
+                version: 'v21.0',
+              });
+            }}
+          />
+        )}
       </body>
     </html>
   );

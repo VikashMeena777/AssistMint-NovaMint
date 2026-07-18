@@ -538,3 +538,64 @@ export interface PlanConfig {
   branding: boolean;
   languages: string[];
 }
+
+// ─── WhatsApp Business Profile ──────────────
+export interface WhatsAppBusinessProfile {
+  about?: string;
+  address?: string;
+  description?: string;
+  email?: string;
+  profile_picture_url?: string;
+  vertical?: string;
+  websites?: string[];
+}
+
+// ─── Ice Breakers ───────────────────────────
+export interface IceBreaker {
+  question: string;
+}
+
+// ─── Campaign Limits (per plan) ─────────────
+export interface CampaignLimits {
+  campaigns_per_month: number;
+  messages_per_campaign: number;
+  daily_send_cap: number;
+}
+
+export const CAMPAIGN_LIMITS: Record<PlanTier, CampaignLimits> = {
+  free: { campaigns_per_month: 0, messages_per_campaign: 0, daily_send_cap: 0 },
+  starter: { campaigns_per_month: 2, messages_per_campaign: 100, daily_send_cap: 50 },
+  growth: { campaigns_per_month: 10, messages_per_campaign: 500, daily_send_cap: 200 },
+  enterprise: { campaigns_per_month: 50, messages_per_campaign: 2000, daily_send_cap: 1000 },
+};
+
+// ─── Facebook SDK Types ─────────────────────
+export interface FBLoginResponse {
+  authResponse?: {
+    accessToken: string;
+    code?: string;
+    userID: string;
+    expiresIn: number;
+  };
+  status: 'connected' | 'not_authorized' | 'unknown';
+}
+
+declare global {
+  interface Window {
+    FB?: {
+      init: (params: { appId: string; cookie: boolean; xfbml: boolean; version: string }) => void;
+      login: (
+        callback: (response: FBLoginResponse) => void,
+        options?: {
+          config_id?: string;
+          response_type?: string;
+          override_default_response_type?: boolean;
+          extras?: Record<string, unknown>;
+        }
+      ) => void;
+      getLoginStatus: (callback: (response: FBLoginResponse) => void) => void;
+    };
+    fbAsyncInit?: () => void;
+  }
+}
+
