@@ -20,6 +20,7 @@ import {
   Zap,
   PhoneCall,
   CheckCircle2,
+  Camera,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -493,11 +494,14 @@ function WhatsAppSettings({
   });
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingPfp, setUploadingPfp] = useState(false);
 
   // Ice breaker state
   const [iceBreakers, setIceBreakers] = useState<string[]>([]);
   const [loadingIce, setLoadingIce] = useState(false);
   const [savingIce, setSavingIce] = useState(false);
+
+  const [waitingForPopup, setWaitingForPopup] = useState(false);
 
   const isConnected = !!(data.whatsapp_phone_id && data.whatsapp_access_token);
   const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '';
@@ -545,13 +549,17 @@ function WhatsAppSettings({
 
     // Reset session info
     sessionInfoRef.current = {};
-    setConnecting(true);
+    setWaitingForPopup(true);
 
     try {
       window.FB.login(
         (response) => {
+          setWaitingForPopup(false);
+
           if (response.authResponse?.code) {
-            // Exchange code for token via our API, include session info IDs
+            // Popup closed with auth code — NOW show the connecting animation
+            setConnecting(true);
+
             fetch('/api/whatsapp/connect', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -580,7 +588,6 @@ function WhatsAppSettings({
                 setConnecting(false);
               });
           } else {
-            setConnecting(false);
             if (response.status !== 'unknown') {
               toast.error('Login cancelled or failed. Try manual entry below.');
               setShowManual(true);
@@ -597,6 +604,7 @@ function WhatsAppSettings({
     } catch {
       toast.error('Embedded Signup failed. Enter credentials manually below.');
       setShowManual(true);
+      setWaitingForPopup(false);
       setConnecting(false);
     }
   };
@@ -691,6 +699,40 @@ function WhatsAppSettings({
       toast.error('Failed to update profile');
     }
     setSavingProfile(false);
+  };
+
+  // ── Upload Profile Picture ──
+  const handlePfpUpload = async (file: File) => {
+    if (!file) return;
+    // Validate file type and size (max 5MB, JPEG/PNG only)
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      toast.error('Only JPEG and PNG images are supported.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5MB.');
+      return;
+    }
+    setUploadingPfp(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const resp = await fetch('/api/whatsapp/profile/picture', {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await resp.json();
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success('Profile picture updated!');
+        // Refresh profile to get new URL
+        loadProfile();
+      }
+    } catch {
+      toast.error('Failed to upload profile picture.');
+    }
+    setUploadingPfp(false);
   };
 
   // ── Load Ice Breakers ──
@@ -791,7 +833,6 @@ function WhatsAppSettings({
                 const StepIcon = step.icon;
                 const isActive = connectStep === i;
                 const isDone = connectStep > i;
-                const isPending = connectStep < i;
 
                 return (
                   <div
@@ -860,10 +901,15 @@ function WhatsAppSettings({
               </p>
               <button
                 onClick={handleConnect}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-600 hover:scale-105 active:scale-95 transition-all"
+                disabled={waitingForPopup}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-600 hover:scale-105 active:scale-95 disabled:opacity-70 disabled:cursor-wait transition-all"
               >
-                <MessageSquare className="h-4 w-4" />
-                Connect with WhatsApp
+                {waitingForPopup ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="h-4 w-4" />
+                )}
+                {waitingForPopup ? 'Waiting for Facebook...' : 'Connect with WhatsApp'}
               </button>
               <div className="mt-3 flex items-center justify-center gap-4 text-xs text-muted-foreground">
                 <span>✓ Uses your existing number</span>
@@ -948,22 +994,47 @@ function WhatsAppSettings({
                 </div>
               ) : (
                 <>
-                  {/* Profile Picture Preview */}
-                  {profile.profile_picture_url && (
-                    <div className="flex items-center gap-4 mb-2">
-                      <div className="relative h-16 w-16 rounded-full overflow-hidden border-2 border-emerald-500/30 shadow-lg">
-                        <img
-                          src={profile.profile_picture_url}
-                          alt="WhatsApp profile"
-                          className="h-full w-full object-cover"
+                  {/* Profile Picture */}
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="relative group">
+                      <div className="h-20 w-20 rounded-full overflow-hidden border-2 border-border/50 shadow-lg bg-muted/30">
+                        {profile.profile_picture_url ? (
+                          <img
+                            src={profile.profile_picture_url}
+                            alt="WhatsApp profile"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center">
+                            <MessageSquare className="h-8 w-8 text-muted-foreground/40" />
+                          </div>
+                        )}
+                      </div>
+                      {/* Upload overlay */}
+                      <label className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                        {uploadingPfp ? (
+                          <Loader2 className="h-5 w-5 text-white animate-spin" />
+                        ) : (
+                          <Camera className="h-5 w-5 text-white" />
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handlePfpUpload(file);
+                            e.target.value = '';
+                          }}
+                          disabled={uploadingPfp}
                         />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">Profile Picture</p>
-                        <p className="text-xs text-muted-foreground">Update this from your WhatsApp app or Meta Business Suite.</p>
-                      </div>
+                      </label>
                     </div>
-                  )}
+                    <div>
+                      <p className="text-sm font-medium">Profile Picture</p>
+                      <p className="text-xs text-muted-foreground">Hover to change · JPEG/PNG, max 5MB</p>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium">About <span className="text-muted-foreground">(tagline, max 139 chars)</span></label>
