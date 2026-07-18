@@ -69,7 +69,7 @@ export async function GET(req: Request) {
 
       // Send reminder
       try {
-        await fetch(`https://graph.facebook.com/v21.0/${rest.whatsapp_phone_id}/messages`, {
+        await fetch(`https://graph.facebook.com/v25.0/${rest.whatsapp_phone_id}/messages`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${rest.whatsapp_access_token}`,

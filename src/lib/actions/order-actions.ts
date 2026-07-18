@@ -214,7 +214,7 @@ async function sendOrderStatusWhatsApp(
   msg = msg.replace(/RESTAURANT/g, restaurant.name || '');
 
   try {
-    await fetch(`https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`, {
+    await fetch(`https://graph.facebook.com/v25.0/${restaurant.whatsapp_phone_id}/messages`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${restaurant.whatsapp_access_token}`,

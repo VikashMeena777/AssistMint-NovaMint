@@ -10,7 +10,7 @@ import { createServerClient } from '@supabase/ssr';
 
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || '';
 const META_APP_SECRET = process.env.META_APP_SECRET || '';
-const GRAPH_API = 'https://graph.facebook.com/v21.0';
+const GRAPH_API = 'https://graph.facebook.com/v25.0';
 
 // Admin client for DB writes
 const supabaseAdmin = createClient(

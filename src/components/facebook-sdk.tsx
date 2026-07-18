@@ -10,13 +10,14 @@ export default function FacebookSDK() {
   return (
     <Script
       src="https://connect.facebook.net/en_US/sdk.js"
-      strategy="lazyOnload"
+      strategy="afterInteractive"
       onLoad={() => {
         window.FB?.init({
           appId: META_APP_ID,
+          autoLogAppEvents: true,
           cookie: true,
-          xfbml: false,
-          version: 'v21.0',
+          xfbml: true,
+          version: 'v25.0',
         });
       }}
     />

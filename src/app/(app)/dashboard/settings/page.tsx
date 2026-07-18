@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Store,
   Bot,
@@ -476,7 +476,33 @@ function WhatsAppSettings({
   const isConnected = !!(data.whatsapp_phone_id && data.whatsapp_access_token);
   const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '';
 
-  // ── Embedded Signup ──
+  // ── Embedded Signup (v4) ──
+  // Store session info from postMessage (WABA ID + Phone Number ID)
+  const sessionInfoRef = useRef<{ waba_id?: string; phone_number_id?: string }>({});
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return;
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data.type === 'WA_EMBEDDED_SIGNUP') {
+          // data.data contains { phone_number_id, waba_id }
+          if (data.data?.phone_number_id) {
+            sessionInfoRef.current = {
+              waba_id: data.data.waba_id,
+              phone_number_id: data.data.phone_number_id,
+            };
+          }
+        }
+      } catch {
+        // Not a JSON message, ignore
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const handleConnect = () => {
     // Try Embedded Signup first
     if (!window.FB) {
@@ -491,17 +517,23 @@ function WhatsAppSettings({
       return;
     }
 
+    // Reset session info
+    sessionInfoRef.current = {};
     setConnecting(true);
 
     try {
       window.FB.login(
         (response) => {
           if (response.authResponse?.code) {
-            // Exchange code for token via our API
+            // Exchange code for token via our API, include session info IDs
             fetch('/api/whatsapp/connect', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ code: response.authResponse.code }),
+              body: JSON.stringify({
+                code: response.authResponse.code,
+                waba_id: sessionInfoRef.current.waba_id,
+                phone_number_id: sessionInfoRef.current.phone_number_id,
+              }),
             })
               .then((r) => r.json())
               .then((result) => {
@@ -533,11 +565,7 @@ function WhatsAppSettings({
           config_id: META_CONFIG_ID,
           response_type: 'code',
           override_default_response_type: true,
-          extras: {
-            setup: { solutionID: META_CONFIG_ID },
-            featureType: '',
-            sessionInfoVersion: 2,
-          },
+          extras: { version: 'v4' },
         }
       );
     } catch {

@@ -2,7 +2,7 @@
 // AssistMint — WhatsApp Cloud API Client
 // ============================================
 
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v21.0';
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v25.0';
 
 export function sanitizeWhatsAppNumber(phone: string): string {
   let clean = phone.trim().replace(/\D/g, ''); // Keep only digits
