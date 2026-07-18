@@ -16,6 +16,10 @@ import {
   Check,
   ArrowUpRight,
   Sparkles,
+  Shield,
+  Zap,
+  PhoneCall,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -456,14 +460,36 @@ function WhatsAppSettings({
 }) {
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [connectStep, setConnectStep] = useState(0);
   const [disconnecting, setDisconnecting] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showIceBreakers, setShowIceBreakers] = useState(false);
 
+  // Animated connecting steps
+  const CONNECT_STEPS = [
+    { icon: Shield, label: 'Authenticating with Meta', color: 'text-blue-400' },
+    { icon: Zap, label: 'Exchanging access token', color: 'text-amber-400' },
+    { icon: Webhook, label: 'Subscribing to webhooks', color: 'text-purple-400' },
+    { icon: PhoneCall, label: 'Registering phone number', color: 'text-cyan-400' },
+    { icon: CheckCircle2, label: 'Connected! Bot is live', color: 'text-emerald-400' },
+  ];
+
+  // Auto-progress connecting steps for visual feedback
+  useEffect(() => {
+    if (!connecting) {
+      setConnectStep(0);
+      return;
+    }
+    const timers = [1200, 2800, 4400, 6000].map((delay, i) =>
+      setTimeout(() => setConnectStep(i + 1), delay)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [connecting]);
+
   // Profile state
   const [profile, setProfile] = useState({
-    about: '', address: '', description: '', email: '', vertical: '', websites: '' as string,
+    about: '', address: '', description: '', email: '', vertical: '', websites: '' as string, profile_picture_url: '' as string,
   });
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -632,6 +658,7 @@ function WhatsAppSettings({
           email: result.profile.email || '',
           vertical: result.profile.vertical || '',
           websites: (result.profile.websites || []).join(', '),
+          profile_picture_url: result.profile.profile_picture_url || '',
         });
       }
     } catch {
@@ -644,7 +671,9 @@ function WhatsAppSettings({
   const saveProfile = async () => {
     setSavingProfile(true);
     try {
-      const payload: Record<string, unknown> = { ...profile };
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { profile_picture_url, ...editableProfile } = profile;
+      const payload: Record<string, unknown> = { ...editableProfile };
       if (profile.websites) {
         payload.websites = profile.websites.split(',').map((w: string) => w.trim()).filter(Boolean);
       } else {
@@ -736,6 +765,88 @@ function WhatsAppSettings({
               </div>
             </div>
           </>
+        ) : connecting ? (
+          /* ── Rich Connecting Animation Overlay ── */
+          <div className="py-6 px-2">
+            <div className="text-center mb-8">
+              {/* Animated WhatsApp icon with pulse ring */}
+              <div className="relative mx-auto mb-4 h-16 w-16">
+                <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping" />
+                <div className="absolute inset-1 rounded-full bg-emerald-500/10 animate-pulse" />
+                <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-xl shadow-emerald-500/30">
+                  <MessageSquare className="h-7 w-7 text-white" />
+                </div>
+              </div>
+              <h3 className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+                Setting Up Your Bot
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                This usually takes 5-10 seconds
+              </p>
+            </div>
+
+            {/* Progress Steps */}
+            <div className="max-w-xs mx-auto space-y-3">
+              {CONNECT_STEPS.map((step, i) => {
+                const StepIcon = step.icon;
+                const isActive = connectStep === i;
+                const isDone = connectStep > i;
+                const isPending = connectStep < i;
+
+                return (
+                  <div
+                    key={i}
+                    className={`flex items-center gap-3 rounded-xl px-4 py-2.5 transition-all duration-500 ${
+                      isActive
+                        ? 'bg-primary/10 border border-primary/20 scale-[1.02]'
+                        : isDone
+                        ? 'bg-emerald-500/5 border border-emerald-500/10'
+                        : 'opacity-30 border border-transparent'
+                    }`}
+                  >
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-500 ${
+                      isDone
+                        ? 'bg-emerald-500/20'
+                        : isActive
+                        ? 'bg-primary/20'
+                        : 'bg-muted/30'
+                    }`}>
+                      {isDone ? (
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      ) : isActive ? (
+                        <StepIcon className={`h-4 w-4 ${step.color} animate-pulse`} />
+                      ) : (
+                        <StepIcon className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <span className={`text-sm font-medium transition-colors duration-500 ${
+                      isDone ? 'text-emerald-500' : isActive ? 'text-foreground' : 'text-muted-foreground'
+                    }`}>
+                      {step.label}
+                    </span>
+                    {isActive && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground ml-auto" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Animated progress bar */}
+            <div className="max-w-xs mx-auto mt-6">
+              <div className="h-1.5 w-full rounded-full bg-muted/30 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-400 transition-all duration-1000 ease-out"
+                  style={{ width: `${Math.min(((connectStep + 1) / CONNECT_STEPS.length) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Fun fact while waiting */}
+            <p className="text-center text-[11px] text-muted-foreground/60 mt-4 italic">
+              💡 Tip: Your AI bot will automatically respond to customer messages once connected.
+            </p>
+          </div>
         ) : (
           <>
             {/* Disconnected State */}
@@ -749,15 +860,10 @@ function WhatsAppSettings({
               </p>
               <button
                 onClick={handleConnect}
-                disabled={connecting}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-600 disabled:opacity-50 transition-all"
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-600 hover:scale-105 active:scale-95 transition-all"
               >
-                {connecting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <MessageSquare className="h-4 w-4" />
-                )}
-                {connecting ? 'Connecting...' : 'Connect with WhatsApp'}
+                <MessageSquare className="h-4 w-4" />
+                Connect with WhatsApp
               </button>
               <div className="mt-3 flex items-center justify-center gap-4 text-xs text-muted-foreground">
                 <span>✓ Uses your existing number</span>
@@ -842,9 +948,25 @@ function WhatsAppSettings({
                 </div>
               ) : (
                 <>
+                  {/* Profile Picture Preview */}
+                  {profile.profile_picture_url && (
+                    <div className="flex items-center gap-4 mb-2">
+                      <div className="relative h-16 w-16 rounded-full overflow-hidden border-2 border-emerald-500/30 shadow-lg">
+                        <img
+                          src={profile.profile_picture_url}
+                          alt="WhatsApp profile"
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Profile Picture</p>
+                        <p className="text-xs text-muted-foreground">Update this from your WhatsApp app or Meta Business Suite.</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium">About (short tagline)</label>
+                      <label className="text-xs font-medium">About <span className="text-muted-foreground">(tagline, max 139 chars)</span></label>
                       <input
                         type="text"
                         value={profile.about}
@@ -861,34 +983,37 @@ function WhatsAppSettings({
                         value={profile.email}
                         onChange={(e) => setProfile({ ...profile, email: e.target.value })}
                         placeholder="info@yourbusiness.com"
+                        maxLength={128}
                         className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
                       />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium">Description</label>
+                    <label className="text-xs font-medium">Description <span className="text-muted-foreground">(max 512 chars)</span></label>
                     <textarea
                       value={profile.description}
                       onChange={(e) => setProfile({ ...profile, description: e.target.value })}
-                      placeholder="Tell customers about your business..."
+                      placeholder="Tell customers about your restaurant, cuisine style, specialties..."
                       rows={3}
                       maxLength={512}
                       className="flex w-full rounded-lg border border-input bg-muted/30 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors resize-none"
                     />
+                    <p className="text-[11px] text-muted-foreground text-right">{profile.description.length}/512</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Address</label>
+                      <label className="text-xs font-medium">Address <span className="text-muted-foreground">(max 256 chars)</span></label>
                       <input
                         type="text"
                         value={profile.address}
                         onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-                        placeholder="123 Main St, City"
+                        placeholder="123 Main St, Mumbai, Maharashtra"
+                        maxLength={256}
                         className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Category</label>
+                      <label className="text-xs font-medium">Business Category</label>
                       <select
                         value={profile.vertical}
                         onChange={(e) => setProfile({ ...profile, vertical: e.target.value })}
@@ -899,19 +1024,26 @@ function WhatsAppSettings({
                         <option value="FOOD">Food & Beverages</option>
                         <option value="RETAIL">Retail</option>
                         <option value="HOTEL">Hotel / Hospitality</option>
+                        <option value="BEAUTY">Beauty & Spa</option>
+                        <option value="EDU">Education</option>
+                        <option value="ENTERTAIN">Entertainment</option>
+                        <option value="HEALTH">Health & Medical</option>
+                        <option value="PROF_SERVICES">Professional Services</option>
+                        <option value="TRAVEL">Travel & Tourism</option>
                         <option value="OTHER">Other</option>
                       </select>
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium">Website(s) <span className="text-muted-foreground">(comma-separated)</span></label>
+                    <label className="text-xs font-medium">Websites <span className="text-muted-foreground">(comma-separated, max 2)</span></label>
                     <input
                       type="text"
                       value={profile.websites}
                       onChange={(e) => setProfile({ ...profile, websites: e.target.value })}
-                      placeholder="https://yourbusiness.com"
+                      placeholder="https://yourbusiness.com, https://instagram.com/yourbrand"
                       className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
                     />
+                    <p className="text-[11px] text-muted-foreground">Add your website, social media links, or online ordering page.</p>
                   </div>
                   <button
                     onClick={saveProfile}
