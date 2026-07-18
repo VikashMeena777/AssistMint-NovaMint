@@ -478,13 +478,8 @@ function WhatsAppSettings({
 
   // ── Embedded Signup ──
   const handleConnect = () => {
-    if (!window.FB) {
-      toast.error('Facebook SDK not loaded. Please refresh the page.');
-      return;
-    }
-
-    if (!META_CONFIG_ID) {
-      toast.error('Embedded Signup not configured yet. Use manual entry below.');
+    // If FB SDK or config not available, go straight to manual entry
+    if (!window.FB || !META_CONFIG_ID) {
       setShowManual(true);
       return;
     }

@@ -337,8 +337,9 @@ export default function OnboardingWizard() {
                 onClick={() => {
                   const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '';
                   if (!window.FB || !META_CONFIG_ID) {
-                    // Fallback to manual if SDK not available
-                    toast.error('Embedded Signup not available. Use manual entry or skip for now.');
+                    // SDK not ready — skip to next step, user can configure in Settings later
+                    toast.info('WhatsApp setup available in Settings after onboarding.');
+                    setStep(2);
                     return;
                   }
                   setLoading(true);
