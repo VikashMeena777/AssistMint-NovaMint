@@ -14,14 +14,8 @@ const APP_SECRET = process.env.WHATSAPP_APP_SECRET || '';
 
 // ─── Signature Verification ─────────────────
 function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
-  if (!APP_SECRET) {
-    console.log('[WhatsApp Webhook] No APP_SECRET configured — skipping signature check');
-    return true;
-  }
-  if (!signatureHeader) {
-    console.error('[WhatsApp Webhook] No x-hub-signature-256 header present');
-    return false;
-  }
+  if (!APP_SECRET) return true; // skip if secret not configured (dev mode)
+  if (!signatureHeader) return false;
 
   const expectedSignature = crypto
     .createHmac('sha256', APP_SECRET)
@@ -30,16 +24,12 @@ function verifySignature(rawBody: string, signatureHeader: string | null): boole
 
   const receivedSignature = signatureHeader.replace('sha256=', '');
 
-  // DEBUG: Log signature comparison (remove after debugging)
-  console.log(`[WhatsApp Webhook] Signature check — received: ${receivedSignature.substring(0, 16)}... expected: ${expectedSignature.substring(0, 16)}... secret_len: ${APP_SECRET.length}`);
-
   try {
     return crypto.timingSafeEqual(
       Buffer.from(expectedSignature, 'hex'),
       Buffer.from(receivedSignature, 'hex')
     );
-  } catch (err) {
-    console.error('[WhatsApp Webhook] Signature comparison error:', err);
+  } catch {
     return false;
   }
 }
@@ -81,9 +71,6 @@ function markProcessed(msgId: string) {
 }
 
 export async function POST(req: NextRequest) {
-  // DEBUG: First thing — log that we received a POST (remove after debugging)
-  console.log(`[WhatsApp Webhook] ⚡ POST received at ${new Date().toISOString()} from ${req.headers.get('x-forwarded-for') || 'unknown'}`);
-
   try {
     // Rate limit check
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'anonymous';
