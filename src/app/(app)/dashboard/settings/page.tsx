@@ -495,6 +495,7 @@ function WhatsAppSettings({
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingPfp, setUploadingPfp] = useState(false);
+  const profileLoadedRef = useRef(false);
 
   // Ice breaker state
   const [iceBreakers, setIceBreakers] = useState<string[]>([]);
@@ -979,7 +980,10 @@ function WhatsAppSettings({
             <button
               onClick={() => {
                 setShowProfile(!showProfile);
-                if (!showProfile && !profile.about) loadProfile();
+                if (!showProfile && !profileLoadedRef.current) {
+                  profileLoadedRef.current = true;
+                  loadProfile();
+                }
               }}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 text-xs font-medium hover:bg-muted transition-all"
             >

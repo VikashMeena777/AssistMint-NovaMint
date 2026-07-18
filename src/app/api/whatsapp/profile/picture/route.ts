@@ -66,6 +66,10 @@ export async function POST(req: NextRequest) {
     const accessToken = restaurant.whatsapp_access_token;
     const appId = process.env.NEXT_PUBLIC_META_APP_ID;
 
+    if (!appId) {
+      return NextResponse.json({ error: 'Meta App ID not configured' }, { status: 500 });
+    }
+
     // Step 1: Create upload session via Resumable Upload API
     const sessionResp = await fetch(
       `${GRAPH_API}/${appId}/uploads?file_length=${file.size}&file_type=${file.type}&access_token=${accessToken}`,
