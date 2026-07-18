@@ -337,9 +337,11 @@ export default function OnboardingWizard() {
                 onClick={() => {
                   const META_CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || '';
                   if (!window.FB || !META_CONFIG_ID) {
-                    // SDK not ready — skip to next step, user can configure in Settings later
-                    toast.info('WhatsApp setup available in Settings after onboarding.');
-                    setStep(2);
+                    // SDK not ready — show manual entry so user can connect
+                    toast.error('One-click setup not available yet. Enter credentials manually below.');
+                    // Open the details element programmatically
+                    const details = document.querySelector('details.group') as HTMLDetailsElement;
+                    if (details) details.open = true;
                     return;
                   }
                   setLoading(true);
