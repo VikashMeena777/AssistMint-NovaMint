@@ -1041,7 +1041,7 @@ function WhatsAppSettings({
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium">About <span className="text-muted-foreground">(tagline, max 139 chars)</span></label>
+                      <label className="text-xs font-medium">About <span className="text-muted-foreground">(tagline)</span></label>
                       <input
                         type="text"
                         value={profile.about}
@@ -1050,6 +1050,7 @@ function WhatsAppSettings({
                         maxLength={139}
                         className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
                       />
+                      <p className="text-[11px] text-muted-foreground text-right">{profile.about.length}/139</p>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium">Email</label>
@@ -1061,6 +1062,7 @@ function WhatsAppSettings({
                         maxLength={128}
                         className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
                       />
+                      <p className="text-[11px] text-muted-foreground text-right">{profile.email.length}/128</p>
                     </div>
                   </div>
                   <div className="space-y-1.5">
@@ -1077,7 +1079,7 @@ function WhatsAppSettings({
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Address <span className="text-muted-foreground">(max 256 chars)</span></label>
+                      <label className="text-xs font-medium">Address</label>
                       <input
                         type="text"
                         value={profile.address}
@@ -1086,6 +1088,7 @@ function WhatsAppSettings({
                         maxLength={256}
                         className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
                       />
+                      <p className="text-[11px] text-muted-foreground text-right">{profile.address.length}/256</p>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium">Business Category</label>
@@ -1096,21 +1099,27 @@ function WhatsAppSettings({
                       >
                         <option value="">Select category</option>
                         <option value="RESTAURANT">Restaurant</option>
-                        <option value="FOOD">Food & Beverages</option>
+                        <option value="GROCERY">Grocery</option>
                         <option value="RETAIL">Retail</option>
                         <option value="HOTEL">Hotel / Hospitality</option>
                         <option value="BEAUTY">Beauty & Spa</option>
+                        <option value="APPAREL">Apparel / Fashion</option>
                         <option value="EDU">Education</option>
                         <option value="ENTERTAIN">Entertainment</option>
+                        <option value="EVENT_PLAN">Event Planning</option>
+                        <option value="FINANCE">Finance</option>
                         <option value="HEALTH">Health & Medical</option>
+                        <option value="NONPROFIT">Non-Profit</option>
+                        <option value="GOVT">Government</option>
                         <option value="PROF_SERVICES">Professional Services</option>
+                        <option value="AUTO">Automotive</option>
                         <option value="TRAVEL">Travel & Tourism</option>
                         <option value="OTHER">Other</option>
                       </select>
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium">Websites <span className="text-muted-foreground">(comma-separated, max 2)</span></label>
+                    <label className="text-xs font-medium">Websites & Social Links <span className="text-muted-foreground">(comma-separated, max 2)</span></label>
                     <input
                       type="text"
                       value={profile.websites}
@@ -1118,7 +1127,7 @@ function WhatsAppSettings({
                       placeholder="https://yourbusiness.com, https://instagram.com/yourbrand"
                       className="flex h-9 w-full rounded-lg border border-input bg-muted/30 px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-colors"
                     />
-                    <p className="text-[11px] text-muted-foreground">Add your website, social media links, or online ordering page.</p>
+                    <p className="text-[11px] text-muted-foreground">Add your website, Instagram, Facebook, or online ordering page. Meta shows these on your WhatsApp profile.</p>
                   </div>
                   <button
                     onClick={saveProfile}

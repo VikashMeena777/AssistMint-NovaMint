@@ -35,6 +35,12 @@ export async function handleIncomingMessage(params: {
     name?: string;
     address?: string;
   };
+  media?: {
+    type: string;       // 'image' | 'video' | 'audio' | 'document' | 'sticker'
+    mediaId: string;
+    mimeType?: string;
+    caption?: string;
+  };
 }): Promise<void> {
   const { phoneNumberId, from, messageId, text, interactiveReply, whatsappName, location } = params;
 

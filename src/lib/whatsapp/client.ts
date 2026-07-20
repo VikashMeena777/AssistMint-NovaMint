@@ -80,7 +80,7 @@ export async function sendTextMessage(
           recipient_type: 'individual',
           to: sanitizeWhatsAppNumber(to),
           type: 'text',
-          text: { preview_url: false, body: text },
+          text: { preview_url: true, body: text },
         }),
       }
     );
@@ -353,20 +353,80 @@ export async function sendTemplateMessage(
   });
 }
 
-// ─── Verify Webhook Signature ───────────────
+// ─── Send Reaction to a Message ─────────────
 
-export function verifyWebhookSignature(
-  body: string,
-  signature: string,
-  appSecret: string
-): boolean {
-  // Use Node.js crypto to verify HMAC-SHA256
-  const crypto = require('crypto');
-  const expectedSignature = crypto
-    .createHmac('sha256', appSecret)
-    .update(body)
-    .digest('hex');
-  return `sha256=${expectedSignature}` === signature;
+export async function sendReactionMessage(
+  options: SendMessageOptions & {
+    messageId: string;
+    emoji: string; // e.g. '\u2705' for ✅, '\uD83D\uDE4F' for 🙏, or '' to remove
+  }
+): Promise<{ message_id: string }> {
+  return withRetry(async () => {
+    const { phoneNumberId, accessToken, to, messageId, emoji } = options;
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: sanitizeWhatsAppNumber(to),
+          type: 'reaction',
+          reaction: { message_id: messageId, emoji },
+        }),
+      }
+    );
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(data)}`);
+    return { message_id: data.messages?.[0]?.id || '' };
+  });
+}
+
+// ─── Send Location Message ──────────────────
+
+export async function sendLocationMessage(
+  options: SendMessageOptions & {
+    latitude: number;
+    longitude: number;
+    name?: string;
+    address?: string;
+  }
+): Promise<{ message_id: string }> {
+  return withRetry(async () => {
+    const { phoneNumberId, accessToken, to, latitude, longitude, name, address } = options;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const locationPayload: Record<string, any> = { latitude, longitude };
+    if (name) locationPayload.name = name;
+    if (address) locationPayload.address = address;
+
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: sanitizeWhatsAppNumber(to),
+          type: 'location',
+          location: locationPayload,
+        }),
+      }
+    );
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(`WhatsApp API error ${response.status}: ${JSON.stringify(data)}`);
+    return { message_id: data.messages?.[0]?.id || '' };
+  });
 }
 
 // ─── Mark Message as Read ───────────────────

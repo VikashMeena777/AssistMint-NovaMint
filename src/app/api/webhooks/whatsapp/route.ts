@@ -14,7 +14,10 @@ const APP_SECRET = process.env.WHATSAPP_APP_SECRET || '';
 
 // ─── Signature Verification ─────────────────
 function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
-  if (!APP_SECRET) return true; // skip if secret not configured (dev mode)
+  if (!APP_SECRET) {
+    console.warn('[WhatsApp Webhook] ⚠️ WHATSAPP_APP_SECRET not set — signature verification DISABLED. Set it in production!');
+    return true;
+  }
   if (!signatureHeader) return false;
 
   const expectedSignature = crypto
@@ -223,6 +226,30 @@ export async function POST(req: NextRequest) {
           };
         }
 
+        // Parse media messages (image, video, audio, document, sticker)
+        let mediaData: { type: string; mediaId: string; mimeType?: string; caption?: string } | undefined;
+        const mediaTypes = ['image', 'video', 'audio', 'document', 'sticker'];
+        if (mediaTypes.includes(message.type as string)) {
+          const media = message[message.type as string] as Record<string, string> | undefined;
+          if (media) {
+            mediaData = {
+              type: message.type as string,
+              mediaId: media.id || '',
+              mimeType: media.mime_type,
+              caption: media.caption,
+            };
+          }
+        }
+
+        // Parse reaction messages (emoji reactions on messages)
+        if (message.type === 'reaction') {
+          const reaction = message.reaction as Record<string, string> | undefined;
+          if (reaction) {
+            console.log(`[WhatsApp Webhook] Reaction ${reaction.emoji} on ${reaction.message_id} from ${message.from}`);
+            continue; // Reactions are logged but not forwarded to orchestrator
+          }
+        }
+
         // Check if this is a restaurant owner replying to manage orders
         const msgText = (message.text as Record<string, string>)?.body || '';
         const commandText = interactiveReply?.id || msgText;
@@ -234,10 +261,11 @@ export async function POST(req: NextRequest) {
           phoneNumberId,
           from: message.from as string,
           messageId: message.id as string,
-          text: msgText || undefined,
+          text: msgText || (mediaData?.caption) || undefined,
           interactiveReply,
           whatsappName,
           location: locationData,
+          media: mediaData,
         });
       } catch (err) {
         console.error(`[WhatsApp Webhook] Error processing message ${message.id}:`, err);
