@@ -57,34 +57,7 @@ export async function generateAIResponse(
     ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
     : messages;
 
-  // Attempt 1: NVIDIA NIM (Primary) — 15s timeout
-  if (process.env.NIM_API_KEY) {
-    try {
-      const result = await generateText({
-        model: nim.chatModel(NIM_MODEL),
-        messages: allMessages,
-        maxOutputTokens,
-        temperature,
-        abortSignal: AbortSignal.timeout(15_000), // 15 second hard timeout
-      });
-
-      const usage = result.usage as unknown as Record<string, number> | undefined;
-      return {
-        text: result.text,
-        provider: 'nim',
-        usage: {
-          input: usage?.promptTokens ?? usage?.inputTokens ?? 0,
-          output: usage?.completionTokens ?? usage?.outputTokens ?? 0,
-        },
-      };
-    } catch (error) {
-      const errMsg = (error as Error).message || String(error);
-      const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('TimeoutError');
-      console.error(`[AI Engine] NIM ${isTimeout ? 'TIMED OUT (15s)' : 'failed'}, falling back to Groq:`, errMsg);
-    }
-  }
-
-  // Attempt 2: Groq (Fallback) — 10s timeout
+  // Attempt 1: Groq (Primary — fastest, 1-3s typical)
   if (process.env.GROQ_API_KEY) {
     try {
       const result = await generateText({
@@ -92,7 +65,7 @@ export async function generateAIResponse(
         messages: allMessages,
         maxOutputTokens,
         temperature,
-        abortSignal: AbortSignal.timeout(10_000), // 10 second hard timeout
+        abortSignal: AbortSignal.timeout(10_000), // 10s timeout
       });
 
       const usage = result.usage as unknown as Record<string, number> | undefined;
@@ -107,7 +80,34 @@ export async function generateAIResponse(
     } catch (error) {
       const errMsg = (error as Error).message || String(error);
       const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('TimeoutError');
-      console.error(`[AI Engine] Groq ${isTimeout ? 'TIMED OUT (10s)' : 'failed'}:`, errMsg);
+      console.error(`[AI Engine] Groq ${isTimeout ? 'TIMED OUT (10s)' : 'failed'}, falling back to NIM:`, errMsg);
+    }
+  }
+
+  // Attempt 2: NVIDIA NIM (Fallback — slower but reliable, 25s timeout)
+  if (process.env.NIM_API_KEY) {
+    try {
+      const result = await generateText({
+        model: nim.chatModel(NIM_MODEL),
+        messages: allMessages,
+        maxOutputTokens,
+        temperature,
+        abortSignal: AbortSignal.timeout(25_000), // 25s timeout — NIM is slower
+      });
+
+      const usage = result.usage as unknown as Record<string, number> | undefined;
+      return {
+        text: result.text,
+        provider: 'nim',
+        usage: {
+          input: usage?.promptTokens ?? usage?.inputTokens ?? 0,
+          output: usage?.completionTokens ?? usage?.outputTokens ?? 0,
+        },
+      };
+    } catch (error) {
+      const errMsg = (error as Error).message || String(error);
+      const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('TimeoutError');
+      console.error(`[AI Engine] NIM ${isTimeout ? 'TIMED OUT (25s)' : 'failed'}:`, errMsg);
     }
   }
 
