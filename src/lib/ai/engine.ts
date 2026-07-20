@@ -57,7 +57,7 @@ export async function generateAIResponse(
     ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
     : messages;
 
-  // Attempt 1: NVIDIA NIM (Primary)
+  // Attempt 1: NVIDIA NIM (Primary) — 15s timeout
   if (process.env.NIM_API_KEY) {
     try {
       const result = await generateText({
@@ -65,6 +65,7 @@ export async function generateAIResponse(
         messages: allMessages,
         maxOutputTokens,
         temperature,
+        abortSignal: AbortSignal.timeout(15_000), // 15 second hard timeout
       });
 
       const usage = result.usage as unknown as Record<string, number> | undefined;
@@ -77,11 +78,13 @@ export async function generateAIResponse(
         },
       };
     } catch (error) {
-      console.error('[AI Engine] NIM failed, falling back to Groq:', (error as Error).message);
+      const errMsg = (error as Error).message || String(error);
+      const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('TimeoutError');
+      console.error(`[AI Engine] NIM ${isTimeout ? 'TIMED OUT (15s)' : 'failed'}, falling back to Groq:`, errMsg);
     }
   }
 
-  // Attempt 2: Groq (Fallback)
+  // Attempt 2: Groq (Fallback) — 10s timeout
   if (process.env.GROQ_API_KEY) {
     try {
       const result = await generateText({
@@ -89,6 +92,7 @@ export async function generateAIResponse(
         messages: allMessages,
         maxOutputTokens,
         temperature,
+        abortSignal: AbortSignal.timeout(10_000), // 10 second hard timeout
       });
 
       const usage = result.usage as unknown as Record<string, number> | undefined;
@@ -101,13 +105,16 @@ export async function generateAIResponse(
         },
       };
     } catch (error) {
-      console.error('[AI Engine] Groq failed:', (error as Error).message);
+      const errMsg = (error as Error).message || String(error);
+      const isTimeout = errMsg.includes('abort') || errMsg.includes('timeout') || errMsg.includes('TimeoutError');
+      console.error(`[AI Engine] Groq ${isTimeout ? 'TIMED OUT (10s)' : 'failed'}:`, errMsg);
     }
   }
 
-  // Attempt 3: Static fallback
+  // Attempt 3: Static fallback (instant — no API call)
+  console.warn('[AI Engine] All providers failed, using static fallback');
   return {
-    text: "I'm sorry, I'm experiencing some technical difficulties right now. Please try again in a moment, or type 'agent' to speak with a human. 🙏",
+    text: "I'm sorry, I'm having a brief hiccup right now. Please try again in a moment, or type *menu* to browse our menu. 🙏",
     provider: 'fallback',
   };
 }

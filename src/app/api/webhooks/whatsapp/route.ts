@@ -9,6 +9,9 @@ import { handleOwnerReply } from '@/lib/services/owner-notifications';
 import { webhookLimiter, checkRateLimit } from '@/lib/utils/rate-limiter';
 import crypto from 'crypto';
 
+// Vercel: max 30s for webhook (NIM 15s + Groq 10s + DB overhead)
+export const maxDuration = 30;
+
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'assistmint-verify';
 const APP_SECRET = process.env.WHATSAPP_APP_SECRET || '';
 
