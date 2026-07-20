@@ -57,20 +57,36 @@ export async function GET(req: NextRequest) {
 // ─── POST: Incoming Messages & Status Updates ───────
 
 // In-memory dedup: prevent processing the same message ID twice
-// WhatsApp can redeliver webhooks on timeout/failure
-const processedMessages = new Set<string>();
+// Uses timestamp-based expiry so messages aren't permanently blocked
+const processedMessages = new Map<string, number>(); // msgId → timestamp when processed
+const DEDUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes — after this, allow reprocessing
 const MAX_PROCESSED_CACHE = 5000;
 
+function isRecentlyProcessed(msgId: string): boolean {
+  const processedAt = processedMessages.get(msgId);
+  if (!processedAt) return false;
+  // If processed within the dedup window, consider it duplicate
+  if (Date.now() - processedAt < DEDUP_WINDOW_MS) return true;
+  // Expired — remove and allow reprocessing
+  processedMessages.delete(msgId);
+  return false;
+}
+
 function markProcessed(msgId: string) {
-  processedMessages.add(msgId);
-  // Prevent memory leak — trim old entries
+  processedMessages.set(msgId, Date.now());
+  // Prevent memory leak — trim oldest entries
   if (processedMessages.size > MAX_PROCESSED_CACHE) {
-    const iterator = processedMessages.values();
-    for (let i = 0; i < 1000; i++) {
-      const val = iterator.next().value;
-      if (val) processedMessages.delete(val);
+    const entries = [...processedMessages.entries()]
+      .sort((a, b) => a[1] - b[1]) // oldest first
+      .slice(0, 1000);
+    for (const [key] of entries) {
+      processedMessages.delete(key);
     }
   }
+}
+
+function unmarkProcessed(msgId: string) {
+  processedMessages.delete(msgId);
 }
 
 export async function POST(req: NextRequest) {
@@ -137,9 +153,9 @@ export async function POST(req: NextRequest) {
             }));
           }
 
-          // ── DEDUP CHECK: Skip if already processed ──
-          if (processedMessages.has(msgId)) {
-            console.log(`[WhatsApp Webhook] Skipping duplicate message: ${msgId}`);
+          // ── DEDUP CHECK: Skip if processed within last 2 minutes ──
+          if (isRecentlyProcessed(msgId)) {
+            console.log(`[WhatsApp Webhook] Skipping duplicate message (processed <2min ago): ${msgId}`);
             continue;
           }
 
@@ -154,7 +170,7 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          // Mark as processed BEFORE handling (prevents race conditions)
+          // Mark as processing NOW to prevent concurrent handling
           markProcessed(msgId);
 
           messagesToProcess.push({ phoneNumberId, message, whatsappName });
@@ -269,6 +285,8 @@ export async function POST(req: NextRequest) {
         });
       } catch (err) {
         console.error(`[WhatsApp Webhook] Error processing message ${message.id}:`, err);
+        // Remove from dedup cache so Meta's retry can reprocess this message
+        unmarkProcessed(message.id as string);
       }
     }
 
