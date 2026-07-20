@@ -110,7 +110,8 @@ export async function handleIncomingMessage(params: {
   // 7. Handle special commands
   const lowerText = (text || '').toLowerCase().trim();
 
-  if (lowerText === 'hi' || lowerText === 'hello' || lowerText === 'hey' || lowerText === 'start') {
+  // Smart greeting detection — catches misspellings, variations, and first messages
+  if (isGreeting(lowerText, customer)) {
     await sendGreeting(restaurant, customer, conversation);
     return;
   }
@@ -690,6 +691,64 @@ async function handleDirectAddToCart(
     });
   }
   await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+}
+
+// ─── Smart Greeting Detection ───────────────
+// Catches misspellings, variations, Hindi, slang, and first-time messages
+
+const GREETING_EXACT = new Set([
+  // English
+  'hi', 'hello', 'hey', 'hii', 'hiii', 'hiiii', 'helo', 'hllo',
+  'helloo', 'hellooo', 'hemlo', 'henlo', 'hola', 'yo', 'yoo', 'yooo',
+  'heya', 'heyy', 'heyyy', 'hai', 'haii',
+  'sup', 'wassup', 'whatsup', 'wazzup', 'watsup',
+  'start', 'begin', 'get started',
+  // Hindi / Hinglish
+  'namaste', 'namaskar', 'namastey', 'namasthe',
+  'kya haal', 'kya hal', 'kaise ho', 'kese ho',
+  'jai shree ram', 'jai shri ram', 'ram ram', 'radhe radhe',
+  // Single emoji greetings
+  '👋', '🙏', '✋', '🤙', '👋🏻', '🙏🏻',
+]);
+
+const GREETING_PREFIXES = [
+  'good morning', 'good afternoon', 'good evening', 'good night',
+  'gm', 'gn', 'morning', 'evening',
+  'hey there', 'hi there', 'hello there',
+  'howdy', 'greetings',
+];
+
+function isGreeting(text: string, customer: { total_orders?: number }): boolean {
+  if (!text) return false;
+
+  // 1. Exact match (most common)
+  if (GREETING_EXACT.has(text)) return true;
+
+  // 2. Prefix match (good morning X, hey there!)
+  if (GREETING_PREFIXES.some(p => text.startsWith(p))) return true;
+
+  // 3. New customer with short message — always show greeting with buttons
+  // First interaction should ALWAYS be the premium button experience
+  if ((customer.total_orders || 0) === 0 && text.length <= 30) {
+    // Only if it's not a clear food order or command
+    const foodIndicators = ['add', 'order', 'want', 'give', 'send', 'menu', 'cart', 'checkout'];
+    if (!foodIndicators.some(f => text.includes(f))) return true;
+  }
+
+  // 4. Fuzzy match against core greeting words
+  // Catches "hemlo" (edit distance 1 from "hello"), "helo", "helllo", etc.
+  const coreGreetings = ['hello', 'hi', 'hey', 'namaste', 'start'];
+  const firstWord = text.split(/\s+/)[0] || '';
+  if (firstWord.length >= 2 && firstWord.length <= 10) {
+    for (const g of coreGreetings) {
+      const dist = levenshtein(firstWord, g);
+      // Allow 1 typo for short words, 2 for longer
+      const maxDist = g.length <= 3 ? 1 : 2;
+      if (dist <= maxDist) return true;
+    }
+  }
+
+  return false;
 }
 
 // ─── Greeting with Buttons ──────────────────
