@@ -42,7 +42,7 @@ export async function handleIncomingMessage(params: {
     caption?: string;
   };
 }): Promise<void> {
-  const { phoneNumberId, from, messageId, text, interactiveReply, whatsappName, location } = params;
+  const { phoneNumberId, from, messageId, text, interactiveReply, whatsappName, location, media } = params;
 
   // 1. Lookup restaurant by WhatsApp phone ID
   const restaurant = await getRestaurantByPhoneId(phoneNumberId);
@@ -75,6 +75,20 @@ export async function handleIncomingMessage(params: {
   // 5. Handle location messages — use as delivery address
   if (location) {
     await handleLocationMessage(restaurant, customer, conversation, location);
+    return;
+  }
+
+  // 5.5 Handle media messages — acknowledge but explain we can't process images
+  if (media && !text) {
+    const mediaResponses: Record<string, string> = {
+      image: '📸 Thanks for the image! I can only read text messages right now. How can I help you? Type *menu* to browse our menu.',
+      video: '🎥 I received your video! I can only process text messages at the moment. Type *menu* to see our menu.',
+      audio: '🎙️ I got your voice message! I can\'t listen to audio yet — could you type your request instead?',
+      document: '📄 I received your document! I can only handle text for now. How can I help you?',
+      sticker: '😊 Nice sticker! How can I help you today? Type *menu* to browse our menu.',
+    };
+    const response = mediaResponses[media.type] || '👋 I received your message! I can only process text right now. Type *menu* to get started.';
+    await sendBotReply(restaurant, customer, conversation, response);
     return;
   }
 
@@ -1529,6 +1543,10 @@ function buildSystemPrompt(
 ${statusInstruction}
 
 You are the premium AI concierge for "${restaurant.name}" on WhatsApp. You provide a world-class ordering experience.
+${restaurant.address ? `
+## RESTAURANT INFO:
+Address: ${restaurant.address}
+If customers ask where the restaurant is located, share this address.` : ''}
 
 ## YOUR PERSONALITY:
 - Professional yet warm. Like a 5-star restaurant host.

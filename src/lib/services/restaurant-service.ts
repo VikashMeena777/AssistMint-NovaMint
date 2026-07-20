@@ -31,6 +31,7 @@ export interface Restaurant {
     free_above?: number;       // free delivery if subtotal >= this (in paise)
     enabled?: boolean;
   };
+  address?: string;
 }
 
 // ─── Lookup by WhatsApp Phone ID ────────────
@@ -62,6 +63,7 @@ export async function getRestaurantByPhoneId(phoneNumberId: string): Promise<Res
     tax_rate: (r.tax_rate as number) ?? 500, // default 5% (500 = 5.00%)
     business_hours: (r.business_hours as Record<string, unknown>) || {},
     delivery_fee_rules: (r.delivery_fee_rules as Restaurant['delivery_fee_rules']) || { flat_fee: 0, free_above: 0, enabled: false },
+    address: (r.address as string) || undefined,
   };
 }
 
@@ -93,5 +95,6 @@ export async function getRestaurantById(id: string): Promise<Restaurant | null> 
     tax_rate: (r.tax_rate as number) ?? 500,
     business_hours: (r.business_hours as Record<string, unknown>) || {},
     delivery_fee_rules: (r.delivery_fee_rules as Restaurant['delivery_fee_rules']) || { flat_fee: 0, free_above: 0, enabled: false },
+    address: (r.address as string) || undefined,
   };
 }
