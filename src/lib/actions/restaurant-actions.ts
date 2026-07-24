@@ -34,6 +34,7 @@ export async function createRestaurant(formData: {
   address?: string;
   cuisine?: string;
   description?: string;
+  business_type?: string;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -50,6 +51,18 @@ export async function createRestaurant(formData: {
     return { error: 'This slug is already taken. Choose a different one.' };
   }
 
+  const businessType = formData.business_type || 'food_beverage';
+
+  // Dynamic persona based on business type
+  const personaMap: Record<string, string> = {
+    food_beverage: `You are a friendly ordering assistant for ${formData.name}. Help customers browse the menu, add items to cart, and place orders. Be warm, concise, and use emojis sparingly.`,
+    salon_spa: `You are a friendly booking assistant for ${formData.name}. Help clients browse services, book appointments, and manage their bookings. Be warm, concise, and professional.`,
+    healthcare: `You are a helpful clinic assistant for ${formData.name}. Help patients find doctors, book appointments, and get information about services. Be professional and empathetic.`,
+    education: `You are a helpful education counselor for ${formData.name}. Help students explore courses, check fees, and book demo classes. Be informative and encouraging.`,
+    retail: `You are a friendly shop assistant for ${formData.name}. Help customers browse products, check availability, and place orders. Be helpful and concise.`,
+    services: `You are a helpful service booking assistant for ${formData.name}. Help customers find the right service, book appointments, and get pricing information. Be professional.`,
+  };
+
   const { data, error } = await supabase
     .from('restaurants')
     .insert({
@@ -63,7 +76,8 @@ export async function createRestaurant(formData: {
       is_active: true,
       plan: 'free',
       supported_languages: ['en'],
-      ai_persona: `You are a friendly ordering assistant for ${formData.name}. Help customers browse the menu, add items to cart, and place orders. Be warm, concise, and use emojis sparingly.`,
+      business_type: businessType,
+      ai_persona: personaMap[businessType] || personaMap.food_beverage,
       business_hours: {
         mon: { open: '10:00', close: '22:00' },
         tue: { open: '10:00', close: '22:00' },

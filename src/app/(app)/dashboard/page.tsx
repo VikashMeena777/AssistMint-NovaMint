@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import DashboardCharts from "@/components/dashboard/dashboard-charts";
 import { DashboardStatsGrid, RecentOrdersList } from "@/components/dashboard/dashboard-motion";
+import InsightsPanel from "@/components/dashboard/insights-panel";
 
 export const metadata = {
   title: "Dashboard",
@@ -208,6 +209,9 @@ export default async function DashboardPage() {
       {/* Interactive Charts Dashboard Component */}
       <DashboardCharts data={chartData} />
 
+
+      {/* AI Insights */}
+      <InsightsPanel />
 
       {/* Quick Actions + Setup Checklist */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

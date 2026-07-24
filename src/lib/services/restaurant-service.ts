@@ -1,9 +1,10 @@
 // ============================================
-// AssistMint — Restaurant Service
-// Lookup restaurant by WhatsApp phone number ID
+// AssistMint — Restaurant / Business Service
+// Lookup business by WhatsApp phone number ID
 // ============================================
 
 import { createClient } from '@supabase/supabase-js';
+import type { BusinessType } from '@/lib/utils/business-types';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,6 +33,12 @@ export interface Restaurant {
     enabled?: boolean;
   };
   address?: string;
+  // Multi-business fields
+  business_type: BusinessType;
+  delivery_enabled: boolean;
+  pickup_enabled: boolean;
+  business_config: Record<string, unknown>;
+  google_review_url?: string;
 }
 
 // ─── Lookup by WhatsApp Phone ID ────────────
@@ -64,6 +71,10 @@ export async function getRestaurantByPhoneId(phoneNumberId: string): Promise<Res
     business_hours: (r.business_hours as Record<string, unknown>) || {},
     delivery_fee_rules: (r.delivery_fee_rules as Restaurant['delivery_fee_rules']) || { flat_fee: 0, free_above: 0, enabled: false },
     address: (r.address as string) || undefined,
+    business_type: (r.business_type as BusinessType) || 'food_beverage',
+    delivery_enabled: (r.delivery_enabled as boolean) ?? false,
+    pickup_enabled: (r.pickup_enabled as boolean) ?? true,
+    business_config: (r.business_config as Record<string, unknown>) || {},
   };
 }
 
@@ -96,5 +107,9 @@ export async function getRestaurantById(id: string): Promise<Restaurant | null> 
     business_hours: (r.business_hours as Record<string, unknown>) || {},
     delivery_fee_rules: (r.delivery_fee_rules as Restaurant['delivery_fee_rules']) || { flat_fee: 0, free_above: 0, enabled: false },
     address: (r.address as string) || undefined,
+    business_type: (r.business_type as BusinessType) || 'food_beverage',
+    delivery_enabled: (r.delivery_enabled as boolean) ?? false,
+    pickup_enabled: (r.pickup_enabled as boolean) ?? true,
+    business_config: (r.business_config as Record<string, unknown>) || {},
   };
 }

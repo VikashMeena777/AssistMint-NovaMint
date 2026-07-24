@@ -72,14 +72,80 @@ export async function handleIncomingMessage(params: {
     return; // Human agent is handling
   }
 
+  // 4.5 Business hours auto-responder — inform if closed (but still respond normally)
+  const closedInfo = isBusinessClosed(restaurant);
+  if (closedInfo.isClosed && !(conversation.context as Record<string, unknown>)?.closed_notified) {
+    // Only notify once per conversation session
+    const closedMsg = closedInfo.nextOpen
+      ? `⏰ We're currently closed.\n\n🕐 We'll be back *${closedInfo.nextOpen}*.\n\nFeel free to browse — your order will be processed when we open! 😊`
+      : `⏰ We're currently closed for today.\n\nFeel free to browse — we'll process your order when we reopen! 😊`;
+    await sendBotReply(restaurant, customer, conversation, closedMsg);
+
+    // Mark as notified so we don't repeat
+    const { createClient: createAdmin } = await import('@supabase/supabase-js');
+    const supabaseAdmin = createAdmin(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false } }
+    );
+    await supabaseAdmin
+      .from('conversations')
+      .update({
+        context: {
+          ...(conversation.context as Record<string, unknown> || {}),
+          closed_notified: true,
+        },
+      })
+      .eq('id', conversation.id);
+    // Don't return — still process the actual message below
+  }
+
   // 5. Handle location messages — use as delivery address
   if (location) {
     await handleLocationMessage(restaurant, customer, conversation, location);
     return;
   }
 
-  // 5.5 Handle media messages — acknowledge but explain we can't process images
+  // 5.5 Handle media messages — healthcare special: prescriptions
   if (media && !text) {
+    const bt = restaurant.business_type || 'food_beverage';
+
+    // Healthcare: image = prescription
+    if (bt === 'healthcare' && media.type === 'image') {
+      await sendBotReply(
+        restaurant,
+        customer,
+        conversation,
+        '💊 *Prescription Received!*\n\nWe\'ve received your prescription image. Our team will review it and get back to you shortly.\n\n⏱️ Expected response time: *15-30 minutes*\n\nSend *book* to book an appointment or *menu* to view our services.'
+      );
+
+      // Notify owner about prescription
+      if (restaurant.owner_whatsapp && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+        const ownerMsg = `💊 *Prescription Received!*\n\n👤 ${customer.name || customer.phone}\n📱 ${customer.phone}\n📸 Image ID: ${media.mediaId}\n\nPlease check WhatsApp and respond to the customer.`;
+        try {
+          await fetch(
+            `https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${restaurant.whatsapp_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: restaurant.owner_whatsapp.replace(/\D/g, ''),
+                type: 'text',
+                text: { body: ownerMsg },
+              }),
+            }
+          );
+        } catch {
+          // Non-critical
+        }
+      }
+      return;
+    }
+
     const mediaResponses: Record<string, string> = {
       image: '📸 Thanks for the image! I can only read text messages right now. How can I help you? Type *menu* to browse our menu.',
       video: '🎥 I received your video! I can only process text messages at the moment. Type *menu* to see our menu.',
@@ -98,12 +164,23 @@ export async function handleIncomingMessage(params: {
     return;
   }
 
-  // 6.1 Auto-detect Hindi from first message
+  // 6.1 Auto-detect Indian languages from first message
   if ((customer.total_orders || 0) === 0 && !customer.language_preference) {
-    const hindiPattern = /[\u0900-\u097F]/;
-    if (hindiPattern.test(text || '')) {
-      await setCustomerLanguage(customer.id, 'hi');
-      customer.language_preference = 'hi';
+    const langPatterns: Array<{ code: string; regex: RegExp }> = [
+      { code: 'hi', regex: /[\u0900-\u097F]/ },     // Hindi / Marathi (Devanagari)
+      { code: 'ta', regex: /[\u0B80-\u0BFF]/ },     // Tamil
+      { code: 'te', regex: /[\u0C00-\u0C7F]/ },     // Telugu
+      { code: 'kn', regex: /[\u0C80-\u0CFF]/ },     // Kannada
+      { code: 'bn', regex: /[\u0980-\u09FF]/ },     // Bengali
+      { code: 'mr', regex: /[\u0900-\u097F]/ },     // Marathi (also Devanagari — detected as 'hi' by default)
+    ];
+    const inputText = text || '';
+    for (const lp of langPatterns) {
+      if (lp.regex.test(inputText)) {
+        await setCustomerLanguage(customer.id, lp.code);
+        customer.language_preference = lp.code;
+        break;
+      }
     }
   }
 
@@ -137,7 +214,18 @@ export async function handleIncomingMessage(params: {
       await sendBotReply(restaurant, customer, conversation, msg);
       return;
     }
-    await askForDeliveryAddress(restaurant, customer, conversation);
+    // Respect delivery/pickup toggles
+    if (restaurant.delivery_enabled && restaurant.pickup_enabled) {
+      // Both enabled → ask customer to choose
+      await askForDeliveryAddress(restaurant, customer, conversation);
+    } else if (restaurant.delivery_enabled && !restaurant.pickup_enabled) {
+      // Delivery only → ask for address directly
+      await askForDeliveryAddress(restaurant, customer, conversation);
+    } else {
+      // Pickup only (default) → skip address, go straight to payment
+      await sendBotReply(restaurant, customer, conversation, '🏪 *Your order will be ready for pickup!* ✅');
+      await sendPaymentChoice(restaurant, customer, conversation);
+    }
     return;
   }
   // ── New Commands ──
@@ -166,6 +254,24 @@ export async function handleIncomingMessage(params: {
     await sendMenuOverview(restaurant, customer, conversation, 'bestseller');
     return;
   }
+  if (lowerText === 'book' || lowerText === 'appointment' || lowerText === 'book appointment' || lowerText === 'schedule') {
+    const bt = restaurant.business_type || 'food_beverage';
+    if (['salon_spa', 'healthcare', 'education', 'services'].includes(bt)) {
+      await startAppointmentBooking(restaurant, customer, conversation);
+    } else {
+      await sendBotReply(restaurant, customer, conversation, '📋 Send *menu* to browse our menu and place an order!');
+    }
+    return;
+  }
+  if (lowerText === 'enquire' || lowerText === 'inquiry' || lowerText === 'enquiry' || lowerText === 'interested') {
+    const bt = restaurant.business_type || 'food_beverage';
+    if (['education', 'healthcare'].includes(bt)) {
+      await handleInquiryCapture(restaurant, customer, conversation, lowerText);
+    } else {
+      await sendBotReply(restaurant, customer, conversation, '📋 Send *menu* to browse what we offer!');
+    }
+    return;
+  }
   if (lowerText === 'hindi' || lowerText === 'हिंदी') {
     await setCustomerLanguage(customer.id, 'hi');
     customer.language_preference = 'hi';
@@ -176,6 +282,62 @@ export async function handleIncomingMessage(params: {
     await setCustomerLanguage(customer.id, 'en');
     customer.language_preference = 'en';
     await sendBotReply(restaurant, customer, conversation, '✅ Language switched to English! 🇬🇧\nSend *menu* to browse our menu.');
+    return;
+  }
+  if (lowerText === 'tamil' || lowerText === 'தமிழ்') {
+    await setCustomerLanguage(customer.id, 'ta');
+    customer.language_preference = 'ta';
+    await sendBotReply(restaurant, customer, conversation, '✅ மொழி தமிழுக்கு மாற்றப்பட்டது! 🇮🇳\nமெனுவைப் பார்க்க *menu* அனுப்புங்கள்.');
+    return;
+  }
+  if (lowerText === 'telugu' || lowerText === 'తెలుగు') {
+    await setCustomerLanguage(customer.id, 'te');
+    customer.language_preference = 'te';
+    await sendBotReply(restaurant, customer, conversation, '✅ భాష తెలుగుకు మార్చబడింది! 🇮🇳\nమెనూ చూడటానికి *menu* పంపండి.');
+    return;
+  }
+  if (lowerText === 'kannada' || lowerText === 'ಕನ್ನಡ') {
+    await setCustomerLanguage(customer.id, 'kn');
+    customer.language_preference = 'kn';
+    await sendBotReply(restaurant, customer, conversation, '✅ ಭಾಷೆ ಕನ್ನಡಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಿದೆ! 🇮🇳\nಮೆನು ನೋಡಲು *menu* ಕಳುಹಿಸಿ.');
+    return;
+  }
+  if (lowerText === 'marathi' || lowerText === 'मराठी') {
+    await setCustomerLanguage(customer.id, 'mr');
+    customer.language_preference = 'mr';
+    await sendBotReply(restaurant, customer, conversation, '✅ भाषा मराठीत बदलली! 🇮🇳\nमेनू पाहण्यासाठी *menu* पाठवा.');
+    return;
+  }
+  if (lowerText === 'bengali' || lowerText === 'bangla' || lowerText === 'বাংলা') {
+    await setCustomerLanguage(customer.id, 'bn');
+    customer.language_preference = 'bn';
+    await sendBotReply(restaurant, customer, conversation, '✅ ভাষা বাংলায় পরিবর্তন করা হয়েছে! 🇮🇳\nমেনু দেখতে *menu* পাঠান।');
+    return;
+  }
+  if (lowerText === 'language' || lowerText === 'lang' || lowerText === 'भाषा') {
+    // Show language selection list
+    const langRows = [
+      { id: 'lang_en', title: '🇬🇧 English', description: 'Switch to English' },
+      { id: 'lang_hi', title: '🇮🇳 हिंदी', description: 'Switch to Hindi' },
+      { id: 'lang_ta', title: '🇮🇳 தமிழ்', description: 'Switch to Tamil' },
+      { id: 'lang_te', title: '🇮🇳 తెలుగు', description: 'Switch to Telugu' },
+      { id: 'lang_kn', title: '🇮🇳 ಕನ್ನಡ', description: 'Switch to Kannada' },
+      { id: 'lang_mr', title: '🇮🇳 मराठी', description: 'Switch to Marathi' },
+      { id: 'lang_bn', title: '🇮🇳 বাংলা', description: 'Switch to Bengali' },
+    ];
+    const sections: ListSection[] = [{ title: '🌍 Choose Language', rows: langRows }];
+    if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+      await sendListMessage({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        headerText: '🌍 Language / भाषा',
+        bodyText: 'Choose your preferred language:',
+        buttonText: '🌍 Languages',
+        sections,
+      });
+    }
+    await saveMessage(conversation.id, restaurant.id, 'bot', 'Choose your preferred language', undefined, { phone: customer.phone });
     return;
   }
 
@@ -380,6 +542,10 @@ async function handleInteractiveReply(
       await sendMenuOverview(restaurant, customer, conversation, 'bestseller');
       break;
 
+    case 'btn_book_appointment':
+      await startAppointmentBooking(restaurant, customer, conversation);
+      break;
+
     case 'btn_location':
       await sendBotReply(restaurant, customer, conversation, '📍 Share your *live location* by tapping 📎 → Location.\nThis helps us deliver faster!');
       break;
@@ -409,10 +575,19 @@ async function handleInteractiveReply(
         const rating = parseInt(parts[0]);
         const orderId = parts.slice(1).join('_');
         await saveOrderRating(orderId, rating);
-        const ratingMsg = rating >= 4
-          ? `${'\u2b50'.repeat(rating)} Thank you! We're glad you loved it \ud83c\udf89`
-          : `${'\u2b50'.repeat(rating)} Thanks for the honest feedback \u2014 we'll do better next time \ud83d\ude4f`;
-        await sendBotReply(restaurant, customer, conversation, ratingMsg);
+
+        if (rating >= 4) {
+          // Check if business has Google Review URL
+          const googleUrl = restaurant.google_review_url;
+          if (googleUrl) {
+            const ratingMsg = `${'⭐'.repeat(rating)} Thank you so much! We're thrilled you loved it! 🎉\n\n🙏 Would you mind sharing your experience on Google? It really helps us!\n\n👉 ${googleUrl}`;
+            await sendBotReply(restaurant, customer, conversation, ratingMsg);
+          } else {
+            await sendBotReply(restaurant, customer, conversation, `${'⭐'.repeat(rating)} Thank you! We're glad you loved it 🎉`);
+          }
+        } else {
+          await sendBotReply(restaurant, customer, conversation, `${'⭐'.repeat(rating)} Thanks for the honest feedback — we'll do better next time 🙏`);
+        }
       } else if (btnId.startsWith('addr_')) {
         const idx = parseInt(btnId.replace('addr_', ''));
         const addresses = await getSavedAddresses(customer.id);
@@ -429,6 +604,37 @@ async function handleInteractiveReply(
             await supabaseAdmin.from('cart_sessions').update({ metadata: { delivery_address: addresses[idx] } }).eq('id', cart.id);
           }
           await sendPaymentChoice(restaurant, customer, conversation);
+        }
+      } else if (btnId.startsWith('appt_svc_')) {
+        // Appointment: service selected
+        await handleAppointmentServiceSelected(restaurant, customer, conversation, btnId.replace('appt_svc_', ''));
+      } else if (btnId.startsWith('appt_date_')) {
+        // Appointment: date selected
+        await handleAppointmentDateSelected(restaurant, customer, conversation, btnId.replace('appt_date_', ''));
+      } else if (btnId.startsWith('appt_time_')) {
+        // Appointment: time selected → appt_time_HH:MM_HH:MM
+        const timeParts = btnId.replace('appt_time_', '').split('_');
+        if (timeParts.length >= 2) {
+          await handleAppointmentTimeSelected(restaurant, customer, conversation, timeParts[0], timeParts[1]);
+        }
+      } else if (btnId.startsWith('inq_')) {
+        // Inquiry: service selected
+        await handleInquirySelected(restaurant, customer, conversation, btnId.replace('inq_', ''));
+      } else if (btnId.startsWith('lang_')) {
+        // Language selection from list
+        const langMap: Record<string, { code: string; msg: string }> = {
+          lang_en: { code: 'en', msg: '✅ Language switched to English! 🇬🇧\nSend *menu* to browse.' },
+          lang_hi: { code: 'hi', msg: '✅ भाषा हिंदी में बदल दी गई है! 🇮🇳\n*menu* भेजें।' },
+          lang_ta: { code: 'ta', msg: '✅ மொழி தமிழுக்கு மாற்றப்பட்டது! 🇮🇳\n*menu* அனுப்புங்கள்.' },
+          lang_te: { code: 'te', msg: '✅ భాష తెలుగుకు మార్చబడింది! 🇮🇳\n*menu* పంపండి.' },
+          lang_kn: { code: 'kn', msg: '✅ ಭಾಷೆ ಕನ್ನಡಕ್ಕೆ ಬದಲಾಯಿಸಲಾಗಿದೆ! 🇮🇳\n*menu* ಕಳುಹಿಸಿ.' },
+          lang_mr: { code: 'mr', msg: '✅ भाषा मराठीत बदलली! 🇮🇳\n*menu* पाठवा.' },
+          lang_bn: { code: 'bn', msg: '✅ ভাষা বাংলায় পরিবর্তন করা হয়েছে! 🇮🇳\n*menu* পাঠান।' },
+        };
+        const lang = langMap[btnId];
+        if (lang) {
+          await setCustomerLanguage(customer.id, lang.code);
+          await sendBotReply(restaurant, customer, conversation, lang.msg);
         }
       } else {
         await generateAndSendAIResponse(restaurant, customer, conversation, reply.title);
@@ -760,31 +966,60 @@ async function sendGreeting(
 ): Promise<void> {
   const isHindi = customer.language_preference === 'hi';
   const isReturning = (customer.total_orders || 0) > 0;
-  
+  const bt = restaurant.business_type || 'food_beverage';
+
+  // Business-type specific labels
+  const typeLabels: Record<string, { icon: string; action: string; menuLabel: string; menuBtn: string }> = {
+    food_beverage:  { icon: '🏪', action: 'ordering assistant', menuLabel: 'menu',     menuBtn: '📋 View Menu' },
+    salon_spa:      { icon: '💇', action: 'booking assistant',  menuLabel: 'services', menuBtn: '💇 Our Services' },
+    healthcare:     { icon: '🏥', action: 'clinic assistant',   menuLabel: 'services', menuBtn: '👨‍⚕️ Our Doctors' },
+    education:      { icon: '📚', action: 'education counselor', menuLabel: 'courses', menuBtn: '📋 Our Courses' },
+    retail:         { icon: '🛍️', action: 'shop assistant',     menuLabel: 'products', menuBtn: '🛍️ Browse Products' },
+    services:       { icon: '🔧', action: 'booking assistant',  menuLabel: 'services', menuBtn: '📋 Our Services' },
+  };
+  const labels = typeLabels[bt] || typeLabels.food_beverage;
+  const supportsAppointments = ['salon_spa', 'healthcare', 'education', 'services'].includes(bt);
+
   let bodyText: string;
   if (isHindi) {
     const greeting = customer.name ? `नमस्ते ${customer.name}! 👋` : 'नमस्ते! 👋';
     bodyText = isReturning
-      ? `${greeting}\n\n🏪 *${restaurant.name}*\nवापस आने पर खुशी हुई! 🎉\n\nआज क्या ऑर्डर करना चाहेंगे?`
-      : `${greeting}\n\n🏪 *${restaurant.name}*\nमैं आपका ऑर्डरिंग असिस्टेंट हूँ 🤖\n\n📋 मेनू देखें\n🛒 कार्ट में आइटम जोड़ें\n✅ ऑर्डर प्लेस करें\n\nशुरू करें! 👇`;
+      ? `${greeting}\n\n${labels.icon} *${restaurant.name}*\nवापस आने पर खुशी हुई! 🎉\n\nआज क्या करना चाहेंगे?`
+      : `${greeting}\n\n${labels.icon} *${restaurant.name}*\nमैं आपका ${labels.action} हूँ 🤖\n\nशुरू करें! 👇`;
   } else {
     const greeting = customer.name ? `Hey ${customer.name}! 👋` : 'Hey there! 👋';
     bodyText = isReturning
-      ? `${greeting}\n\n🏪 *${restaurant.name}*\nGreat to see you again! 🎉\n\nWhat are you craving today?`
-      : `${greeting}\n\n🏪 *${restaurant.name}*\nI'm your personal ordering assistant 🤖\n\n📋 Browse our menu with photos\n🛒 Add items to cart\n✅ Checkout & pay\n\nLet's get started! 👇`;
+      ? `${greeting}\n\n${labels.icon} *${restaurant.name}*\nGreat to see you again! 🎉\n\nWhat can I help you with today?`
+      : `${greeting}\n\n${labels.icon} *${restaurant.name}*\nI'm your personal ${labels.action} 🤖\n\n📋 Browse our ${labels.menuLabel}\n${supportsAppointments ? '📅 Book appointments\n' : '🛒 Add items to cart\n'}✅ ${supportsAppointments ? 'Quick booking' : 'Checkout & pay'}\n\nLet's get started! 👇`;
   }
 
-  const buttons = isReturning
-    ? [
-        { id: 'btn_menu', title: '📋 View Menu' },
-        { id: 'btn_reorder', title: '🔄 Reorder Last' },
-        { id: 'btn_orders', title: '📦 My Orders' },
-      ]
-    : [
-        { id: 'btn_menu', title: '📋 View Menu' },
-        { id: 'btn_bestsellers', title: '⭐ Bestsellers' },
-        { id: 'btn_help', title: '💬 Help' },
-      ];
+  // Dynamic buttons based on business type
+  let buttons: Array<{ id: string; title: string }>;
+  if (supportsAppointments) {
+    buttons = isReturning
+      ? [
+          { id: 'btn_menu', title: labels.menuBtn },
+          { id: 'btn_book_appointment', title: '📅 Book Now' },
+          { id: 'btn_orders', title: '📋 My Bookings' },
+        ]
+      : [
+          { id: 'btn_menu', title: labels.menuBtn },
+          { id: 'btn_book_appointment', title: '📅 Book Now' },
+          { id: 'btn_help', title: '💬 Help' },
+        ];
+  } else {
+    buttons = isReturning
+      ? [
+          { id: 'btn_menu', title: labels.menuBtn },
+          { id: 'btn_reorder', title: '🔄 Reorder Last' },
+          { id: 'btn_orders', title: '📦 My Orders' },
+        ]
+      : [
+          { id: 'btn_menu', title: labels.menuBtn },
+          { id: 'btn_bestsellers', title: '⭐ Bestsellers' },
+          { id: 'btn_help', title: '💬 Help' },
+        ];
+  }
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     await sendReplyButtons({
@@ -1254,9 +1489,9 @@ async function askForDeliveryAddress(
     }));
     const sections: ListSection[] = [
       { title: '📍 Saved Addresses', rows: addrRows },
-      { title: '⚙️ Options', rows: [
-        { id: 'btn_skip_address', title: '🏪 Pickup Instead', description: 'Pick up from restaurant' },
-      ]},
+      ...(restaurant.pickup_enabled ? [{ title: '⚙️ Options', rows: [
+        { id: 'btn_skip_address', title: '🏪 Pickup Instead', description: 'Pick up from store' },
+      ]}] : []),
     ];
     await sendListMessage({
       phoneNumberId: restaurant.whatsapp_phone_id,
@@ -1277,7 +1512,7 @@ async function askForDeliveryAddress(
         to: customer.phone,
         bodyText,
         buttons: [
-          { id: 'btn_skip_address', title: '🏪 Pickup Instead' },
+          ...(restaurant.pickup_enabled ? [{ id: 'btn_skip_address', title: '🏪 Pickup Instead' }] : []),
           { id: 'btn_location', title: '📍 Share Location' },
         ],
       });
@@ -2273,6 +2508,46 @@ function isRestaurantOpen(restaurant: Restaurant): boolean {
   return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
 }
 
+function isBusinessClosed(restaurant: Restaurant): { isClosed: boolean; nextOpen: string | null } {
+  if (isRestaurantOpen(restaurant)) return { isClosed: false, nextOpen: null };
+
+  const hours = restaurant.business_hours;
+  if (!hours || Object.keys(hours).length === 0) return { isClosed: false, nextOpen: null };
+
+  const now = getISTDate();
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const todayIdx = now.getDay();
+
+  // Check if just before opening today
+  const todayKey = days[todayIdx];
+  const todayShort = todayKey.substring(0, 3);
+  const todayHours = (hours[todayKey] || hours[todayShort]) as { open?: string; close?: string; closed?: boolean; is_closed?: boolean } | undefined;
+
+  if (todayHours && !todayHours.closed && !todayHours.is_closed && todayHours.open) {
+    const [openH, openM] = todayHours.open.split(':').map(Number);
+    const openMinutes = openH * 60 + openM;
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    if (currentMinutes < openMinutes) {
+      return { isClosed: true, nextOpen: `today at ${todayHours.open}` };
+    }
+  }
+
+  // Find next open day
+  for (let offset = 1; offset <= 7; offset++) {
+    const nextIdx = (todayIdx + offset) % 7;
+    const nextDay = days[nextIdx];
+    const nextShort = nextDay.substring(0, 3);
+    const nextHours = (hours[nextDay] || hours[nextShort]) as { open?: string; close?: string; closed?: boolean; is_closed?: boolean } | undefined;
+
+    if (nextHours && !nextHours.closed && !nextHours.is_closed && nextHours.open) {
+      const dayLabel = offset === 1 ? 'tomorrow' : nextDay.charAt(0).toUpperCase() + nextDay.slice(1);
+      return { isClosed: true, nextOpen: `${dayLabel} at ${nextHours.open}` };
+    }
+  }
+
+  return { isClosed: true, nextOpen: null };
+}
+
 function getBusinessHoursText(restaurant: Restaurant): string {
   const hours = restaurant.business_hours;
   if (!hours || Object.keys(hours).length === 0) return '';
@@ -2309,4 +2584,425 @@ function getTodayHoursText(restaurant: Restaurant): string {
     return `${todayHours.open} to ${todayHours.close}`;
   }
   return '';
+}
+
+// ─── Appointment Booking Flow (Salon/Healthcare/Education) ──
+
+async function startAppointmentBooking(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string }
+): Promise<void> {
+  // Get services (menu_items) to show as bookable services
+  const menu = await getFullMenu(restaurant.id);
+  if (!menu) {
+    await sendBotReply(restaurant, customer, conversation, '📋 No services set up yet. Please contact us directly!');
+    return;
+  }
+  const allItems: Array<{ id: string; name: string; price: number; categoryName: string }> = [];
+
+  for (const cat of menu.categories) {
+    for (const item of cat.items) {
+      if (item.is_available) {
+        allItems.push({
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          categoryName: cat.name,
+        });
+      }
+    }
+  }
+
+  if (allItems.length === 0) {
+    await sendBotReply(
+      restaurant,
+      customer,
+      conversation,
+      '📋 No services available for booking right now. Please check back later or contact us directly!'
+    );
+    return;
+  }
+
+  // Show services as a WhatsApp list
+  const rows = allItems.slice(0, 10).map((item) => ({
+    id: `appt_svc_${item.id}`,
+    title: item.name.substring(0, 24),
+    description: `₹${(item.price / 100).toFixed(0)} • ${item.categoryName}`.substring(0, 72),
+  }));
+
+  const sections: ListSection[] = [
+    { title: '📋 Available Services', rows },
+  ];
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendListMessage({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      headerText: '📅 Book Appointment',
+      bodyText: '✨ *Select a service to book:*\n\nChoose from our available services below.',
+      buttonText: '📋 View Services',
+      sections,
+    });
+  }
+
+  await saveMessage(conversation.id, restaurant.id, 'bot', 'Select a service to book an appointment', undefined, { phone: customer.phone });
+}
+
+// Handle appointment service selection → ask for date
+async function handleAppointmentServiceSelected(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string },
+  serviceItemId: string
+): Promise<void> {
+  // Look up the selected service
+  const menu = await getFullMenu(restaurant.id);
+  let selectedService: { name: string; price: number } | null = null;
+
+  if (menu) {
+    for (const cat of menu.categories) {
+      const found = cat.items.find((i: { id: string; name: string; price: number }) => i.id === serviceItemId);
+      if (found) {
+        selectedService = { name: found.name, price: found.price };
+        break;
+      }
+    }
+  }
+
+  if (!selectedService) {
+    await sendBotReply(restaurant, customer, conversation, '❌ Service not found. Send *book* to try again.');
+    return;
+  }
+
+  // Store selection in conversation context for the next step
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+  await supabaseAdmin
+    .from('conversations')
+    .update({
+      context: {
+        booking_flow: 'pick_date',
+        booking_service_name: selectedService.name,
+        booking_service_price: selectedService.price,
+        booking_service_item_id: serviceItemId,
+      },
+    })
+    .eq('id', conversation.id);
+
+  // Offer date options
+  const today = new Date();
+  const dateOptions = [0, 1, 2].map((offset) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + offset);
+    const dateStr = d.toISOString().split('T')[0];
+    const label = offset === 0 ? 'Today' : offset === 1 ? 'Tomorrow' : d.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
+    return { id: `appt_date_${dateStr}`, title: `📅 ${label}` };
+  });
+
+  const priceStr = `₹${(selectedService.price / 100).toFixed(0)}`;
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText: `✅ *${selectedService.name}* — ${priceStr}\n\n📅 *When would you like to book?*`,
+      buttons: dateOptions,
+    });
+  }
+
+  await saveMessage(conversation.id, restaurant.id, 'bot', `Selected: ${selectedService.name}. Pick a date.`, undefined, { phone: customer.phone });
+}
+
+// Handle appointment date selection → show time slots
+async function handleAppointmentDateSelected(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string; context: Record<string, unknown> },
+  dateStr: string
+): Promise<void> {
+  const { getAvailableSlots } = await import('@/lib/services/appointment-service');
+
+  // Get context
+  const ctx = conversation.context || {};
+  const serviceName = (ctx.booking_service_name as string) || 'Service';
+  const servicePrice = (ctx.booking_service_price as number) || 0;
+
+  // Update context with date
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+  await supabaseAdmin
+    .from('conversations')
+    .update({
+      context: {
+        ...ctx,
+        booking_flow: 'pick_time',
+        booking_date: dateStr,
+      },
+    })
+    .eq('id', conversation.id);
+
+  // Get available slots
+  const slots = await getAvailableSlots(restaurant.id, dateStr, 30);
+  const availableSlots = slots.filter((s) => s.available);
+
+  if (availableSlots.length === 0) {
+    await sendBotReply(
+      restaurant,
+      customer,
+      conversation,
+      `😔 No available slots on *${dateStr}*.\n\nSend *book* to try a different date!`
+    );
+    return;
+  }
+
+  // Show top 10 slots as list
+  const rows = availableSlots.slice(0, 10).map((slot) => {
+    const [h, m] = slot.start_time.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return {
+      id: `appt_time_${slot.start_time}_${slot.end_time}`,
+      title: `⏰ ${h12}:${String(m).padStart(2, '0')} ${ampm}`,
+      description: `${slot.start_time} — ${slot.end_time}`,
+    };
+  });
+
+  const sections: ListSection[] = [{ title: '⏰ Available Slots', rows }];
+
+  const dateLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendListMessage({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      headerText: `${serviceName}`,
+      bodyText: `📅 *${dateLabel}*\n\nSelect a time slot:`,
+      buttonText: '⏰ View Time Slots',
+      sections,
+    });
+  }
+
+  await saveMessage(conversation.id, restaurant.id, 'bot', `Date: ${dateStr}. Pick a time slot.`, undefined, { phone: customer.phone });
+}
+
+// Handle appointment time selection → confirm booking
+async function handleAppointmentTimeSelected(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string },
+  conversation: { id: string; context: Record<string, unknown> },
+  startTime: string,
+  endTime: string
+): Promise<void> {
+  const { createAppointment: createAppt } = await import('@/lib/services/appointment-service');
+
+  const ctx = conversation.context || {};
+  const serviceName = (ctx.booking_service_name as string) || 'Service';
+  const servicePrice = (ctx.booking_service_price as number) || 0;
+  const dateStr = (ctx.booking_date as string) || new Date().toISOString().split('T')[0];
+
+  // Create the appointment
+  const result = await createAppt({
+    restaurant_id: restaurant.id,
+    customer_id: customer.id,
+    service_name: serviceName,
+    service_price: servicePrice,
+    appointment_date: dateStr,
+    start_time: startTime,
+    end_time: endTime,
+    customer_name: customer.name || undefined,
+    customer_phone: customer.phone,
+  });
+
+  // Clear booking context
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+  await supabaseAdmin
+    .from('conversations')
+    .update({ context: {} })
+    .eq('id', conversation.id);
+
+  if (result.error) {
+    await sendBotReply(restaurant, customer, conversation, `❌ ${result.error}\n\nSend *book* to try again.`);
+    return;
+  }
+
+  // Format confirmation
+  const [h, m] = startTime.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  const timeStr = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  const dateLabel = new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  });
+  const priceStr = `₹${(servicePrice / 100).toFixed(0)}`;
+
+  const confirmMsg = `✅ *Appointment Booked!*\n\n📋 ${serviceName}\n📅 ${dateLabel}\n⏰ ${timeStr}\n💰 ${priceStr}\n\nWe'll remind you 1 hour before 🔔\nSee you there! 😊`;
+
+  await sendBotReply(restaurant, customer, conversation, confirmMsg);
+
+  // Notify owner
+  if (restaurant.owner_whatsapp && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    const ownerMsg = `📅 *New Appointment Booked!*\n\n👤 ${customer.name || customer.phone}\n📋 ${serviceName} — ${priceStr}\n📅 ${dateLabel} at ${timeStr}`;
+    try {
+      await fetch(
+        `https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${restaurant.whatsapp_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: restaurant.owner_whatsapp.replace(/\D/g, ''),
+            type: 'text',
+            text: { body: ownerMsg },
+          }),
+        }
+      );
+    } catch {
+      // Non-critical
+    }
+  }
+}
+
+// ─── Inquiry Capture (Education / Healthcare) ──
+
+async function handleInquiryCapture(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string },
+  conversation: { id: string },
+  _trigger: string
+): Promise<void> {
+  // Show services as inquiry options
+  const menu = await getFullMenu(restaurant.id);
+  if (!menu || menu.categories.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, '📩 Thanks for your interest! Please tell us what you\'re looking for and we\'ll get back to you shortly.');
+    return;
+  }
+
+  const allItems: Array<{ id: string; name: string; price: number; categoryName: string }> = [];
+  for (const cat of menu.categories) {
+    for (const item of cat.items) {
+      if (item.is_available) {
+        allItems.push({ id: item.id, name: item.name, price: item.price, categoryName: cat.name });
+      }
+    }
+  }
+
+  if (allItems.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, '📩 Thanks for your interest! Please tell us what you\'re looking for.');
+    return;
+  }
+
+  const bt = restaurant.business_type || 'food_beverage';
+  const label = bt === 'education' ? 'course' : 'service';
+
+  const rows = allItems.slice(0, 10).map((item) => ({
+    id: `inq_${item.id}`,
+    title: item.name.substring(0, 24),
+    description: `₹${(item.price / 100).toFixed(0)} • ${item.categoryName}`.substring(0, 72),
+  }));
+
+  const sections: ListSection[] = [{ title: `📋 Select a ${label}`, rows }];
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendListMessage({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      headerText: `📩 Enquire about a ${label}`,
+      bodyText: `What ${label} are you interested in? Select below and we'll get back to you!`,
+      buttonText: `📋 View ${label}s`,
+      sections,
+    });
+  }
+
+  await saveMessage(conversation.id, restaurant.id, 'bot', `Select a ${label} to enquire about`, undefined, { phone: customer.phone });
+}
+
+// Handle inquiry service selection → save inquiry + notify owner
+async function handleInquirySelected(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string },
+  conversation: { id: string },
+  serviceItemId: string
+): Promise<void> {
+  const { createInquiry } = await import('@/lib/services/inquiry-service');
+
+  // Look up the selected service
+  const menu = await getFullMenu(restaurant.id);
+  let serviceName = 'General Inquiry';
+  if (menu) {
+    for (const cat of menu.categories) {
+      const found = cat.items.find((i: { id: string; name: string }) => i.id === serviceItemId);
+      if (found) {
+        serviceName = found.name;
+        break;
+      }
+    }
+  }
+
+  // Create inquiry
+  await createInquiry({
+    restaurant_id: restaurant.id,
+    customer_id: customer.id,
+    customer_name: customer.name || undefined,
+    customer_phone: customer.phone,
+    interest: serviceName,
+    source: 'whatsapp',
+  });
+
+  const bt = restaurant.business_type || 'food_beverage';
+  const label = bt === 'education' ? 'course' : 'service';
+
+  await sendBotReply(
+    restaurant,
+    customer,
+    conversation,
+    `📩 *Inquiry Received!*\n\nYou've enquired about: *${serviceName}*\n\nOur team will get back to you shortly! 🙏\n\nIn the meantime, send *book* to book an appointment or *menu* to browse all ${label}s.`
+  );
+
+  // Notify owner
+  if (restaurant.owner_whatsapp && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    const ownerMsg = `📩 *New Inquiry!*\n\n👤 ${customer.name || customer.phone}\n📋 Interested in: *${serviceName}*\n📱 ${customer.phone}`;
+    try {
+      await fetch(
+        `https://graph.facebook.com/v21.0/${restaurant.whatsapp_phone_id}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${restaurant.whatsapp_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: restaurant.owner_whatsapp.replace(/\D/g, ''),
+            type: 'text',
+            text: { body: ownerMsg },
+          }),
+        }
+      );
+    } catch {
+      // Non-critical
+    }
+  }
 }

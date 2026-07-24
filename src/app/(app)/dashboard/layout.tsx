@@ -24,24 +24,50 @@ import {
   Layers,
   ChevronDown,
   Star,
+  CalendarDays,
+  UserCog,
+  Inbox,
 } from "lucide-react";
 import PageTransition from "@/components/dashboard/page-transition";
 import OrderRealtimeListener from "@/components/dashboard/order-realtime-listener";
+import { getBusinessTypeConfig, type BusinessType } from "@/lib/utils/business-types";
 
-const sidebarItems = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/menu", label: "Menu", icon: UtensilsCrossed },
-  { href: "/dashboard/orders", label: "Orders", icon: ShoppingCart },
-  { href: "/dashboard/customers", label: "Customers", icon: Users },
-  { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
-  { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
-  { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
-  { href: "/dashboard/combos", label: "Combos", icon: Layers },
-  { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
-  { href: "/dashboard/loyalty", label: "Loyalty", icon: Gift },
-  { href: "/dashboard/feedback", label: "Feedback", icon: Star },
-  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-];
+// Business types that support appointments
+const APPOINTMENT_TYPES: BusinessType[] = ['salon_spa', 'healthcare', 'education', 'services'];
+// Business types that have inquiry/lead tracking
+const INQUIRY_TYPES: BusinessType[] = ['education', 'healthcare'];
+
+// Base sidebar items — labels for Menu, Orders, Combos, Customers are overridden per business type
+const getSidebarItems = (businessType: BusinessType) => {
+  const config = getBusinessTypeConfig(businessType);
+  const supportsAppointments = APPOINTMENT_TYPES.includes(businessType);
+
+  const items = [
+    { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+    { href: "/dashboard/menu", label: config.sidebar.menu, icon: UtensilsCrossed },
+    { href: "/dashboard/orders", label: config.sidebar.orders, icon: ShoppingCart },
+    ...(supportsAppointments ? [
+      { href: "/dashboard/appointments", label: "Appointments", icon: CalendarDays },
+      { href: "/dashboard/staff", label: "Staff", icon: UserCog },
+    ] : []),
+    ...(INQUIRY_TYPES.includes(businessType) ? [
+      { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
+    ] : []),
+    { href: "/dashboard/customers", label: config.sidebar.customers, icon: Users },
+    { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
+    { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+    { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
+    { href: "/dashboard/combos", label: config.sidebar.combos, icon: Layers },
+    { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
+    { href: "/dashboard/loyalty", label: "Loyalty", icon: Gift },
+    { href: "/dashboard/feedback", label: "Feedback", icon: Star },
+    { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  ];
+
+  return items;
+};
+
+
 
 export default function DashboardLayout({
   children,
@@ -49,8 +75,9 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [restaurantName, setRestaurantName] = useState("My Restaurant");
+  const [restaurantName, setRestaurantName] = useState("My Business");
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
+  const [businessType, setBusinessType] = useState<BusinessType>('food_beverage');
 
   useEffect(() => {
     (async () => {
@@ -59,13 +86,14 @@ export default function DashboardLayout({
       if (!user) return;
       const { data } = await supabase
         .from("restaurants")
-        .select("id, name")
+        .select("id, name, business_type")
         .eq("owner_id", user.id)
         .single();
       if (data) {
         const d = data as Record<string, string>;
         setRestaurantName(d.name);
         setRestaurantId(d.id);
+        if (d.business_type) setBusinessType(d.business_type as BusinessType);
       }
     })();
   }, []);
@@ -114,7 +142,7 @@ export default function DashboardLayout({
 
           {/* Nav */}
           <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 scrollbar-thin">
-            {sidebarItems.map((item) => (
+            {getSidebarItems(businessType).map((item) => (
               <SidebarLink
                 key={item.href}
                 href={item.href}

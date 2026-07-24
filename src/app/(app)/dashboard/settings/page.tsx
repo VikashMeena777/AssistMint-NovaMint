@@ -85,6 +85,10 @@ export default function SettingsPage() {
       "tax_rate",
       "ai_persona",
       "supported_languages",
+      "business_type",
+      "delivery_enabled",
+      "pickup_enabled",
+      "google_review_url",
     ];
 
     for (const key of keysToCheck) {
@@ -349,6 +353,18 @@ function RestaurantSettings({
             placeholder="Full restaurant address..."
             rows={2}
             className="flex w-full rounded-xl border border-input bg-muted/30 px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors resize-none"
+          />
+        </div>
+        <div className="mt-4 space-y-2">
+          <label className="text-sm font-medium">Google Review Link</label>
+          <p className="text-xs text-muted-foreground">
+            Customers who rate ⭐⭐⭐⭐+ will be redirected to leave a Google review
+          </p>
+          <input
+            value={data.google_review_url || ""}
+            onChange={(e) => onChange("google_review_url", e.target.value)}
+            placeholder="https://g.page/r/your-business/review"
+            className="flex h-10 w-full rounded-xl border border-input bg-muted/30 px-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
           />
         </div>
       </div>
@@ -1635,6 +1651,8 @@ function DeliverySettings({
   const enabled = rules.enabled || false;
   const flatFeeRupees = ((rules.flat_fee || 0) / 100).toString();
   const freeAboveRupees = ((rules.free_above || 0) / 100).toString();
+  const pickupEnabled = data.pickup_enabled ?? true;
+  const deliveryEnabled = data.delivery_enabled ?? false;
 
   const updateRules = (field: string, value: string | boolean) => {
     const current = data.delivery_fee_rules || { flat_fee: 0, free_above: 0, enabled: false };
@@ -1658,6 +1676,76 @@ function DeliverySettings({
 
   return (
     <div className="space-y-6">
+      {/* Order Types Available */}
+      <div className="rounded-2xl border border-border/50 bg-card p-6">
+        <h3 className="text-base font-semibold mb-1">Order Types</h3>
+        <p className="text-sm text-muted-foreground mb-5">
+          Choose how customers can receive their orders.
+        </p>
+
+        {/* Pickup Toggle */}
+        <div className="flex items-center justify-between rounded-xl border border-border/50 p-4 mb-3">
+          <div>
+            <p className="text-sm font-medium">🏪 Pickup / Takeaway</p>
+            <p className="text-xs text-muted-foreground">
+              Customers order online and pick up from your location
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={pickupEnabled}
+              onChange={(e) => onChange("pickup_enabled", e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-10 h-5 rounded-full bg-muted peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
+          </label>
+        </div>
+
+        {/* Delivery Toggle */}
+        <div className="flex items-center justify-between rounded-xl border border-border/50 p-4">
+          <div>
+            <p className="text-sm font-medium">🚗 Home Delivery</p>
+            <p className="text-xs text-muted-foreground">
+              Enable if you have your own delivery staff
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={deliveryEnabled}
+              onChange={(e) => onChange("delivery_enabled", e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-10 h-5 rounded-full bg-muted peer-checked:bg-primary transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
+          </label>
+        </div>
+
+        {/* Warning if both are off */}
+        {!pickupEnabled && !deliveryEnabled && (
+          <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-3 mt-3">
+            <p className="text-sm text-destructive font-medium">
+              ⚠️ At least one order type must be enabled for customers to place orders.
+            </p>
+          </div>
+        )}
+
+        {/* Info text */}
+        <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 mt-3">
+          <p className="text-xs text-muted-foreground">
+            {pickupEnabled && deliveryEnabled
+              ? "📋 Customers will choose between Pickup and Delivery at checkout."
+              : pickupEnabled
+              ? "📋 All orders will be Pickup only. No delivery address will be asked."
+              : deliveryEnabled
+              ? "📋 All orders will require delivery address."
+              : "📋 No order type is enabled. Customers cannot place orders."}
+          </p>
+        </div>
+      </div>
+
+      {/* Delivery Charges — only show when delivery is enabled */}
+      {deliveryEnabled && (
       <div className="rounded-2xl border border-border/50 bg-card p-6">
         <h3 className="text-base font-semibold mb-1">Delivery Charges</h3>
         <p className="text-sm text-muted-foreground mb-5">
@@ -1753,6 +1841,7 @@ function DeliverySettings({
           </div>
         )}
       </div>
+      )}
 
       {/* Tax Rate */}
       <div className="rounded-2xl border border-border/50 bg-card p-6">

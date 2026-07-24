@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createRestaurant, updateWhatsAppConfig, startStarterTrial } from '@/lib/actions/restaurant-actions';
 import { createCategory, createMenuItem } from '@/lib/actions/menu-actions';
 import { toast } from 'sonner';
+import { getAllBusinessTypes, type BusinessType } from '@/lib/utils/business-types';
 
 // ─── Types ──────────────────────────────────
 
@@ -90,8 +91,9 @@ export default function OnboardingWizard() {
 
   const [addSampleMenu, setAddSampleMenu] = useState(true);
   const [trialActivated, setTrialActivated] = useState(false);
+  const [selectedBusinessType, setSelectedBusinessType] = useState<BusinessType>('food_beverage');
 
-  const steps = ['Restaurant', 'WhatsApp', 'Menu', 'Launch'];
+  const steps = ['Business', 'Details', 'WhatsApp', 'Menu', 'Launch'];
 
   // ── Auto-generate slug ──
   const handleNameChange = (name: string) => {
@@ -102,17 +104,20 @@ export default function OnboardingWizard() {
     setRestaurant({ ...restaurant, name, slug });
   };
 
-  // ── Step 1: Create Restaurant ──
+  // ── Step 1: Create Restaurant (was Step 0) ──
   const handleCreateRestaurant = async () => {
     if (!restaurant.name || !restaurant.slug) {
-      setError('Restaurant name is required.');
+      setError('Business name is required.');
       return;
     }
 
     setLoading(true);
     setError('');
 
-    const result = await createRestaurant(restaurant);
+    const result = await createRestaurant({
+      ...restaurant,
+      business_type: selectedBusinessType,
+    });
     if (result.error) {
       setError(result.error);
       setLoading(false);
@@ -139,7 +144,7 @@ export default function OnboardingWizard() {
     }
 
     setLoading(false);
-    setStep(1);
+    setStep(2);
   };
 
   // ── Step 2: Configure WhatsApp ──
@@ -160,7 +165,7 @@ export default function OnboardingWizard() {
     }
 
     setLoading(false);
-    setStep(2);
+    setStep(3);
   };
 
   // ── Step 3: Add Sample Menu ──
@@ -222,7 +227,7 @@ export default function OnboardingWizard() {
     }
 
     setLoading(false);
-    setStep(3);
+    setStep(4);
   };
 
   // ── Step 4: Launch ──
@@ -249,11 +254,44 @@ export default function OnboardingWizard() {
             </div>
           )}
 
-          {/* Step 1: Restaurant Details */}
+          {/* Step 0: Business Type Selection */}
           {step === 0 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-white">Restaurant Details</h2>
-              <p className="text-white/40 text-sm">Tell us about your restaurant</p>
+              <h2 className="text-xl font-semibold text-white">What type of business do you run?</h2>
+              <p className="text-white/40 text-sm">This customizes your entire dashboard experience.</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {getAllBusinessTypes().map((bt) => (
+                  <button
+                    key={bt.type}
+                    onClick={() => setSelectedBusinessType(bt.type)}
+                    className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all ${
+                      selectedBusinessType === bt.type
+                        ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/30'
+                        : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+                    }`}
+                  >
+                    <span className="text-2xl mb-1.5">{bt.emoji}</span>
+                    <span className="text-sm font-medium text-white">{bt.label}</span>
+                    <span className="text-xs text-white/40 mt-0.5 line-clamp-2">{bt.description}</span>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => { setError(''); setStep(1); }}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2.5 rounded-lg transition-colors"
+              >
+                Continue →
+              </button>
+            </div>
+          )}
+
+          {/* Step 1: Business Details */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold text-white">Business Details</h2>
+              <p className="text-white/40 text-sm">Tell us about your business</p>
 
               <div>
                 <label className="block text-sm text-white/60 mb-1">Restaurant Name *</label>
@@ -325,7 +363,7 @@ export default function OnboardingWizard() {
           )}
 
           {/* Step 2: WhatsApp Config */}
-          {step === 1 && (
+          {step === 2 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-white">Connect WhatsApp</h2>
               <p className="text-white/40 text-sm">
@@ -449,7 +487,7 @@ export default function OnboardingWizard() {
               </div>
 
               <button
-                onClick={() => setStep(2)}
+                onClick={() => setStep(3)}
                 className="w-full bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
               >
                 Skip for now — configure later in Settings
@@ -458,7 +496,7 @@ export default function OnboardingWizard() {
           )}
 
           {/* Step 3: Menu Setup */}
-          {step === 2 && (
+          {step === 3 && (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-white">Menu Setup</h2>
               <p className="text-white/40 text-sm">Add your first menu items or start with a sample</p>
@@ -508,7 +546,7 @@ export default function OnboardingWizard() {
           )}
 
           {/* Step 4: Launch! */}
-          {step === 3 && (
+          {step === 4 && (
             <div className="text-center space-y-4 py-4">
               <div className="text-5xl mb-4">🚀</div>
               <h2 className="text-2xl font-bold text-white">You&apos;re all set!</h2>
