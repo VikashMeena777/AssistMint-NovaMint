@@ -41,14 +41,56 @@ import {
 import { toast } from "sonner";
 import { updateMenuItem } from "@/lib/actions/menu-actions";
 
-const AVAILABLE_TAGS = [
-  { value: 'bestseller', label: 'Bestseller', icon: Star, color: 'text-amber-500' },
-  { value: 'spicy', label: 'Spicy', icon: Flame, color: 'text-red-500' },
-  { value: 'new', label: 'New', icon: Sparkles, color: 'text-blue-500' },
-  { value: 'chefs_special', label: "Chef's Special", icon: ChefHat, color: 'text-purple-500' },
-  { value: 'popular', label: 'Popular', icon: TrendingUp, color: 'text-emerald-500' },
-  { value: 'must_try', label: 'Must Try', icon: Heart, color: 'text-pink-500' },
-] as const;
+const getTagsForBusinessType = (type: string) => {
+  switch (type) {
+    case 'salon_spa':
+      return [
+        { value: 'bestseller', label: 'Bestseller', icon: Star, color: 'text-amber-500' },
+        { value: 'popular', label: 'Most Popular', icon: TrendingUp, color: 'text-emerald-500' },
+        { value: 'new', label: 'New Service', icon: Sparkles, color: 'text-blue-500' },
+        { value: 'express', label: 'Express', icon: Flame, color: 'text-pink-500' },
+        { value: 'specialist_choice', label: 'Stylist Pick', icon: Heart, color: 'text-purple-500' },
+      ];
+    case 'healthcare':
+      return [
+        { value: 'recommended', label: 'Recommended', icon: Star, color: 'text-emerald-500' },
+        { value: 'popular', label: 'Popular', icon: TrendingUp, color: 'text-blue-500' },
+        { value: 'new', label: 'New Treatment', icon: Sparkles, color: 'text-purple-500' },
+        { value: 'express', label: 'Fast Result', icon: Flame, color: 'text-amber-500' },
+      ];
+    case 'education':
+      return [
+        { value: 'top_rated', label: 'Top Rated', icon: Star, color: 'text-amber-500' },
+        { value: 'high_demand', label: 'High Demand', icon: TrendingUp, color: 'text-emerald-500' },
+        { value: 'new_batch', label: 'New Batch', icon: Sparkles, color: 'text-blue-500' },
+        { value: 'exam_special', label: 'Exam Special', icon: Flame, color: 'text-red-500' },
+      ];
+    case 'retail':
+      return [
+        { value: 'bestseller', label: 'Bestseller', icon: Star, color: 'text-amber-500' },
+        { value: 'new', label: 'New Arrival', icon: Sparkles, color: 'text-blue-500' },
+        { value: 'trending', label: 'Trending', icon: TrendingUp, color: 'text-pink-500' },
+        { value: 'clearance', label: 'Limited Offer', icon: Flame, color: 'text-red-500' },
+      ];
+    case 'services':
+      return [
+        { value: 'most_booked', label: 'Most Booked', icon: Star, color: 'text-amber-500' },
+        { value: 'same_day', label: 'Same Day Available', icon: Flame, color: 'text-emerald-500' },
+        { value: 'warranty', label: 'Warranty Included', icon: Sparkles, color: 'text-blue-500' },
+        { value: 'popular', label: 'Popular', icon: TrendingUp, color: 'text-purple-500' },
+      ];
+    case 'food_beverage':
+    default:
+      return [
+        { value: 'bestseller', label: 'Bestseller', icon: Star, color: 'text-amber-500' },
+        { value: 'spicy', label: 'Spicy', icon: Flame, color: 'text-red-500' },
+        { value: 'new', label: 'New', icon: Sparkles, color: 'text-blue-500' },
+        { value: 'chefs_special', label: "Chef's Special", icon: ChefHat, color: 'text-purple-500' },
+        { value: 'popular', label: 'Popular', icon: TrendingUp, color: 'text-emerald-500' },
+        { value: 'must_try', label: 'Must Try', icon: Heart, color: 'text-pink-500' },
+      ];
+  }
+};
 import {
   getMenuItems,
   getCategories,
@@ -521,7 +563,7 @@ export default function MenuPage() {
           <div className="space-y-2">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tags</p>
             <div className="flex flex-wrap gap-2">
-              {AVAILABLE_TAGS.map((tag) => {
+              {getTagsForBusinessType(businessType).map((tag) => {
                 const isSelected = newItem.tags.includes(tag.value) || (tag.value === 'bestseller' && newItem.is_bestseller);
                 const Icon = tag.icon;
                 return (
@@ -731,7 +773,7 @@ export default function MenuPage() {
                         </span>
                       )}
                       {(item.tags as string[] || []).filter((t: string) => t !== 'bestseller').map((tag: string) => {
-                        const tagDef = AVAILABLE_TAGS.find(t => t.value === tag);
+                        const tagDef = getTagsForBusinessType(businessType).find((t: { value: string; label: string; icon: any; color: string }) => t.value === tag);
                         if (!tagDef) return null;
                         const Icon = tagDef.icon;
                         return (
@@ -778,7 +820,7 @@ export default function MenuPage() {
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tags</label>
                         <div className="flex flex-wrap gap-1">
-                          {AVAILABLE_TAGS.map(tag => {
+                          {getTagsForBusinessType(businessType).map((tag: { value: string; label: string; icon: any; color: string }) => {
                             const currentTags: string[] = (editValues.tags as string[]) ?? (item.tags as string[] || []);
                             const isActive = tag.value === 'bestseller'
                               ? (editValues.is_bestseller !== undefined ? editValues.is_bestseller as boolean : item.is_bestseller)

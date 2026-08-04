@@ -21,6 +21,7 @@ import {
   PhoneCall,
   CheckCircle2,
   Camera,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -209,6 +210,8 @@ export default function SettingsPage() {
               };
               const label = tab.id === "restaurant" ? (tabLabelMap[bType] || "Business Details") : tab.id === "delivery" ? (bType === "food_beverage" || bType === "retail" ? "Delivery" : "Service Options") : tab.label;
 
+              const TabIcon = tab.id === "delivery" && !(bType === "food_beverage" || bType === "retail") ? MapPin : tab.icon;
+
               return (
                 <button
                   key={tab.id}
@@ -219,7 +222,7 @@ export default function SettingsPage() {
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >
-                  <tab.icon className="h-4 w-4" />
+                  <TabIcon className="h-4 w-4" />
                   {label}
                 </button>
               );

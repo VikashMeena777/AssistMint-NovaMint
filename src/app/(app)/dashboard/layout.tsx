@@ -15,9 +15,9 @@ import {
   BarChart3,
   Gift,
   Megaphone,
-  Settings,
+  Settings as SettingsIcon,
   LogOut,
-  Menu,
+  Menu as MenuIcon,
   X,
   CreditCard,
   Tag,
@@ -27,61 +27,126 @@ import {
   CalendarDays,
   UserCog,
   Inbox,
+  Scissors,
+  Stethoscope,
+  BookOpen,
+  ShoppingBag,
+  Wrench,
+  Package,
+  GraduationCap,
+  UserCheck,
+  Activity,
+  Award,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import PageTransition from "@/components/dashboard/page-transition";
 import OrderRealtimeListener from "@/components/dashboard/order-realtime-listener";
 import { getBusinessTypeConfig, type BusinessType } from "@/lib/utils/business-types";
 
-// Business types that support appointments
-const APPOINTMENT_TYPES: BusinessType[] = ['salon_spa', 'healthcare', 'education', 'services'];
-// Business types that have inquiry/lead tracking
-const INQUIRY_TYPES: BusinessType[] = ['education', 'healthcare'];
-
-// Base sidebar items — labels for Menu, Orders, Combos, Customers are overridden per business type
+// Isolated sidebar items for each business type
 const getSidebarItems = (businessType: BusinessType) => {
   const config = getBusinessTypeConfig(businessType);
-  const supportsCart = config.supportsCart;
-  const supportsAppointments = APPOINTMENT_TYPES.includes(businessType);
+  const terms = config.terms;
 
-  const staffLabelMap: Record<string, string> = {
-    salon_spa: "Staff & Stylists",
-    healthcare: "Doctors & Staff",
-    education: "Faculty & Tutors",
-    services: "Technicians & Staff",
-  };
+  switch (businessType) {
+    case 'salon_spa':
+      return [
+        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+        { href: "/dashboard/services", label: terms.catalog, icon: Scissors },
+        { href: "/dashboard/appointments", label: terms.bookings, icon: CalendarDays },
+        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserCog },
+        { href: "/dashboard/clients", label: terms.customers, icon: Users },
+        { href: "/dashboard/packages", label: terms.combo, icon: Sparkles },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+        { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
+        { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
+        { href: "/dashboard/loyalty", label: "Loyalty", icon: Gift },
+        { href: "/dashboard/feedback", label: "Reviews", icon: Star },
+        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+      ];
 
-  const apptLabelMap: Record<string, string> = {
-    education: "Demo Classes",
-    services: "Bookings",
-    salon_spa: "Appointments",
-    healthcare: "Appointments",
-  };
+    case 'healthcare':
+      return [
+        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+        { href: "/dashboard/services", label: terms.catalog, icon: Stethoscope },
+        { href: "/dashboard/appointments", label: terms.bookings, icon: CalendarDays },
+        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserCheck },
+        { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
+        { href: "/dashboard/patients", label: terms.customers, icon: Users },
+        { href: "/dashboard/packages", label: terms.combo, icon: Activity },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+        { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
+        { href: "/dashboard/feedback", label: "Reviews", icon: Star },
+        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+      ];
 
-  const items = [
-    { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-    { href: "/dashboard/menu", label: config.sidebar.menu, icon: UtensilsCrossed },
-    ...(supportsCart ? [
-      { href: "/dashboard/orders", label: config.sidebar.orders, icon: ShoppingCart },
-    ] : []),
-    ...(supportsAppointments ? [
-      { href: "/dashboard/appointments", label: apptLabelMap[businessType] || "Appointments", icon: CalendarDays },
-      { href: "/dashboard/staff", label: staffLabelMap[businessType] || "Staff", icon: UserCog },
-    ] : []),
-    ...(INQUIRY_TYPES.includes(businessType) ? [
-      { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
-    ] : []),
-    { href: "/dashboard/customers", label: config.sidebar.customers, icon: Users },
-    { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
-    { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
-    { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
-    { href: "/dashboard/combos", label: config.sidebar.combos, icon: Layers },
-    { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
-    { href: "/dashboard/loyalty", label: "Loyalty", icon: Gift },
-    { href: "/dashboard/feedback", label: "Feedback", icon: Star },
-    { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  ];
+    case 'education':
+      return [
+        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+        { href: "/dashboard/courses", label: terms.catalog, icon: BookOpen },
+        { href: "/dashboard/appointments", label: terms.bookings, icon: CalendarDays },
+        { href: "/dashboard/staff", label: terms.staffTitle, icon: GraduationCap },
+        { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
+        { href: "/dashboard/students", label: terms.customers, icon: Users },
+        { href: "/dashboard/packages", label: terms.combo, icon: Award },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
+        { href: "/dashboard/payments", label: "Fee Payments", icon: CreditCard },
+        { href: "/dashboard/campaigns", label: "Student Broadcasts", icon: Megaphone },
+        { href: "/dashboard/feedback", label: "Reviews", icon: Star },
+        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+      ];
 
-  return items;
+    case 'retail':
+      return [
+        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+        { href: "/dashboard/products", label: terms.catalog, icon: ShoppingBag },
+        { href: "/dashboard/orders", label: terms.bookings, icon: Package },
+        { href: "/dashboard/customers", label: terms.customers, icon: Users },
+        { href: "/dashboard/packages", label: terms.combo, icon: Gift },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+        { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
+        { href: "/dashboard/campaigns", label: "Promotions", icon: Megaphone },
+        { href: "/dashboard/loyalty", label: "Loyalty Points", icon: Gift },
+        { href: "/dashboard/feedback", label: "Reviews", icon: Star },
+        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+      ];
+
+    case 'services':
+      return [
+        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+        { href: "/dashboard/services", label: terms.catalog, icon: Wrench },
+        { href: "/dashboard/appointments", label: terms.bookings, icon: CalendarDays },
+        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserCog },
+        { href: "/dashboard/customers", label: terms.customers, icon: Users },
+        { href: "/dashboard/packages", label: terms.combo, icon: ShieldCheck },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+        { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
+        { href: "/dashboard/feedback", label: "Ratings & Reviews", icon: Star },
+        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+      ];
+
+    case 'food_beverage':
+    default:
+      return [
+        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+        { href: "/dashboard/menu", label: terms.catalog, icon: UtensilsCrossed },
+        { href: "/dashboard/orders", label: terms.bookings, icon: ShoppingCart },
+        { href: "/dashboard/customers", label: terms.customers, icon: Users },
+        { href: "/dashboard/combos", label: terms.combo, icon: Layers },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+        { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
+        { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
+        { href: "/dashboard/loyalty", label: "Loyalty", icon: Gift },
+        { href: "/dashboard/feedback", label: "Feedback", icon: Star },
+        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+      ];
+  }
 };
 
 
@@ -175,7 +240,7 @@ export default function DashboardLayout({
             <SidebarLink
               href="/dashboard/settings"
               label="Settings"
-              icon={Settings}
+              icon={SettingsIcon}
               onClick={() => setSidebarOpen(false)}
             />
             <LogoutButton />
@@ -191,7 +256,7 @@ export default function DashboardLayout({
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden text-muted-foreground hover:text-foreground"
           >
-            <Menu className="h-5 w-5" />
+            <MenuIcon className="h-5 w-5" />
           </button>
 
           <div className="flex-1" />
