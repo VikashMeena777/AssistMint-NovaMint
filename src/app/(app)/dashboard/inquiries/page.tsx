@@ -24,10 +24,24 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   closed: { label: '❌ Closed', color: 'bg-gray-500/10 text-gray-400 border-gray-500/20', icon: <XCircle className="w-3.5 h-3.5" /> },
 };
 
+import { getCurrentRestaurant } from '@/lib/actions/restaurant-actions';
+import { getBusinessTypeConfig } from '@/lib/utils/business-types';
+
 export default function InquiriesPage() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [businessType, setBusinessType] = useState<string>('education');
+
+  useEffect(() => {
+    (async () => {
+      const r = await getCurrentRestaurant();
+      if (r?.business_type) setBusinessType(r.business_type as string);
+    })();
+  }, []);
+
+  const config = getBusinessTypeConfig(businessType);
+  const terms = config.terms;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -61,9 +75,9 @@ export default function InquiriesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Inquiries</h1>
+        <h1 className="text-2xl font-bold">{terms.customer} Inquiries</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Track and follow up on customer inquiries
+          Track and follow up on {terms.customer.toLowerCase()} inquiries and lead requests
         </p>
       </div>
 

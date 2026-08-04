@@ -24,6 +24,8 @@ import {
 import { getMenuItems, getCategories } from "@/lib/actions/menu-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
 
+import { getBusinessTypeConfig } from "@/lib/utils/business-types";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyData = Record<string, any>;
 
@@ -33,6 +35,7 @@ export default function CombosPage() {
   const [categories, setCategories] = useState<AnyData[]>([]);
   const [loading, setLoading] = useState(true);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
+  const [businessType, setBusinessType] = useState<string>("food_beverage");
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -49,10 +52,15 @@ export default function CombosPage() {
   useEffect(() => {
     (async () => {
       const r = await getCurrentRestaurant();
-      if (r?.id) setRestaurantId(r.id as string);
-      else setLoading(false);
+      if (r?.id) {
+        setRestaurantId(r.id as string);
+        if (r.business_type) setBusinessType(r.business_type as string);
+      } else setLoading(false);
     })();
   }, []);
+
+  const config = getBusinessTypeConfig(businessType);
+  const terms = config.terms;
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
@@ -181,9 +189,9 @@ export default function CombosPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Combos</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{terms.combo}</h1>
           <p className="text-sm text-muted-foreground">
-            Bundle menu items together with a special price to boost average order value.
+            {terms.comboDesc}
           </p>
         </div>
         <div className="flex gap-2">
@@ -199,7 +207,7 @@ export default function CombosPage() {
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 transition-all"
           >
             <Plus className="h-4 w-4" />
-            Create Combo
+            {terms.comboAdd}
           </button>
         </div>
       </div>
@@ -208,7 +216,7 @@ export default function CombosPage() {
       {showCreate && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold">Create Combo</h3>
+            <h3 className="text-base font-semibold">{terms.comboAdd}</h3>
             <button onClick={() => setShowCreate(false)}>
               <X className="h-4 w-4 text-muted-foreground" />
             </button>

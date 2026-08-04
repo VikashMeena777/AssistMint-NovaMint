@@ -20,6 +20,8 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
+import { getCurrentRestaurant } from '@/lib/actions/restaurant-actions';
+import { getBusinessTypeConfig } from '@/lib/utils/business-types';
 
 const AUDIENCE_OPTIONS = [
   { value: 'all', label: '👥 All Customers', desc: 'Every customer who has ever messaged' },
@@ -39,6 +41,17 @@ export default function CampaignsPage() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [businessType, setBusinessType] = useState<string>('food_beverage');
+
+  useEffect(() => {
+    (async () => {
+      const r = await getCurrentRestaurant();
+      if (r?.business_type) setBusinessType(r.business_type as string);
+    })();
+  }, []);
+
+  const config = getBusinessTypeConfig(businessType);
+  const terms = config.terms;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -50,7 +63,7 @@ export default function CampaignsPage() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleSend = async (id: string) => {
-    const confirmed = window.confirm('Send this broadcast to all targeted customers? This cannot be undone.');
+    const confirmed = window.confirm(`Send this broadcast to all targeted ${terms.customers.toLowerCase()}? This cannot be undone.`);
     if (!confirmed) return;
 
     toast.loading('Sending broadcast...', { id: 'broadcast-send' });
@@ -60,30 +73,30 @@ export default function CampaignsPage() {
     if (result.error) {
       toast.error(result.error);
     } else {
-      toast.success(`✅ Broadcast sent! ${result.sent} delivered, ${result.failed} failed`);
+      toast.success('Broadcast campaign launched!');
       loadData();
     }
   };
 
   const sentCount = broadcasts.filter((b) => b.status === 'sent').length;
-  const totalReach = broadcasts.reduce((sum, b) => sum + b.sent_count, 0);
+  const totalReach = broadcasts.reduce((sum, b) => sum + (b.sent_count || 0), 0);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Campaigns</h1>
+          <h1 className="text-2xl font-bold">Broadcast Campaigns</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Broadcast promotional messages to your customers via WhatsApp
+            Send WhatsApp broadcasts & promotional messages to your {terms.customers.toLowerCase()}
           </p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl font-medium hover:bg-primary/90 transition-colors"
+          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl font-medium hover:opacity-90 transition-opacity"
         >
           <Plus className="w-4 h-4" />
-          New Broadcast
+          New Campaign
         </button>
       </div>
 

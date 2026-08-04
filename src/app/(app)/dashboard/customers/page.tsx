@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { getCustomers, toggleCustomerBlock } from "@/lib/actions/customer-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
 
+import { getBusinessTypeConfig } from "@/lib/utils/business-types";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyData = Record<string, any>;
 
@@ -22,15 +24,21 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<AnyData[]>([]);
   const [loading, setLoading] = useState(true);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
+  const [businessType, setBusinessType] = useState<string>("food_beverage");
   const [count, setCount] = useState(0);
 
   useEffect(() => {
     (async () => {
       const r = await getCurrentRestaurant();
-      if (r?.id) setRestaurantId(r.id as string);
-      else setLoading(false);
+      if (r?.id) {
+        setRestaurantId(r.id as string);
+        if (r.business_type) setBusinessType(r.business_type as string);
+      } else setLoading(false);
     })();
   }, []);
+
+  const config = getBusinessTypeConfig(businessType);
+  const terms = config.terms;
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
@@ -53,7 +61,7 @@ export default function CustomersPage() {
     const result = await toggleCustomerBlock(restaurantId, customerId, block);
     if (result.error) toast.error(result.error);
     else {
-      toast.success(block ? "Customer blocked" : "Customer unblocked");
+      toast.success(block ? `${terms.customer} blocked` : `${terms.customer} unblocked`);
       loadData();
     }
   };
@@ -61,9 +69,9 @@ export default function CustomersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{terms.customers}</h1>
         <p className="text-sm text-muted-foreground">
-          {count} total customers · Manage your WhatsApp customer base.
+          {count} total {terms.customers.toLowerCase()} · Manage your WhatsApp {terms.customer.toLowerCase()} base.
         </p>
       </div>
 
@@ -73,7 +81,7 @@ export default function CustomersPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or phone..."
+          placeholder={`Search by name or phone...`}
           className="flex h-10 w-full rounded-xl border border-input bg-card pl-10 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
         />
       </div>
@@ -102,9 +110,9 @@ export default function CustomersPage() {
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 mb-6">
               <Users className="h-9 w-9 text-primary" />
             </div>
-            <h3 className="text-lg font-semibold">No customers yet</h3>
+            <h3 className="text-lg font-semibold">No {terms.customers.toLowerCase()} yet</h3>
             <p className="mt-2 text-sm text-muted-foreground max-w-md">
-              Customer profiles are created automatically when they message your WhatsApp bot.
+              {terms.customer} profiles are created automatically when they message your WhatsApp bot.
             </p>
           </div>
         ) : (

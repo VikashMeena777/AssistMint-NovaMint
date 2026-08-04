@@ -64,7 +64,8 @@ const STATUS_LABELS: Record<string, string> = {
   no_show: '👻 No Show',
 };
 
-// ─── Main Component ─────────────────────────
+import { getCurrentRestaurant } from '@/lib/actions/restaurant-actions';
+import { getBusinessTypeConfig } from '@/lib/utils/business-types';
 
 export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -73,6 +74,17 @@ export default function AppointmentsPage() {
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showNewForm, setShowNewForm] = useState(false);
+  const [businessType, setBusinessType] = useState<string>('salon_spa');
+
+  useEffect(() => {
+    (async () => {
+      const r = await getCurrentRestaurant();
+      if (r?.business_type) setBusinessType(r.business_type as string);
+    })();
+  }, []);
+
+  const config = getBusinessTypeConfig(businessType);
+  const terms = config.terms;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -95,7 +107,7 @@ export default function AppointmentsPage() {
     if (result.error) {
       toast.error(result.error);
     } else {
-      toast.success(`Appointment ${status}`);
+      toast.success(`Booking status updated`);
       loadData();
     }
   };
@@ -113,15 +125,15 @@ export default function AppointmentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Appointments</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage bookings and schedule</p>
+          <h1 className="text-2xl font-bold">{terms.bookings}</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage bookings and scheduling</p>
         </div>
         <button
           onClick={() => setShowNewForm(true)}
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl font-medium hover:opacity-90 transition-opacity"
         >
           <Plus className="w-4 h-4" />
-          New Booking
+          New {terms.booking}
         </button>
       </div>
 

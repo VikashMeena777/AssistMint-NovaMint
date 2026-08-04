@@ -6,11 +6,25 @@ import type { StaffMember } from '@/lib/services/appointment-service';
 import { toast } from 'sonner';
 import { Plus, X, Pencil, Trash2, User, Phone, Briefcase, Star } from 'lucide-react';
 
+import { getCurrentRestaurant } from '@/lib/actions/restaurant-actions';
+import { getBusinessTypeConfig } from '@/lib/utils/business-types';
+
 export default function StaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [businessType, setBusinessType] = useState<string>('salon_spa');
+
+  useEffect(() => {
+    (async () => {
+      const r = await getCurrentRestaurant();
+      if (r?.business_type) setBusinessType(r.business_type as string);
+    })();
+  }, []);
+
+  const config = getBusinessTypeConfig(businessType);
+  const terms = config.terms;
 
   const loadStaff = useCallback(async () => {
     setLoading(true);
@@ -37,9 +51,9 @@ export default function StaffPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Staff</h1>
+          <h1 className="text-2xl font-bold">{terms.staffTitle}</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Manage your team members
+            Manage your team members and schedule
           </p>
         </div>
         <button
@@ -47,7 +61,7 @@ export default function StaffPage() {
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl font-medium hover:opacity-90 transition-opacity"
         >
           <Plus className="w-4 h-4" />
-          Add Staff
+          Add {terms.staff}
         </button>
       </div>
 

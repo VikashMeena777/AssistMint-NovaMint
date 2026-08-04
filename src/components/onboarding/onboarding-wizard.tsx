@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createRestaurant, updateWhatsAppConfig, startStarterTrial } from '@/lib/actions/restaurant-actions';
 import { createCategory, createMenuItem } from '@/lib/actions/menu-actions';
 import { toast } from 'sonner';
-import { getAllBusinessTypes, type BusinessType } from '@/lib/utils/business-types';
+import { getAllBusinessTypes, getBusinessTypeConfig, type BusinessType } from '@/lib/utils/business-types';
 
 // ─── Types ──────────────────────────────────
 
@@ -632,11 +632,14 @@ export default function OnboardingWizard() {
             </div>
           )}
 
-          {/* Step 3: Menu Setup */}
-          {step === 3 && (
+          {/* Step 3: Catalog / Menu Setup */}
+          {step === 3 && (() => {
+            const config = getBusinessTypeConfig(selectedBusinessType);
+            const terms = config.terms;
+            return (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-white">Menu Setup</h2>
-              <p className="text-white/40 text-sm">Add your first menu items or start with a sample</p>
+              <h2 className="text-xl font-semibold text-white">{terms.setupCatalog}</h2>
+              <p className="text-white/40 text-sm">{terms.setupCatalogDesc}</p>
 
               <div
                 onClick={() => setAddSampleMenu(true)}
@@ -649,8 +652,8 @@ export default function OnboardingWizard() {
                 <div className="flex items-center gap-3">
                   <div className={`w-4 h-4 rounded-full border-2 ${addSampleMenu ? 'border-emerald-500 bg-emerald-500' : 'border-white/20'}`} />
                   <div>
-                    <div className="text-white font-medium">Start with sample menu</div>
-                    <div className="text-white/40 text-sm">3 categories, 9 items — you can edit later</div>
+                    <div className="text-white font-medium">Start with sample {terms.catalog.toLowerCase()}</div>
+                    <div className="text-white/40 text-sm">Sample categories & items pre-configured — edit anytime</div>
                   </div>
                 </div>
               </div>
@@ -666,7 +669,7 @@ export default function OnboardingWizard() {
                 <div className="flex items-center gap-3">
                   <div className={`w-4 h-4 rounded-full border-2 ${!addSampleMenu ? 'border-emerald-500 bg-emerald-500' : 'border-white/20'}`} />
                   <div>
-                    <div className="text-white font-medium">I&apos;ll add my own menu</div>
+                    <div className="text-white font-medium">I&apos;ll add my own {terms.catalog.toLowerCase()}</div>
                     <div className="text-white/40 text-sm">Set up from scratch in the dashboard</div>
                   </div>
                 </div>
@@ -684,33 +687,37 @@ export default function OnboardingWizard() {
                   disabled={loading}
                   className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
                 >
-                  {loading ? 'Setting up menu...' : 'Continue →'}
+                  {loading ? 'Setting up...' : 'Continue →'}
                 </button>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Step 4: Launch! */}
-          {step === 4 && (
+          {step === 4 && (() => {
+            const config = getBusinessTypeConfig(selectedBusinessType);
+            const terms = config.terms;
+            return (
             <div className="text-center space-y-4 py-4">
               <div className="text-5xl mb-4">🚀</div>
               <h2 className="text-2xl font-bold text-white">You&apos;re all set!</h2>
               <p className="text-white/50">
-                Your AI ordering assistant is ready. Head to the dashboard to manage your menu, view orders, and customize your bot.
+                Your AI assistant is ready. Head to your dashboard to {terms.launchSubtext}.
               </p>
 
               <div className="bg-white/5 rounded-xl p-4 text-left space-y-2 text-sm">
                 <div className="flex items-center gap-2 text-emerald-400">
-                  <span>✅</span> Business created
+                  <span>✅</span> Business profile created ({config.label})
                 </div>
                 <div className="flex items-center gap-2 text-emerald-400">
-                  <span>✅</span> WhatsApp configured
+                  <span>✅</span> WhatsApp assistant configured
                 </div>
                 <div className="flex items-center gap-2 text-emerald-400">
-                  <span>✅</span> {addSampleMenu ? 'Sample menu added (9 items)' : 'Ready for menu setup'}
+                  <span>✅</span> {addSampleMenu ? terms.sampleAddedText : `Ready for ${terms.catalog.toLowerCase()} setup`}
                 </div>
                 <div className="flex items-center gap-2 text-emerald-400">
-                  <span>✅</span> AI assistant active
+                  <span>✅</span> AI persona active
                 </div>
                 {trialActivated && (
                   <div className="flex items-center gap-2 text-amber-400">
@@ -726,7 +733,8 @@ export default function OnboardingWizard() {
                 Go to Dashboard →
               </button>
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Footer */}
