@@ -1678,6 +1678,61 @@ function DeliverySettings({
   const pickupEnabled = data.pickup_enabled ?? true;
   const deliveryEnabled = data.delivery_enabled ?? false;
 
+  const bType = (data.business_type as string) || "food_beverage";
+  const isCartBusiness = bType === "food_beverage" || bType === "retail";
+
+  const cfg = {
+    title: isCartBusiness ? "Order Types & Delivery" : "Service Location Options",
+    subtitle: isCartBusiness 
+      ? "Choose how customers can receive their orders." 
+      : "Choose where clients can receive your services or appointments.",
+    option1Label: isCartBusiness ? "🏪 Pickup / Takeaway" : "🏢 In-Salon / On-Site Visit",
+    option1Desc: isCartBusiness 
+      ? "Customers order online and pick up from your location" 
+      : "Clients visit your salon/clinic/studio for appointments",
+    option2Label: isCartBusiness ? "🚗 Home Delivery" : "🏠 At-Home / Doorstep Service",
+    option2Desc: isCartBusiness 
+      ? "Enable if you offer home delivery of products/food" 
+      : "Enable if your staff visits client's home/location for service",
+    warningText: isCartBusiness
+      ? "⚠️ At least one order type must be enabled for customers to place orders."
+      : "⚠️ At least one service option must be enabled for clients to book.",
+    infoBoth: isCartBusiness
+      ? "📋 Customers will choose between Pickup and Delivery at checkout."
+      : "📋 Clients will choose between In-Salon visit and Home Visit when booking.",
+    infoOption1Only: isCartBusiness
+      ? "📋 All orders will be Pickup only. No delivery address will be asked."
+      : "📋 All appointments will be In-Salon / On-Site only. No home address will be asked.",
+    infoOption2Only: isCartBusiness
+      ? "📋 All orders will require delivery address."
+      : "📋 All appointments will require customer's home address.",
+    infoNeither: isCartBusiness
+      ? "📋 No order type is enabled. Customers cannot place orders."
+      : "📋 No option is enabled. Clients cannot book appointments.",
+    feeTitle: isCartBusiness ? "Delivery Charges" : "Home Visit / Travel Charges",
+    feeSubtitle: isCartBusiness 
+      ? "Configure how delivery fees are applied to customer orders." 
+      : "Configure travel charges applied for home visit appointments.",
+    feeEnableLabel: isCartBusiness ? "Enable Delivery Charges" : "Enable Home Visit Fee",
+    feeEnableDesc: isCartBusiness 
+      ? "When enabled, delivery fee will be added to all orders" 
+      : "When enabled, travel fee will be added to home visit bookings",
+    feeAmountLabel: isCartBusiness ? "Delivery Fee (₹)" : "Travel Fee (₹)",
+    feeAmountDesc: isCartBusiness 
+      ? "Flat delivery charge applied to each order" 
+      : "Flat travel fee added for home visit service",
+    freeAboveLabel: isCartBusiness ? "Free Delivery Above (₹)" : "Free Home Visit Fee Above (₹)",
+    freeAboveDesc: isCartBusiness 
+      ? "Orders above this amount get free delivery. Set to 0 to always charge." 
+      : "Bookings above this amount get free home visit fee. Set to 0 to always charge.",
+    previewFee: isCartBusiness ? "Delivery fee" : "Travel fee",
+    previewFree: isCartBusiness ? "Free delivery on orders above" : "Free home visit fee on bookings above",
+    previewBotText: isCartBusiness ? "🚚 Delivery: ₹" : "🏠 Home Visit Fee: ₹",
+    disabledFeeText: isCartBusiness 
+      ? "Delivery charges are currently disabled. All orders will show ₹0 delivery fee." 
+      : "Home visit charges are currently disabled. All home visits will show ₹0 extra fee.",
+  };
+
   const updateRules = (field: string, value: string | boolean) => {
     const current = data.delivery_fee_rules || { flat_fee: 0, free_above: 0, enabled: false };
     let updated;
@@ -1694,25 +1749,24 @@ function DeliverySettings({
       updated = current;
     }
 
-    // We pass this as a string but the parent stores it as-is in formData
     onChange("delivery_fee_rules", updated as unknown as string);
   };
 
   return (
     <div className="space-y-6">
-      {/* Order Types Available */}
+      {/* Order Types / Service Location Available */}
       <div className="rounded-2xl border border-border/50 bg-card p-6">
-        <h3 className="text-base font-semibold mb-1">Order Types</h3>
+        <h3 className="text-base font-semibold mb-1">{cfg.title}</h3>
         <p className="text-sm text-muted-foreground mb-5">
-          Choose how customers can receive their orders.
+          {cfg.subtitle}
         </p>
 
-        {/* Pickup Toggle */}
+        {/* Option 1: Pickup / In-Salon */}
         <div className="flex items-center justify-between rounded-xl border border-border/50 p-4 mb-3">
           <div>
-            <p className="text-sm font-medium">🏪 Pickup / Takeaway</p>
+            <p className="text-sm font-medium">{cfg.option1Label}</p>
             <p className="text-xs text-muted-foreground">
-              Customers order online and pick up from your location
+              {cfg.option1Desc}
             </p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
@@ -1726,12 +1780,12 @@ function DeliverySettings({
           </label>
         </div>
 
-        {/* Delivery Toggle */}
+        {/* Option 2: Delivery / At-Home */}
         <div className="flex items-center justify-between rounded-xl border border-border/50 p-4">
           <div>
-            <p className="text-sm font-medium">🚗 Home Delivery</p>
+            <p className="text-sm font-medium">{cfg.option2Label}</p>
             <p className="text-xs text-muted-foreground">
-              Enable if you have your own delivery staff
+              {cfg.option2Desc}
             </p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
@@ -1749,7 +1803,7 @@ function DeliverySettings({
         {!pickupEnabled && !deliveryEnabled && (
           <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-3 mt-3">
             <p className="text-sm text-destructive font-medium">
-              ⚠️ At least one order type must be enabled for customers to place orders.
+              {cfg.warningText}
             </p>
           </div>
         )}
@@ -1758,30 +1812,30 @@ function DeliverySettings({
         <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 mt-3">
           <p className="text-xs text-muted-foreground">
             {pickupEnabled && deliveryEnabled
-              ? "📋 Customers will choose between Pickup and Delivery at checkout."
+              ? cfg.infoBoth
               : pickupEnabled
-              ? "📋 All orders will be Pickup only. No delivery address will be asked."
+              ? cfg.infoOption1Only
               : deliveryEnabled
-              ? "📋 All orders will require delivery address."
-              : "📋 No order type is enabled. Customers cannot place orders."}
+              ? cfg.infoOption2Only
+              : cfg.infoNeither}
           </p>
         </div>
       </div>
 
-      {/* Delivery Charges — only show when delivery is enabled */}
+      {/* Delivery / Travel Charges — only show when delivery/at-home is enabled */}
       {deliveryEnabled && (
       <div className="rounded-2xl border border-border/50 bg-card p-6">
-        <h3 className="text-base font-semibold mb-1">Delivery Charges</h3>
+        <h3 className="text-base font-semibold mb-1">{cfg.feeTitle}</h3>
         <p className="text-sm text-muted-foreground mb-5">
-          Configure how delivery fees are applied to customer orders.
+          {cfg.feeSubtitle}
         </p>
 
         {/* Enable Toggle */}
         <div className="flex items-center justify-between rounded-xl border border-border/50 p-4 mb-5">
           <div>
-            <p className="text-sm font-medium">Enable Delivery Charges</p>
+            <p className="text-sm font-medium">{cfg.feeEnableLabel}</p>
             <p className="text-xs text-muted-foreground">
-              When enabled, delivery fee will be added to all orders
+              {cfg.feeEnableDesc}
             </p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
@@ -1799,7 +1853,7 @@ function DeliverySettings({
           <div className="space-y-4">
             {/* Flat Fee */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Delivery Fee (₹)</label>
+              <label className="text-sm font-medium">{cfg.feeAmountLabel}</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">₹</span>
                 <input
@@ -1813,13 +1867,13 @@ function DeliverySettings({
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Flat delivery charge applied to each order
+                {cfg.feeAmountDesc}
               </p>
             </div>
 
-            {/* Free Delivery Threshold */}
+            {/* Free Threshold */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Free Delivery Above (₹)</label>
+              <label className="text-sm font-medium">{cfg.freeAboveLabel}</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">₹</span>
                 <input
@@ -1833,7 +1887,7 @@ function DeliverySettings({
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Orders above this amount get free delivery. Set to 0 to always charge.
+                {cfg.freeAboveDesc}
               </p>
             </div>
 
@@ -1842,15 +1896,15 @@ function DeliverySettings({
               <p className="text-sm font-medium text-primary mb-2">📋 Preview</p>
               <div className="space-y-1 text-sm text-muted-foreground">
                 <p>
-                  • Delivery fee: <span className="font-medium text-foreground">₹{flatFeeRupees}</span> per order
+                  • {cfg.previewFee}: <span className="font-medium text-foreground">₹{flatFeeRupees}</span> per booking
                 </p>
                 {parseInt(freeAboveRupees) > 0 && (
                   <p>
-                    • Free delivery on orders above: <span className="font-medium text-foreground">₹{freeAboveRupees}</span>
+                    • {cfg.previewFree}: <span className="font-medium text-foreground">₹{freeAboveRupees}</span>
                   </p>
                 )}
                 <p className="text-xs mt-2 italic">
-                  Bot will automatically show &quot;🚚 Delivery: ₹{flatFeeRupees}&quot; in the cart summary
+                  Bot will automatically show &quot;{cfg.previewBotText}{flatFeeRupees}&quot; in summary
                 </p>
               </div>
             </div>
@@ -1860,7 +1914,7 @@ function DeliverySettings({
         {!enabled && (
           <div className="rounded-xl bg-muted/30 border border-border/50 p-4">
             <p className="text-sm text-muted-foreground">
-              Delivery charges are currently disabled. All orders will show ₹0 delivery fee.
+              {cfg.disabledFeeText}
             </p>
           </div>
         )}
