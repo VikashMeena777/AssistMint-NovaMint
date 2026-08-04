@@ -41,10 +41,14 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-500/10 text-red-600",
 };
 
+import { useRouter } from "next/navigation";
+import { getBusinessTypeConfig } from "@/lib/utils/business-types";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OrderData = Record<string, any>;
 
 export default function OrdersPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("all");
   const [search, setSearch] = useState("");
   const [orders, setOrders] = useState<OrderData[]>([]);
@@ -62,10 +66,15 @@ export default function OrdersPage() {
   useEffect(() => {
     (async () => {
       const r = await getCurrentRestaurant();
-      if (r?.id) setRestaurantId(r.id as string);
-      else setLoading(false);
+      if (r?.id) {
+        setRestaurantId(r.id as string);
+        const config = getBusinessTypeConfig(r.business_type as string);
+        if (!config.supportsCart) {
+          router.replace("/dashboard/appointments");
+        }
+      } else setLoading(false);
     })();
-  }, []);
+  }, [router]);
 
   const loadOrders = useCallback(async () => {
     if (!restaurantId) return;

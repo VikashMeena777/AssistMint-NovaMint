@@ -174,7 +174,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
           <p className="text-sm text-muted-foreground">
-            Configure your restaurant, WhatsApp bot, and integrations.
+            Configure your business, WhatsApp bot, and integrations.
           </p>
         </div>
         {isDirty() && (
@@ -197,20 +197,33 @@ export default function SettingsPage() {
         {/* Tab List */}
         <div className="lg:col-span-1">
           <nav className="space-y-1">
-            {SETTINGS_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            ))}
+            {SETTINGS_TABS.map((tab) => {
+              const bType = (formData.business_type as string) || "food_beverage";
+              const tabLabelMap: Record<string, string> = {
+                food_beverage: "Restaurant",
+                salon_spa: "Salon Details",
+                healthcare: "Clinic Details",
+                education: "Academy Details",
+                retail: "Store Details",
+                services: "Business Details",
+              };
+              const label = tab.id === "restaurant" ? (tabLabelMap[bType] || "Business Details") : tab.id === "delivery" ? (bType === "food_beverage" || bType === "retail" ? "Delivery" : "Service Options") : tab.label;
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                    activeTab === tab.id
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <tab.icon className="h-4 w-4" />
+                  {label}
+                </button>
+              );
+            })}
           </nav>
         </div>
 
@@ -254,14 +267,25 @@ function RestaurantSettings({
   data: RestaurantData;
   onChange: (key: string, value: any) => void;
 }) {
+  const bType = (data.business_type as string) || "food_beverage";
+  const settingsLabelMap: Record<string, { nameLabel: string; namePlaceholder: string; secondLabel: string; secondPlaceholder: string; tabName: string }> = {
+    food_beverage: { nameLabel: "Restaurant Name", namePlaceholder: "e.g., Spice Garden", secondLabel: "Cuisine Type", secondPlaceholder: "e.g., North Indian, Chinese", tabName: "Restaurant Details" },
+    salon_spa: { nameLabel: "Salon / Spa Name", namePlaceholder: "e.g., Glow Beauty Salon", secondLabel: "Specialization / Services", secondPlaceholder: "e.g., Hair, Nails, Spa, Skin", tabName: "Salon Details" },
+    healthcare: { nameLabel: "Clinic / Practice Name", namePlaceholder: "e.g., City Care Clinic", secondLabel: "Medical Specialization", secondPlaceholder: "e.g., General Physician, Dental", tabName: "Clinic Details" },
+    education: { nameLabel: "Institute / Academy Name", namePlaceholder: "e.g., Excel Academy", secondLabel: "Courses / Subjects Offered", secondPlaceholder: "e.g., JEE, NEET, Spoken English", tabName: "Academy Details" },
+    retail: { nameLabel: "Shop / Store Name", namePlaceholder: "e.g., Style Studio", secondLabel: "Product Category", secondPlaceholder: "e.g., Clothing, Electronics", tabName: "Store Details" },
+    services: { nameLabel: "Business Name", namePlaceholder: "e.g., FixIt Services", secondLabel: "Services Offered", secondPlaceholder: "e.g., AC Repair, Plumbing", tabName: "Business Details" },
+  };
+  const labels = settingsLabelMap[bType] || settingsLabelMap.food_beverage;
+
   const fields = [
-    { key: "name", label: "Restaurant Name", placeholder: "e.g., Spice Garden" },
+    { key: "name", label: labels.nameLabel, placeholder: labels.namePlaceholder },
     { key: "phone", label: "Phone Number", placeholder: "+91 98765 43210" },
-    { key: "cuisine_type", label: "Cuisine Type", placeholder: "e.g., North Indian, Chinese" },
+    { key: "cuisine_type", label: labels.secondLabel, placeholder: labels.secondPlaceholder },
     { key: "city", label: "City", placeholder: "e.g., Jaipur" },
     { key: "gst_number", label: "GST Number", placeholder: "e.g., 08AAACH7409R1ZZ" },
-    { key: "min_order_amount", label: "Minimum Order Amount (₹)", placeholder: "e.g., 200" },
-    { key: "owner_whatsapp", label: "Owner WhatsApp (Order Alerts & Management)", placeholder: "e.g., +919876543210" },
+    { key: "min_order_amount", label: bType === 'food_beverage' || bType === 'retail' ? "Minimum Order Amount (₹)" : "Minimum Booking Amount (₹)", placeholder: "e.g., 200" },
+    { key: "owner_whatsapp", label: "Owner WhatsApp (Alerts & Management)", placeholder: "e.g., +919876543210" },
   ];
 
   const daysOfWeek = [
@@ -328,9 +352,9 @@ function RestaurantSettings({
 
   return (
     <div className="space-y-6">
-      {/* Restaurant Details */}
+      {/* Business Details */}
       <div className="rounded-2xl border border-border/50 bg-card p-6">
-        <h3 className="text-base font-semibold mb-4">Restaurant Details</h3>
+        <h3 className="text-base font-semibold mb-4">{labels.tabName}</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {fields.map((field) => (
             <div key={field.key} className="space-y-2">
@@ -350,7 +374,7 @@ function RestaurantSettings({
           <textarea
             value={data.address || ""}
             onChange={(e) => onChange("address", e.target.value)}
-            placeholder="Full restaurant address..."
+            placeholder="Full business address..."
             rows={2}
             className="flex w-full rounded-xl border border-input bg-muted/30 px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors resize-none"
           />
@@ -375,7 +399,7 @@ function RestaurantSettings({
           <div>
             <h3 className="text-base font-semibold">Business Hours</h3>
             <p className="text-sm text-muted-foreground">
-              Configure when your restaurant is open for receiving orders.
+              Configure when your business is open for receiving orders and bookings.
             </p>
           </div>
           <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border border-border/50 shrink-0">
@@ -1868,7 +1892,7 @@ function DeliverySettings({
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Standard GST for restaurants is 5%. Set to 0 to disable tax on orders.
+            Applicable tax / GST rate percentage. Set to 0 to disable tax.
           </p>
         </div>
       </div>

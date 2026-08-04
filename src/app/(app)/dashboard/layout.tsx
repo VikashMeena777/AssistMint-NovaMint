@@ -40,15 +40,32 @@ const INQUIRY_TYPES: BusinessType[] = ['education', 'healthcare'];
 // Base sidebar items — labels for Menu, Orders, Combos, Customers are overridden per business type
 const getSidebarItems = (businessType: BusinessType) => {
   const config = getBusinessTypeConfig(businessType);
+  const supportsCart = config.supportsCart;
   const supportsAppointments = APPOINTMENT_TYPES.includes(businessType);
+
+  const staffLabelMap: Record<string, string> = {
+    salon_spa: "Staff & Stylists",
+    healthcare: "Doctors & Staff",
+    education: "Faculty & Tutors",
+    services: "Technicians & Staff",
+  };
+
+  const apptLabelMap: Record<string, string> = {
+    education: "Demo Classes",
+    services: "Bookings",
+    salon_spa: "Appointments",
+    healthcare: "Appointments",
+  };
 
   const items = [
     { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
     { href: "/dashboard/menu", label: config.sidebar.menu, icon: UtensilsCrossed },
-    { href: "/dashboard/orders", label: config.sidebar.orders, icon: ShoppingCart },
+    ...(supportsCart ? [
+      { href: "/dashboard/orders", label: config.sidebar.orders, icon: ShoppingCart },
+    ] : []),
     ...(supportsAppointments ? [
-      { href: "/dashboard/appointments", label: "Appointments", icon: CalendarDays },
-      { href: "/dashboard/staff", label: "Staff", icon: UserCog },
+      { href: "/dashboard/appointments", label: apptLabelMap[businessType] || "Appointments", icon: CalendarDays },
+      { href: "/dashboard/staff", label: staffLabelMap[businessType] || "Staff", icon: UserCog },
     ] : []),
     ...(INQUIRY_TYPES.includes(businessType) ? [
       { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },

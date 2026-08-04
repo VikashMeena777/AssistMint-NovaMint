@@ -174,32 +174,141 @@ export default function OnboardingWizard() {
     setError('');
 
     if (addSampleMenu) {
-      const sampleCategories: SampleCategory[] = [
-        {
-          name: 'Starters',
-          items: [
-            { name: 'Paneer Tikka', price: 24900, is_veg: true, description: 'Tandoor-grilled cottage cheese with spices' },
-            { name: 'Chicken 65', price: 27900, is_veg: false, description: 'Crispy fried chicken with curry leaves' },
-            { name: 'Masala Papad', price: 6900, is_veg: true, description: 'Crispy papad topped with onion, tomato masala' },
-          ],
-        },
-        {
-          name: 'Main Course',
-          items: [
-            { name: 'Dal Makhani', price: 22900, is_veg: true, description: 'Creamy black lentils slow-cooked overnight' },
-            { name: 'Butter Chicken', price: 29900, is_veg: false, description: 'Tender chicken in rich tomato-butter gravy' },
-            { name: 'Palak Paneer', price: 21900, is_veg: true, description: 'Cottage cheese in spinach gravy' },
-          ],
-        },
-        {
-          name: 'Beverages',
-          items: [
-            { name: 'Masala Chai', price: 4900, is_veg: true, description: 'Traditional Indian spiced tea' },
-            { name: 'Mango Lassi', price: 8900, is_veg: true, description: 'Refreshing yogurt-mango smoothie' },
-            { name: 'Fresh Lime Soda', price: 6900, is_veg: true, description: 'Chilled lime soda, sweet or salty' },
-          ],
-        },
-      ];
+      const getSampleCategories = (type: BusinessType): SampleCategory[] => {
+        switch (type) {
+          case 'salon_spa':
+            return [
+              {
+                name: 'Hair Services',
+                items: [
+                  { name: 'Haircut & Styling', price: 49900, is_veg: false, description: 'Professional haircut, wash, and blow-dry styling' },
+                  { name: 'Hair Coloring (Global)', price: 199900, is_veg: false, description: 'Full hair color with premium ammonia-free products' },
+                  { name: 'Keratin Treatment', price: 299900, is_veg: false, description: 'Smoothing treatment for frizz-free, shiny hair' },
+                ],
+              },
+              {
+                name: 'Spa & Massage',
+                items: [
+                  { name: 'Deep Tissue Massage (60 min)', price: 149900, is_veg: false, description: 'Therapeutic deep muscle massage for pain relief' },
+                  { name: 'Swedish Body Massage (60 min)', price: 129900, is_veg: false, description: 'Relaxing full-body oil massage with aroma oils' },
+                  { name: 'Head & Shoulder Relief (30 min)', price: 69900, is_veg: false, description: 'Quick stress buster head and neck massage' },
+                ],
+              },
+              {
+                name: 'Skin & Beauty',
+                items: [
+                  { name: 'Gold Glow Facial', price: 119900, is_veg: false, description: 'Radiance facial for skin brightening and hydration' },
+                  { name: 'Pedicure & Manicure Combo', price: 89900, is_veg: false, description: 'Complete nail care, scrub, and foot massage' },
+                  { name: 'Express Skin Clean-Up', price: 59900, is_veg: false, description: 'Deep pore cleansing and exfoliating scrub' },
+                ],
+              },
+            ];
+
+          case 'healthcare':
+            return [
+              {
+                name: 'Consultations',
+                items: [
+                  { name: 'General Physician Consultation', price: 50000, is_veg: false, description: 'Routine checkup and medical advice' },
+                  { name: 'Specialist Consultation', price: 80000, is_veg: false, description: 'Consultation with senior specialist doctor' },
+                  { name: 'Tele-Consultation (Online)', price: 40000, is_veg: false, description: 'Video consultation from the comfort of home' },
+                ],
+              },
+              {
+                name: 'Diagnostics & Health Checkups',
+                items: [
+                  { name: 'Full Body Checkup Package', price: 199900, is_veg: false, description: 'Includes 60+ vital tests: Blood, Liver, Kidney, Lipid' },
+                  { name: 'Diabetes Monitoring Panel', price: 69900, is_veg: false, description: 'HbA1c, Fasting Blood Sugar, and Lipid profile' },
+                ],
+              },
+            ];
+
+          case 'education':
+            return [
+              {
+                name: 'Foundation Courses',
+                items: [
+                  { name: 'Class 10 Science & Math Booster', price: 499900, is_veg: false, description: 'Complete board exam prep with weekly tests' },
+                  { name: 'Class 12 Physics & Chemistry', price: 699900, is_veg: false, description: 'Comprehensive coaching with doubt clearing sessions' },
+                ],
+              },
+              {
+                name: 'Competitive Exam Prep',
+                items: [
+                  { name: 'JEE Main & Advanced Batch', price: 1499900, is_veg: false, description: '1-Year intensive preparation with mock tests' },
+                  { name: 'NEET Biology Masterclass', price: 1299900, is_veg: false, description: 'Targeted NCERT-focused course for medical aspirants' },
+                ],
+              },
+            ];
+
+          case 'retail':
+            return [
+              {
+                name: 'Apparel & Clothing',
+                items: [
+                  { name: 'Cotton Casual Shirt', price: 89900, is_veg: false, description: '100% breathable cotton slim fit shirt' },
+                  { name: 'Denim Jeans (Blue)', price: 149900, is_veg: false, description: 'Stretch denim jeans with classic 5-pocket styling' },
+                ],
+              },
+              {
+                name: 'Accessories',
+                items: [
+                  { name: 'Leather Slim Wallet', price: 59900, is_veg: false, description: 'Genuine leather minimalist bi-fold wallet' },
+                  { name: 'Polarized Sunglasses', price: 99900, is_veg: false, description: 'UV400 protection lightweight metal frame glasses' },
+                ],
+              },
+            ];
+
+          case 'services':
+            return [
+              {
+                name: 'Home Appliance Repairs',
+                items: [
+                  { name: 'AC Service & General Cleaning', price: 59900, is_veg: false, description: 'Filter cleaning, gas check, and cooling inspection' },
+                  { name: 'Washing Machine Repair', price: 39900, is_veg: false, description: 'Inspection, diagnosis, and minor repairs' },
+                ],
+              },
+              {
+                name: 'Cleaning & Pest Control',
+                items: [
+                  { name: 'Deep Home Cleaning (2 BHK)', price: 249900, is_veg: false, description: 'Complete deep cleaning including kitchen and bathrooms' },
+                  { name: 'Pest Control Treatment', price: 99900, is_veg: false, description: 'Eco-friendly cockroach and ant pest treatment' },
+                ],
+              },
+            ];
+
+          case 'food_beverage':
+          default:
+            return [
+              {
+                name: 'Starters',
+                items: [
+                  { name: 'Paneer Tikka', price: 24900, is_veg: true, description: 'Tandoor-grilled cottage cheese with spices' },
+                  { name: 'Chicken 65', price: 27900, is_veg: false, description: 'Crispy fried chicken with curry leaves' },
+                  { name: 'Masala Papad', price: 6900, is_veg: true, description: 'Crispy papad topped with onion, tomato masala' },
+                ],
+              },
+              {
+                name: 'Main Course',
+                items: [
+                  { name: 'Dal Makhani', price: 22900, is_veg: true, description: 'Creamy black lentils slow-cooked overnight' },
+                  { name: 'Butter Chicken', price: 29900, is_veg: false, description: 'Tender chicken in rich tomato-butter gravy' },
+                  { name: 'Palak Paneer', price: 21900, is_veg: true, description: 'Cottage cheese in spinach gravy' },
+                ],
+              },
+              {
+                name: 'Beverages',
+                items: [
+                  { name: 'Masala Chai', price: 4900, is_veg: true, description: 'Traditional Indian spiced tea' },
+                  { name: 'Mango Lassi', price: 8900, is_veg: true, description: 'Refreshing yogurt-mango smoothie' },
+                  { name: 'Fresh Lime Soda', price: 6900, is_veg: true, description: 'Chilled lime soda, sweet or salty' },
+                ],
+              },
+            ];
+        }
+      };
+
+      const sampleCategories = getSampleCategories(selectedBusinessType);
 
       for (let ci = 0; ci < sampleCategories.length; ci++) {
         const cat = sampleCategories[ci];

@@ -177,14 +177,67 @@ export default async function DashboardPage() {
     });
   }
 
+  const bType = ((restaurant as Record<string, unknown>)?.business_type as string) || 'food_beverage';
+  const isCartBusiness = bType === 'food_beverage' || bType === 'retail';
+
   const setupSteps = [
     { label: "Create your account", done: true },
-    { label: "Add restaurant details", done: !!restaurantId },
-    { label: "Upload your menu", done: hasMenu },
+    { label: "Add business details", done: !!restaurantId },
+    { label: isCartBusiness ? "Upload catalog / menu" : "Configure services", done: hasMenu },
     { label: "Connect WhatsApp Business", done: hasWhatsApp },
-    { label: "Receive first order", done: todayOrders > 0 || recentOrders.length > 0 },
+    { label: isCartBusiness ? "Receive first order" : "Receive first booking", done: todayOrders > 0 || recentOrders.length > 0 },
   ];
   const completedSteps = setupSteps.filter((s) => s.done).length;
+
+  const getQuickActions = (type: string) => {
+    switch (type) {
+      case 'salon_spa':
+        return [
+          { label: "Add Service", href: "/dashboard/menu", icon: "✂️" },
+          { label: "View Appointments", href: "/dashboard/appointments", icon: "📅" },
+          { label: "Conversations", href: "/dashboard/conversations", icon: "💬" },
+          { label: "Settings", href: "/dashboard/settings", icon: "⚙️" },
+        ];
+      case 'healthcare':
+        return [
+          { label: "Add Service", href: "/dashboard/menu", icon: "🩺" },
+          { label: "View Appointments", href: "/dashboard/appointments", icon: "📅" },
+          { label: "Inquiries", href: "/dashboard/inquiries", icon: "📥" },
+          { label: "Settings", href: "/dashboard/settings", icon: "⚙️" },
+        ];
+      case 'education':
+        return [
+          { label: "Add Course", href: "/dashboard/menu", icon: "📚" },
+          { label: "View Demo Classes", href: "/dashboard/appointments", icon: "📅" },
+          { label: "Student Inquiries", href: "/dashboard/inquiries", icon: "📥" },
+          { label: "Settings", href: "/dashboard/settings", icon: "⚙️" },
+        ];
+      case 'retail':
+        return [
+          { label: "Add Product", href: "/dashboard/menu", icon: "🛍️" },
+          { label: "View Orders", href: "/dashboard/orders", icon: "📦" },
+          { label: "Conversations", href: "/dashboard/conversations", icon: "💬" },
+          { label: "Settings", href: "/dashboard/settings", icon: "⚙️" },
+        ];
+      case 'services':
+        return [
+          { label: "Add Service", href: "/dashboard/menu", icon: "🔧" },
+          { label: "View Bookings", href: "/dashboard/appointments", icon: "📅" },
+          { label: "Conversations", href: "/dashboard/conversations", icon: "💬" },
+          { label: "Settings", href: "/dashboard/settings", icon: "⚙️" },
+        ];
+      case 'food_beverage':
+      default:
+        return [
+          { label: "Add Menu Item", href: "/dashboard/menu", icon: "🍽️" },
+          { label: "View Orders", href: "/dashboard/orders", icon: "📦" },
+          { label: "Conversations", href: "/dashboard/conversations", icon: "💬" },
+          { label: "Settings", href: "/dashboard/settings", icon: "⚙️" },
+        ];
+    }
+  };
+
+  const quickActions = getQuickActions(bType);
 
   return (
     <div className="space-y-8">
@@ -194,7 +247,7 @@ export default async function DashboardPage() {
           Welcome back, {displayName} 👋
         </h1>
         <p className="text-sm text-muted-foreground">
-          Here&apos;s what&apos;s happening at your restaurant today.
+          Here&apos;s what&apos;s happening at your business today.
         </p>
       </div>
 
@@ -209,7 +262,6 @@ export default async function DashboardPage() {
       {/* Interactive Charts Dashboard Component */}
       <DashboardCharts data={chartData} />
 
-
       {/* AI Insights */}
       <InsightsPanel />
 
@@ -219,12 +271,7 @@ export default async function DashboardPage() {
         <div className="glass rounded-2xl p-6">
           <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Add Menu Item", href: "/dashboard/menu", icon: "🍽️" },
-              { label: "View Orders", href: "/dashboard/orders", icon: "📦" },
-              { label: "Conversations", href: "/dashboard/conversations", icon: "💬" },
-              { label: "Settings", href: "/dashboard/settings", icon: "⚙️" },
-            ].map((action) => (
+            {quickActions.map((action) => (
               <Link
                 key={action.label}
                 href={action.href}
@@ -276,12 +323,14 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Orders */}
+      {/* Recent Activity Section */}
       <div className="glass rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Recent Orders</h2>
+          <h2 className="text-lg font-semibold">
+            {isCartBusiness ? "Recent Orders" : bType === 'education' ? "Recent Inquiries & Demos" : bType === 'services' ? "Recent Bookings" : "Recent Appointments"}
+          </h2>
           <Link
-            href="/dashboard/orders"
+            href={isCartBusiness ? "/dashboard/orders" : "/dashboard/appointments"}
             className="text-xs font-medium text-primary hover:underline"
           >
             View All
@@ -295,10 +344,13 @@ export default async function DashboardPage() {
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted mb-4">
               <ShoppingCart className="h-7 w-7 text-muted-foreground" />
             </div>
-            <h3 className="text-sm font-semibold">No orders yet</h3>
+            <h3 className="text-sm font-semibold">
+              {isCartBusiness ? "No orders yet" : "No appointments yet"}
+            </h3>
             <p className="mt-1 text-sm text-muted-foreground max-w-xs">
-              Orders will appear here once your WhatsApp bot is live and
-              customers start ordering.
+              {isCartBusiness
+                ? "Orders will appear here once your WhatsApp bot is live and customers start ordering."
+                : "Bookings will appear here once your WhatsApp bot is live and clients start booking."}
             </p>
             <Link
               href="/dashboard/settings"
