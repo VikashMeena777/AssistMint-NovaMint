@@ -288,32 +288,43 @@ export default function OnboardingWizard() {
           )}
 
           {/* Step 1: Business Details */}
-          {step === 1 && (
+          {step === 1 && (() => {
+            // Dynamic labels based on business type
+            const labelMap: Record<string, { nameLabel: string; namePlaceholder: string; secondLabel: string; secondPlaceholder: string }> = {
+              food_beverage: { nameLabel: 'Restaurant Name', namePlaceholder: 'e.g. Spice Garden', secondLabel: 'Cuisine', secondPlaceholder: 'Indian, Chinese...' },
+              salon_spa: { nameLabel: 'Salon / Spa Name', namePlaceholder: 'e.g. Glow Beauty Salon', secondLabel: 'Specialization', secondPlaceholder: 'Hair, Nails, Spa...' },
+              healthcare: { nameLabel: 'Clinic / Hospital Name', namePlaceholder: 'e.g. City Care Clinic', secondLabel: 'Specialization', secondPlaceholder: 'General, Dental, Ortho...' },
+              education: { nameLabel: 'Institute / Academy Name', namePlaceholder: 'e.g. Excel Academy', secondLabel: 'Courses Offered', secondPlaceholder: 'JEE, NEET, Spoken English...' },
+              retail: { nameLabel: 'Shop / Store Name', namePlaceholder: 'e.g. Style Studio', secondLabel: 'Category', secondPlaceholder: 'Clothing, Electronics...' },
+              services: { nameLabel: 'Business Name', namePlaceholder: 'e.g. FixIt Services', secondLabel: 'Services', secondPlaceholder: 'AC Repair, Plumbing...' },
+            };
+            const labels = labelMap[selectedBusinessType] || labelMap.food_beverage;
+            return (
             <div className="space-y-4">
               <h2 className="text-xl font-semibold text-white">Business Details</h2>
               <p className="text-white/40 text-sm">Tell us about your business</p>
 
               <div>
-                <label className="block text-sm text-white/60 mb-1">Restaurant Name *</label>
+                <label className="block text-sm text-white/60 mb-1">{labels.nameLabel} *</label>
                 <input
                   type="text"
                   value={restaurant.name}
                   onChange={(e) => handleNameChange(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 outline-none"
-                  placeholder="e.g. Spice Garden"
+                  placeholder={labels.namePlaceholder}
                 />
               </div>
 
               <div>
                 <label className="block text-sm text-white/60 mb-1">URL Slug</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-white/30 text-sm">assistmint.com/</span>
+                  <span className="text-white/30 text-sm shrink-0">assistmint.novamintnetworks.in/</span>
                   <input
                     type="text"
                     value={restaurant.slug}
                     onChange={(e) => setRestaurant({ ...restaurant, slug: e.target.value })}
                     className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none"
-                    placeholder="spice-garden"
+                    placeholder="my-business"
                   />
                 </div>
               </div>
@@ -330,13 +341,13 @@ export default function OnboardingWizard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-white/60 mb-1">Cuisine</label>
+                  <label className="block text-sm text-white/60 mb-1">{labels.secondLabel}</label>
                   <input
                     type="text"
                     value={restaurant.cuisine}
                     onChange={(e) => setRestaurant({ ...restaurant, cuisine: e.target.value })}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none"
-                    placeholder="Indian, Chinese..."
+                    placeholder={labels.secondPlaceholder}
                   />
                 </div>
               </div>
@@ -352,15 +363,24 @@ export default function OnboardingWizard() {
                 />
               </div>
 
-              <button
-                onClick={handleCreateRestaurant}
-                disabled={loading || !restaurant.name}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
-              >
-                {loading ? 'Creating...' : 'Continue →'}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setError(''); setStep(0); }}
+                  className="px-6 bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={handleCreateRestaurant}
+                  disabled={loading || !restaurant.name}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
+                >
+                  {loading ? 'Creating...' : 'Continue →'}
+                </button>
+              </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Step 2: WhatsApp Config */}
           {step === 2 && (
@@ -486,12 +506,20 @@ export default function OnboardingWizard() {
                 </code>
               </div>
 
-              <button
-                onClick={() => setStep(3)}
-                className="w-full bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
-              >
-                Skip for now — configure later in Settings
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setError(''); setStep(1); }}
+                  className="px-6 bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={() => setStep(3)}
+                  className="flex-1 bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
+                >
+                  Skip for now — configure later
+                </button>
+              </div>
             </div>
           )}
 
@@ -535,13 +563,21 @@ export default function OnboardingWizard() {
                 </div>
               </div>
 
-              <button
-                onClick={handleMenuSetup}
-                disabled={loading}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
-              >
-                {loading ? 'Setting up menu...' : 'Continue →'}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setError(''); setStep(2); }}
+                  className="px-6 bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={handleMenuSetup}
+                  disabled={loading}
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
+                >
+                  {loading ? 'Setting up menu...' : 'Continue →'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -556,7 +592,7 @@ export default function OnboardingWizard() {
 
               <div className="bg-white/5 rounded-xl p-4 text-left space-y-2 text-sm">
                 <div className="flex items-center gap-2 text-emerald-400">
-                  <span>✅</span> Restaurant created
+                  <span>✅</span> Business created
                 </div>
                 <div className="flex items-center gap-2 text-emerald-400">
                   <span>✅</span> WhatsApp configured
