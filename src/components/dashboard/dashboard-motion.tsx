@@ -133,7 +133,7 @@ export function RecentOrdersList({ recentOrders }: RecentOrdersListProps) {
           </div>
           <div className="text-right">
             <p className="text-sm font-semibold font-mono">
-              ₹{(order.total || 0).toLocaleString("en-IN")}
+              ₹{((order.total || 0) / 100).toLocaleString("en-IN")}
             </p>
             <span
               className={`inline-block mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
