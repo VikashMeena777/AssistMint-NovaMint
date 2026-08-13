@@ -228,24 +228,32 @@ async function sendOrderStatusWhatsApp(
       }),
     });
 
-    // On delivery: send receipt + feedback sequentially with 7 seconds delay
+    // On delivery: send receipt + feedback (fire-and-forget to avoid server action timeout)
+    // The entire flow takes 11+ seconds (receipt + 7s delay + feedback), which exceeds
+    // Vercel's serverless timeout for server actions — so we must NOT await it
     if (status === 'delivered') {
-      const { sendOrderReceipt, sendFeedbackRequest } = await import('@/lib/ai/orchestrator');
-      const { getRestaurantById } = await import('@/lib/services/restaurant-service');
-      const fullRestaurant = await getRestaurantById(restaurantId);
+      (async () => {
+        try {
+          const { sendOrderReceipt, sendFeedbackRequest } = await import('@/lib/ai/orchestrator');
+          const { getRestaurantById } = await import('@/lib/services/restaurant-service');
+          const fullRestaurant = await getRestaurantById(restaurantId);
 
-      if (fullRestaurant) {
-        // Await receipt sending
-        await sendOrderReceipt(fullRestaurant, orderId, order.customer_phone)
-          .catch(e => console.error('[Orders] Receipt send failed:', e));
+          if (fullRestaurant) {
+            // Send receipt
+            await sendOrderReceipt(fullRestaurant, orderId, order.customer_phone)
+              .catch(e => console.error('[Orders] Receipt send failed:', e));
 
-        // Wait 7 seconds before triggering feedback to ensure proper order on WhatsApp
-        await new Promise(resolve => setTimeout(resolve, 7000));
+            // Wait 7 seconds so receipt renders on WhatsApp before feedback
+            await new Promise(resolve => setTimeout(resolve, 7000));
 
-        // Await feedback request
-        await sendFeedbackRequest(fullRestaurant, orderId, order.customer_phone)
-          .catch(e => console.error('[Orders] Feedback request failed:', e));
-      }
+            // Send feedback request (star rating)
+            await sendFeedbackRequest(fullRestaurant, orderId, order.customer_phone)
+              .catch(e => console.error('[Orders] Feedback request failed:', e));
+          }
+        } catch (e) {
+          console.error('[Orders] Receipt/feedback background task failed:', e);
+        }
+      })();
     }
   } catch {
     // Silent fail — don't block order update

@@ -16,6 +16,14 @@ import {
   Filter,
   CalendarDays,
   X,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  Phone,
+  CreditCard,
+  FileText,
+  Eye,
+  UtensilsCrossed,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getOrders, updateOrderStatus, getOrderStats, exportOrdersCsv } from "@/lib/actions/order-actions";
@@ -62,6 +70,7 @@ export default function OrdersPage() {
   const [dateTo, setDateTo] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [totalCount, setTotalCount] = useState(0);
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -372,90 +381,269 @@ export default function OrdersPage() {
           <div className="divide-y divide-border/50">
             {orders.map((order) => {
               const next = getNextStatus(order.status);
+              const isExpanded = expandedOrder === order.id;
+              const items = (order.items || []) as Array<{
+                item_name: string;
+                variant_name?: string;
+                quantity: number;
+                unit_price: number;
+                special_instructions?: string;
+              }>;
+              const deliveryAddr = order.delivery_address as Record<string, string> | null;
+
               return (
-                <div
-                  key={order.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-muted/20 transition-colors gap-3"
-                >
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 shrink-0">
-                      <ShoppingCart className="h-5 w-5 text-primary" />
+                <div key={order.id} className="transition-colors">
+                  {/* Order Summary Row */}
+                  <div
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-muted/20 cursor-pointer gap-3"
+                    onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 shrink-0">
+                        <ShoppingCart className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold flex items-center gap-2">
+                          #{order.order_number} · {order.customers?.saved_name || order.customers?.whatsapp_name || "Customer"}
+                          <span className="text-[10px] text-muted-foreground font-normal">
+                            ({items.length} item{items.length !== 1 ? "s" : ""})
+                          </span>
+                        </p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
+                          <Clock className="h-3 w-3" />
+                          {new Date(order.created_at).toLocaleString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            day: "numeric",
+                            month: "short",
+                          })}
+                          {order.customers?.phone && (
+                            <span className="ml-1 font-mono text-[10px]">
+                              · {order.customers.phone}
+                            </span>
+                          )}
+                          {order.delivery_type && (
+                            <span className="ml-1">
+                              · {order.delivery_type === "dine_in" ? "Dine-in" : order.delivery_type === "pickup" ? "Pickup" : "Delivery"}
+                            </span>
+                          )}
+                          {order.rating > 0 && (
+                            <span className="ml-1 text-amber-500">
+                              · {"⭐".repeat(Math.min(order.rating, 5))}
+                            </span>
+                          )}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
+
+                    <div className="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap pl-14 sm:pl-0">
                       <p className="text-sm font-semibold">
-                        #{order.order_number} · {order.customers?.saved_name || order.customers?.whatsapp_name || "Customer"}
+                        ₹{((order.total || 0) / 100).toLocaleString("en-IN")}
                       </p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 flex-wrap">
-                        <Clock className="h-3 w-3" />
-                        {new Date(order.created_at).toLocaleString("en-IN", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          day: "numeric",
-                          month: "short",
-                        })}
-                        {order.customers?.phone && (
-                          <span className="ml-1 font-mono text-[10px]">
-                            · {order.customers.phone}
-                          </span>
-                        )}
-                        {order.delivery_type && (
-                          <span className="ml-1">
-                            · {order.delivery_type === "dine_in" ? "Dine-in" : "Delivery"}
-                          </span>
-                        )}
-                        {order.rating > 0 && (
-                          <span className="ml-1 text-amber-500">
-                            · {"⭐".repeat(Math.min(order.rating, 5))}
-                          </span>
-                        )}
-                      </p>
+                      {order.payment_status && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            order.payment_status === "paid"
+                              ? "bg-emerald-500/10 text-emerald-600"
+                              : order.payment_status === "cod_pending"
+                              ? "bg-orange-500/10 text-orange-600"
+                              : "bg-yellow-500/10 text-yellow-600"
+                          }`}
+                        >
+                          {order.payment_status === "paid" ? "💳 Paid" : order.payment_status === "cod_pending" ? "💵 COD" : "⏳ Unpaid"}
+                        </span>
+                      )}
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${STATUS_COLORS[order.status] || "bg-muted text-muted-foreground"}`}
+                      >
+                        {order.status?.replace("_", " ")}
+                      </span>
+                      {next && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, next); }}
+                          disabled={updatingOrder === order.id}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
+                        >
+                          {updatingOrder === order.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : null}
+                          Mark {next}
+                        </button>
+                      )}
+                      {order.status !== "cancelled" && order.status !== "delivered" && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "cancelled"); }}
+                          disabled={updatingOrder === order.id}
+                          className="inline-flex h-8 items-center rounded-lg border border-red-200 px-2.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <XCircle className="h-3 w-3" />
+                        </button>
+                      )}
+                      {isExpanded ? (
+                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap pl-14 sm:pl-0">
-                    <p className="text-sm font-semibold">
-                      ₹{((order.total || 0) / 100).toLocaleString("en-IN")}
-                    </p>
-                    {order.payment_status && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          order.payment_status === "paid"
-                            ? "bg-emerald-500/10 text-emerald-600"
-                            : order.payment_status === "cod_pending"
-                            ? "bg-orange-500/10 text-orange-600"
-                            : "bg-yellow-500/10 text-yellow-600"
-                        }`}
-                      >
-                        {order.payment_status === "paid" ? "💳 Paid" : order.payment_status === "cod_pending" ? "💵 COD" : "⏳ Unpaid"}
-                      </span>
-                    )}
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${STATUS_COLORS[order.status] || "bg-muted text-muted-foreground"}`}
-                    >
-                      {order.status?.replace("_", " ")}
-                    </span>
-                    {next && (
-                      <button
-                        onClick={() => handleStatusUpdate(order.id, next)}
-                        disabled={updatingOrder === order.id}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
-                      >
-                        {updatingOrder === order.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : null}
-                        Mark {next}
-                      </button>
-                    )}
-                    {order.status !== "cancelled" && order.status !== "delivered" && (
-                      <button
-                        onClick={() => handleStatusUpdate(order.id, "cancelled")}
-                        disabled={updatingOrder === order.id}
-                        className="inline-flex h-8 items-center rounded-lg border border-red-200 px-2.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <XCircle className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
+                  {/* Expanded Order Details */}
+                  {isExpanded && (
+                    <div className="px-4 pb-4 pt-0 border-t border-dashed border-border/50 bg-muted/10">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
+                        {/* Left: Items Ordered */}
+                        <div>
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                            <UtensilsCrossed className="h-3.5 w-3.5" />
+                            Items Ordered
+                          </h4>
+                          <div className="space-y-1.5">
+                            {items.length > 0 ? items.map((item, idx) => (
+                              <div key={idx} className="flex items-start justify-between text-sm">
+                                <div className="min-w-0">
+                                  <span className="font-medium">
+                                    {item.quantity}× {item.item_name}
+                                    {item.variant_name ? ` (${item.variant_name})` : ""}
+                                  </span>
+                                  {item.special_instructions && (
+                                    <p className="text-[11px] text-amber-600 italic mt-0.5">
+                                      📝 {item.special_instructions}
+                                    </p>
+                                  )}
+                                </div>
+                                <span className="text-xs text-muted-foreground font-mono ml-2 shrink-0">
+                                  ₹{((item.unit_price * item.quantity) / 100).toLocaleString("en-IN")}
+                                </span>
+                              </div>
+                            )) : (
+                              <p className="text-xs text-muted-foreground">No items data available</p>
+                            )}
+                          </div>
+
+                          {/* Order Totals */}
+                          <div className="mt-3 pt-2 border-t border-border/30 space-y-1">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Subtotal</span>
+                              <span>₹{((order.subtotal || 0) / 100).toLocaleString("en-IN")}</span>
+                            </div>
+                            {(order.tax || 0) > 0 && (
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Tax</span>
+                                <span>₹{((order.tax || 0) / 100).toLocaleString("en-IN")}</span>
+                              </div>
+                            )}
+                            {(order.delivery_fee || 0) > 0 && (
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Delivery</span>
+                                <span>₹{((order.delivery_fee || 0) / 100).toLocaleString("en-IN")}</span>
+                              </div>
+                            )}
+                            {(order.discount || 0) > 0 && (
+                              <div className="flex justify-between text-xs text-emerald-600">
+                                <span>Discount</span>
+                                <span>-₹{((order.discount || 0) / 100).toLocaleString("en-IN")}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between text-sm font-bold pt-1 border-t border-border/30">
+                              <span>Total</span>
+                              <span>₹{((order.total || 0) / 100).toLocaleString("en-IN")}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right: Customer & Delivery Info */}
+                        <div className="space-y-3">
+                          {/* Customer Info */}
+                          <div>
+                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                              <Phone className="h-3.5 w-3.5" />
+                              Customer Details
+                            </h4>
+                            <div className="space-y-1 text-sm">
+                              <p>
+                                <span className="text-muted-foreground">Name:</span>{" "}
+                                <span className="font-medium">{order.customer_name || order.customers?.saved_name || order.customers?.whatsapp_name || "Guest"}</span>
+                              </p>
+                              <p>
+                                <span className="text-muted-foreground">Phone:</span>{" "}
+                                <a href={`tel:${order.customer_phone || order.customers?.phone}`} className="font-mono text-primary hover:underline">
+                                  {order.customer_phone || order.customers?.phone || "—"}
+                                </a>
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Delivery Address */}
+                          {deliveryAddr && order.delivery_type === "delivery" && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                                <MapPin className="h-3.5 w-3.5" />
+                                Delivery Address
+                              </h4>
+                              <p className="text-sm">
+                                {deliveryAddr.raw || deliveryAddr.formatted || JSON.stringify(deliveryAddr)}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Payment Info */}
+                          <div>
+                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                              <CreditCard className="h-3.5 w-3.5" />
+                              Payment
+                            </h4>
+                            <div className="space-y-1 text-sm">
+                              <p>
+                                <span className="text-muted-foreground">Method:</span>{" "}
+                                <span className="font-medium">
+                                  {order.payment_method === "cod" ? "Cash on Delivery" : order.payment_method === "online" ? "Online Payment" : order.payment_method || "—"}
+                                </span>
+                              </p>
+                              <p>
+                                <span className="text-muted-foreground">Status:</span>{" "}
+                                <span className={`font-semibold ${
+                                  order.payment_status === "paid" ? "text-emerald-600" :
+                                  order.payment_status === "cod_pending" ? "text-orange-600" : "text-yellow-600"
+                                }`}>
+                                  {order.payment_status === "paid" ? "Paid ✅" : order.payment_status === "cod_pending" ? "COD — Collect on Delivery" : "Pending"}
+                                </span>
+                              </p>
+                              {order.cashfree_order_id && (
+                                <p>
+                                  <span className="text-muted-foreground">Txn ID:</span>{" "}
+                                  <span className="font-mono text-xs">{order.cashfree_order_id}</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Timestamps */}
+                          <div>
+                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                              <FileText className="h-3.5 w-3.5" />
+                              Order Timeline
+                            </h4>
+                            <div className="space-y-1 text-xs text-muted-foreground">
+                              <p>Created: {new Date(order.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>
+                              {order.confirmed_at && <p>Confirmed: {new Date(order.confirmed_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
+                              {order.preparing_at && <p>Preparing: {new Date(order.preparing_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
+                              {order.ready_at && <p>Ready: {new Date(order.ready_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
+                              {order.delivered_at && <p>Delivered: {new Date(order.delivered_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
+                              {order.cancelled_at && <p className="text-red-500">Cancelled: {new Date(order.cancelled_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
+                            </div>
+                          </div>
+
+                          {/* Order ID for verification */}
+                          <div className="pt-2 border-t border-border/30">
+                            <p className="text-[10px] text-muted-foreground font-mono">
+                              <Eye className="h-3 w-3 inline mr-1" />
+                              Order ID: {order.id}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
