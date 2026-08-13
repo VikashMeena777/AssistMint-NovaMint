@@ -33,8 +33,9 @@ export async function GET(req: NextRequest) {
   const o = order as Record<string, unknown>;
   const restaurant = o.restaurants as Record<string, unknown> | null;
 
-  // Determine tax rate — restaurant config or fallback 5%
-  const taxRate = (restaurant?.tax_rate as number) || 5;
+  // Determine tax rate — restaurant config stores percentage × 100 (500 = 5%), convert to plain percentage
+  const rawTaxRate = (restaurant?.tax_rate as number) ?? 500;
+  const taxRate = rawTaxRate / 100; // 500 → 5%
 
   const invoiceData: InvoiceData = {
     orderId: o.id as string,

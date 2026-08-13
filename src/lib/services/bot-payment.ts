@@ -412,19 +412,8 @@ export async function processSuccessfulPayment(
               text: `✅ *Payment Received!*\n\n💰 Amount: ₹${totalRupees}\n📋 Order: #${o.order_number || '—'}\n\nYour order is *confirmed* and being prepared! 🍳\n\nThank you for ordering from *${r.name}*! 🌿`,
             });
 
-            // 2. Generate and send receipt (fire-and-forget/non-blocking)
-            try {
-              const { sendOrderReceipt } = await import('@/lib/ai/orchestrator');
-              const restaurantObj = {
-                id: r.id,
-                name: r.name,
-                whatsapp_phone_id: r.whatsapp_phone_id,
-                whatsapp_token: r.whatsapp_access_token,
-              } as any;
-              sendOrderReceipt(restaurantObj, orderId, c.phone).catch((e: any) => console.error('[PaymentProcessor] Receipt send failed:', e));
-            } catch (receiptErr) {
-              console.error('[PaymentProcessor] Receipt send failed:', receiptErr);
-            }
+            // Receipt is sent when order is marked as 'delivered' (not here)
+            // This prevents duplicate receipts for online payments
           }
         }
       }

@@ -75,6 +75,7 @@ export async function getRestaurantByPhoneId(phoneNumberId: string): Promise<Res
     delivery_enabled: (r.delivery_enabled as boolean) ?? false,
     pickup_enabled: (r.pickup_enabled as boolean) ?? true,
     business_config: (r.business_config as Record<string, unknown>) || {},
+    google_review_url: (r.google_review_url as string) || undefined,
   };
 }
 
@@ -111,5 +112,6 @@ export async function getRestaurantById(id: string): Promise<Restaurant | null> 
     delivery_enabled: (r.delivery_enabled as boolean) ?? false,
     pickup_enabled: (r.pickup_enabled as boolean) ?? true,
     business_config: (r.business_config as Record<string, unknown>) || {},
+    google_review_url: (r.google_review_url as string) || undefined,
   };
 }
