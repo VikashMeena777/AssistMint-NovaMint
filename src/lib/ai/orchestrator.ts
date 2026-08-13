@@ -1309,7 +1309,7 @@ async function sendCategoryItems(
       itemsWithImages.length = 0;
     }
   } else if (itemsWithImages.length === 1 && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
-    // Single image item — send as image + buttons
+    // Single image item — send image with full details in caption + Add to Cart button
     const item = itemsWithImages[0];
     try {
       await sendImageMessage({
@@ -1317,16 +1317,16 @@ async function sendCategoryItems(
         accessToken: restaurant.whatsapp_token,
         to: customer.phone,
         imageUrl: item.image_url!,
-        caption: `${item.is_veg ? '🟢' : '🔴'} ${item.name}${item.is_bestseller ? ' ⭐' : ''} — ₹${(item.price / 100).toFixed(0)}`,
+        caption: `${item.is_veg ? '🟢' : '🔴'} *${item.name}*${item.is_bestseller ? ' ⭐' : ''}\n₹${(item.price / 100).toFixed(0)} · ~${item.prep_time_minutes || 15} mins${item.description ? '\n' + item.description : ''}`,
       });
+      // Send Add to Cart button separately (WhatsApp doesn't support buttons on image messages)
       await sendReplyButtons({
         phoneNumberId: restaurant.whatsapp_phone_id,
         accessToken: restaurant.whatsapp_token,
         to: customer.phone,
-        bodyText: `*${item.name}*\n₹${(item.price / 100).toFixed(0)} · ~${item.prep_time_minutes || 15} mins${item.description ? '\n' + item.description : ''}`,
+        bodyText: `Add *${item.name}* to your cart?`,
         buttons: [
           { id: `add_${item.id}`, title: '🛒 Add to Cart' },
-          { id: 'btn_categories', title: '📋 Categories' },
         ],
       });
     } catch (e) {
@@ -1366,11 +1366,11 @@ async function sendCategoryItems(
     }
   }
 
-  // Navigation buttons after items — delay to ensure carousel arrives first
-  // WhatsApp processes image carousels slower than text buttons
+  // Navigation buttons after items — delay to ensure carousel/image arrives first
+  // WhatsApp processes image carousels slower than text buttons, so we wait longer
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
-    // Wait for carousel to be delivered before sending nav buttons
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Wait for carousel/image to be delivered before sending nav buttons
+    await new Promise(resolve => setTimeout(resolve, 3500));
 
     const navButtons: { id: string; title: string }[] = [];
     if (hasMore) {
