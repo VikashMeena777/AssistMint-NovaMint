@@ -1319,6 +1319,8 @@ async function sendCategoryItems(
         imageUrl: item.image_url!,
         caption: `${item.is_veg ? '🟢' : '🔴'} *${item.name}*${item.is_bestseller ? ' ⭐' : ''}\n₹${(item.price / 100).toFixed(0)} · ~${item.prep_time_minutes || 15} mins${item.description ? '\n' + item.description : ''}`,
       });
+      // Delay so image arrives on WhatsApp before the button text
+      await new Promise(resolve => setTimeout(resolve, 2000));
       // Send Add to Cart button separately (WhatsApp doesn't support buttons on image messages)
       await sendReplyButtons({
         phoneNumberId: restaurant.whatsapp_phone_id,

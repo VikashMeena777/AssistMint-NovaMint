@@ -19,10 +19,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'orderId required' }, { status: 400 });
   }
 
-  // Fetch order
+  // Fetch order with restaurant details
   const { data: order, error } = await supabaseAdmin
     .from('orders')
-    .select('*, restaurants(name, phone)')
+    .select('*, restaurants(name, phone, address, gst_number, city, tax_rate)')
     .eq('id', orderId)
     .single();
 
@@ -33,11 +33,16 @@ export async function GET(req: NextRequest) {
   const o = order as Record<string, unknown>;
   const restaurant = o.restaurants as Record<string, unknown> | null;
 
+  // Determine tax rate — restaurant config or fallback 5%
+  const taxRate = (restaurant?.tax_rate as number) || 5;
+
   const invoiceData: InvoiceData = {
     orderId: o.id as string,
     orderNumber: (o.order_number as string) || (o.id as string).substring(0, 8).toUpperCase(),
-    restaurantName: (restaurant?.name as string) || 'Restaurant',
+    restaurantName: (restaurant?.name as string) || 'Business',
     restaurantPhone: (restaurant?.phone as string) || undefined,
+    restaurantAddress: (restaurant?.address as string) || (restaurant?.city as string) || undefined,
+    restaurantGstin: (restaurant?.gst_number as string) || undefined,
     customerName: (o.customer_name as string) || 'Guest',
     customerPhone: (o.customer_phone as string) || '',
     deliveryAddress: (o.delivery_address as Record<string, string>)?.raw || undefined,
@@ -51,11 +56,14 @@ export async function GET(req: NextRequest) {
     })),
     subtotal: (o.subtotal as number) || 0,
     tax: (o.tax as number) || 0,
+    taxRate,
     deliveryFee: (o.delivery_fee as number) || 0,
     discount: (o.discount as number) || 0,
     total: (o.total as number) || 0,
     paymentMethod: (o.payment_method as string) || 'cod',
     createdAt: (o.created_at as string) || new Date().toISOString(),
+    // State info from restaurant city/address (can be expanded later)
+    stateName: (restaurant?.city as string) || undefined,
   };
 
   const pdfBuffer = generateInvoicePDF(invoiceData);
