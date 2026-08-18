@@ -13,6 +13,7 @@ import {
   Check,
   RefreshCw,
   BadgePercent,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -44,6 +45,7 @@ export default function CombosPage() {
     name: "",
     description: "",
     combo_price: "",
+    valid_until: "",
   });
   const [selectedItems, setSelectedItems] = useState<Map<string, { name: string; price: number; quantity: number }>>(new Map());
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -147,6 +149,7 @@ export default function CombosPage() {
       combo_items: comboItems,
       original_price: originalPrice,
       combo_price: comboPriceNum,
+      valid_until: form.valid_until ? new Date(form.valid_until).toISOString() : undefined,
     });
     setSaving(false);
 
@@ -154,7 +157,7 @@ export default function CombosPage() {
       toast.error(result.error);
     } else {
       toast.success(`Combo "${form.name}" created!`);
-      setForm({ name: "", description: "", combo_price: "" });
+      setForm({ name: "", description: "", combo_price: "", valid_until: "" });
       setSelectedItems(new Map());
       setImageFile(null);
       setImagePreview(null);
@@ -258,6 +261,23 @@ export default function CombosPage() {
                   placeholder="e.g., 2 Biryanis + 2 Drinks + 1 Dessert"
                   className="flex h-10 w-full rounded-xl border border-input bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
+              </div>
+
+              {/* Valid Until (Expiry Date) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="h-3 w-3" />
+                  Valid Until (optional)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={form.valid_until}
+                  onChange={(e) => setForm((p) => ({ ...p, valid_until: e.target.value }))}
+                  className="flex h-10 w-full rounded-xl border border-input bg-card px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Leave empty for no expiry. Combo auto-hides from customers after this date.
+                </p>
               </div>
 
               {/* Image Upload */}
@@ -492,6 +512,17 @@ export default function CombosPage() {
                         ₹{(combo.original_price / 100).toFixed(0)}
                       </span>
                     </div>
+
+                    {/* Expiry Date */}
+                    {combo.valid_until && (
+                      <div className={`flex items-center gap-1.5 text-[10px] font-medium ${
+                        new Date(combo.valid_until) < new Date() ? 'text-red-500' : 'text-muted-foreground'
+                      }`}>
+                        <Calendar className="h-3 w-3" />
+                        {new Date(combo.valid_until) < new Date() ? 'Expired: ' : 'Expires: '}
+                        {new Date(combo.valid_until).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
 
                     {/* Actions */}
                     <div className="flex items-center justify-between gap-2">

@@ -35,6 +35,7 @@ export async function createCombo(
     combo_items: Array<{ item_id: string; name: string; quantity: number }>;
     original_price: number; // in paise
     combo_price: number;    // in paise
+    valid_until?: string;   // ISO date string or empty
   }
 ) {
   const supabase = await createClient();
@@ -63,6 +64,7 @@ export async function createCombo(
       combo_items: combo.combo_items,
       original_price: combo.original_price,
       combo_price: combo.combo_price,
+      valid_until: combo.valid_until || null,
       is_active: true,
     })
     .select()

@@ -254,6 +254,10 @@ export async function handleIncomingMessage(params: {
     await sendMenuOverview(restaurant, customer, conversation, 'bestseller');
     return;
   }
+  if (lowerText === 'combos' || lowerText === 'combo' || lowerText === 'deals' || lowerText === 'offers') {
+    await sendCombosOverview(restaurant, customer, conversation);
+    return;
+  }
   if (lowerText === 'book' || lowerText === 'appointment' || lowerText === 'book appointment' || lowerText === 'schedule') {
     const bt = restaurant.business_type || 'food_beverage';
     if (['salon_spa', 'healthcare', 'education', 'services'].includes(bt)) {
@@ -542,6 +546,10 @@ async function handleInteractiveReply(
       await sendMenuOverview(restaurant, customer, conversation, 'bestseller');
       break;
 
+    case 'btn_combos':
+      await sendCombosOverview(restaurant, customer, conversation);
+      break;
+
     case 'btn_book_appointment':
       await startAppointmentBooking(restaurant, customer, conversation);
       break;
@@ -617,6 +625,9 @@ async function handleInteractiveReply(
         if (timeParts.length >= 2) {
           await handleAppointmentTimeSelected(restaurant, customer, conversation, timeParts[0], timeParts[1]);
         }
+      } else if (btnId.startsWith('add_combo_')) {
+        // Combo: add all combo items to cart
+        await handleAddComboToCart(restaurant, customer, conversation, btnId.replace('add_combo_', ''));
       } else if (btnId.startsWith('inq_')) {
         // Inquiry: service selected
         await handleInquirySelected(restaurant, customer, conversation, btnId.replace('inq_', ''));
@@ -732,6 +743,51 @@ async function tryMatchTextToAction(
     await handleDirectAddToCart(restaurant, customer, conversation, matchedItem.id);
     return true;
   }
+
+  // 2.5 Try to match combo names (e.g., "Family Pack", "Lunch Deal")
+  try {
+    const { createClient: createAdminCombo } = await import('@supabase/supabase-js');
+    const sbAdmin = createAdminCombo(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false } }
+    );
+    const { data: activeCombos } = await sbAdmin
+      .from('combos')
+      .select('id, name')
+      .eq('restaurant_id', restaurant.id)
+      .eq('is_active', true)
+      .limit(20);
+    if (activeCombos && activeCombos.length > 0) {
+      let matchedCombo = activeCombos.find(c =>
+        cleanText === (c.name as string).toLowerCase()
+      );
+      if (!matchedCombo) {
+        matchedCombo = activeCombos.find(c =>
+          cleanText.includes((c.name as string).toLowerCase()) ||
+          (c.name as string).toLowerCase().includes(cleanText)
+        );
+      }
+      if (!matchedCombo && cleanText.length >= 4) {
+        let bestComboScore = 0;
+        for (const combo of activeCombos) {
+          const score = fuzzyScore(cleanText, (combo.name as string).toLowerCase());
+          if (score > bestComboScore && score >= 0.6) {
+            bestComboScore = score;
+            matchedCombo = combo;
+          }
+        }
+      }
+      if (matchedCombo) {
+        console.log(`[Orchestrator] Text matched to combo: "${text}" → ${matchedCombo.name}`);
+        await handleAddComboToCart(restaurant, customer, conversation, matchedCombo.id as string);
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn('[Orchestrator] Combo name matching failed:', e);
+  }
+
 
   // 3. Check if user is confirming the last bot suggestion
   // e.g. bot said "You can try our Paneer Makhani for ₹199" → user says "ok" / "yes" / "sure" / "add it"
@@ -876,6 +932,9 @@ async function handleDirectAddToCart(
     unit_price: item.price,
   };
   const updatedCart = await addToCart(cart.id, cartItem);
+
+  // Fire-and-forget combo suggestion (non-blocking)
+  sendComboSuggestions(restaurant, customer, conversation, item.id).catch(e => console.error('[Orchestrator] Combo suggestion failed:', e));
 
   const priceRupees = (item.price / 100).toFixed(0);
   const itemCount = updatedCart.items.reduce((sum, i) => sum + i.quantity, 0);
@@ -1212,13 +1271,37 @@ async function sendMenuOverview(
   }
 
   // Default: Show category picker as interactive list
+  // Fetch active combos to add a "Combos & Deals" row
+  const { createClient: createAdminForCombo } = await import('@supabase/supabase-js');
+  const sbCombo = createAdminForCombo(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+  const { count: comboCount } = await sbCombo
+    .from('combos')
+    .select('*', { count: 'exact', head: true })
+    .eq('restaurant_id', restaurant.id)
+    .eq('is_active', true);
+
+  const categoryRows = menu.categories.slice(0, comboCount && comboCount > 0 ? 9 : 10).map(cat => ({
+    id: `cat_${cat.id}`,
+    title: cat.name.substring(0, 24),
+    description: `${cat.items.length} item${cat.items.length > 1 ? 's' : ''}`,
+  }));
+
+  // Add Combos row at the top if combos exist
+  if (comboCount && comboCount > 0) {
+    categoryRows.unshift({
+      id: 'btn_combos',
+      title: '🔥 Combos & Deals',
+      description: `${comboCount} special offer${comboCount > 1 ? 's' : ''}`,
+    });
+  }
+
   const sections: ListSection[] = [{
     title: '📂 Menu Categories',
-    rows: menu.categories.slice(0, 10).map(cat => ({
-      id: `cat_${cat.id}`,
-      title: cat.name.substring(0, 24),
-      description: `${cat.items.length} item${cat.items.length > 1 ? 's' : ''}`,
-    })),
+    rows: categoryRows,
   }];
 
   const isHindi = customer.language_preference === 'hi';
@@ -2424,6 +2507,176 @@ async function sendComboSuggestions(
   } catch (e) {
     console.warn('[Orchestrator] Combo suggestion failed:', e);
   }
+}
+
+// ─── Combos Overview (Customer-facing) ──────
+
+async function sendCombosOverview(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string; name?: string },
+  conversation: { id: string }
+): Promise<void> {
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+
+  const now = new Date().toISOString();
+  const { data: combos } = await supabaseAdmin
+    .from('combos')
+    .select('*')
+    .eq('restaurant_id', restaurant.id)
+    .eq('is_active', true)
+    .or(`valid_until.is.null,valid_until.gte.${now}`)
+    .order('display_order', { ascending: true })
+    .limit(10);
+
+  if (!combos || combos.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, '📭 No combo deals available right now.\nSend *menu* to browse regular items!');
+    return;
+  }
+
+  // Try to send as carousel if images are available
+  const combosWithImages = combos.filter(c => c.image_url);
+  if (combosWithImages.length >= 2 && restaurant.whatsapp_phone_id && restaurant.whatsapp_token) {
+    const cards: CarouselCard[] = combosWithImages.slice(0, 10).map(c => {
+      const comboRupees = ((c.combo_price as number) / 100).toFixed(0);
+      const originalRupees = ((c.original_price as number) / 100).toFixed(0);
+      const savings = (((c.original_price as number) - (c.combo_price as number)) / 100).toFixed(0);
+      const items = (c.combo_items as Array<Record<string, unknown>>) || [];
+      const itemNames = items.map((i: Record<string, unknown>) => `${(i.quantity as number) || 1}x ${i.name}`).join(', ');
+      return {
+        imageUrl: c.image_url as string,
+        body: `🔥 *${c.name}*\n₹${comboRupees} ~~₹${originalRupees}~~ (Save ₹${savings})\n${itemNames}${c.description ? '\n' + (c.description as string).substring(0, 50) : ''}`,
+        buttons: [{ id: `add_combo_${c.id}`, title: '🛒 Add Combo' }],
+      };
+    });
+
+    try {
+      await sendCarouselMessage({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        bodyText: `🔥 *Combo Deals from ${restaurant.name}!*`,
+        cards,
+      });
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await sendReplyButtons({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        bodyText: `${cards.length} combo deal${cards.length > 1 ? 's' : ''} above ☝️\nTap to add to your cart!`,
+        buttons: [
+          { id: 'btn_categories', title: '📋 Full Menu' },
+          { id: 'btn_cart', title: '🛒 View Cart' },
+          { id: 'btn_place_order', title: '✅ Checkout' },
+        ],
+      });
+      await saveMessage(conversation.id, restaurant.id, 'bot', 'Sent combo deals carousel', undefined, { phone: customer.phone });
+      return;
+    } catch (e) {
+      console.warn('[Orchestrator] Combo carousel failed, falling back to text:', e);
+    }
+  }
+
+  // Fallback: text list with all combos
+  const comboLines = combos.map(c => {
+    const comboRupees = ((c.combo_price as number) / 100).toFixed(0);
+    const originalRupees = ((c.original_price as number) / 100).toFixed(0);
+    const savings = (((c.original_price as number) - (c.combo_price as number)) / 100).toFixed(0);
+    const items = (c.combo_items as Array<Record<string, unknown>>) || [];
+    const itemNames = items.map((i: Record<string, unknown>) => `${(i.quantity as number) || 1}x ${i.name}`).join(', ');
+    return `🔥 *${c.name}*\n   ₹${comboRupees} ~~₹${originalRupees}~~ (Save ₹${savings})\n   ${itemNames}`;
+  }).join('\n\n');
+
+  const msg = `🎯 *Combo Deals!*\n\n${comboLines}\n\nType the combo name to add it to your cart!`;
+  await sendBotReply(restaurant, customer, conversation, msg);
+}
+
+// ─── Add Combo to Cart ──────────────────────
+
+async function handleAddComboToCart(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string },
+  comboId: string
+): Promise<void> {
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+
+  const { data: combo } = await supabaseAdmin
+    .from('combos')
+    .select('*')
+    .eq('id', comboId)
+    .eq('restaurant_id', restaurant.id)
+    .eq('is_active', true)
+    .single();
+
+  if (!combo) {
+    await sendBotReply(restaurant, customer, conversation, '❌ This combo is no longer available.\nSend *combos* to see current deals!');
+    return;
+  }
+
+  const comboItems = (combo.combo_items as Array<Record<string, unknown>>) || [];
+  if (comboItems.length === 0) {
+    await sendBotReply(restaurant, customer, conversation, '❌ This combo has no items configured.');
+    return;
+  }
+
+  // Distribute the combo price proportionally across items based on original price
+  const originalPrice = combo.original_price as number;
+  const comboPrice = combo.combo_price as number;
+  const ratio = originalPrice > 0 ? comboPrice / originalPrice : 1;
+
+  const cart = await getOrCreateCart(restaurant.id, customer.id);
+  let updatedCart = cart;
+
+  for (const ci of comboItems) {
+    const itemId = ci.item_id as string;
+    const qty = (ci.quantity as number) || 1;
+    const itemName = (ci.name as string) || 'Combo Item';
+
+    // Try to get actual menu item for current price
+    const menuItem = await getMenuItemById(itemId);
+    // Use the proportional combo price for each item
+    const itemOriginalPrice = menuItem ? menuItem.price : 0;
+    const discountedPrice = Math.round(itemOriginalPrice * ratio);
+
+    updatedCart = await addToCart(updatedCart.id, {
+      item_id: itemId,
+      item_name: itemName,
+      quantity: qty,
+      unit_price: discountedPrice > 0 ? discountedPrice : (menuItem?.price || 0),
+    });
+  }
+
+  const comboRupees = (comboPrice / 100).toFixed(0);
+  const savings = ((originalPrice - comboPrice) / 100).toFixed(0);
+  const itemCount = updatedCart.items.reduce((sum, i) => sum + i.quantity, 0);
+  const totalRupees = (updatedCart.total / 100).toFixed(0);
+
+  const bodyText = `✅ *${combo.name}* combo added! (Save ₹${savings})\n\n🛒 Cart: ${itemCount} item${itemCount > 1 ? 's' : ''} · ₹${totalRupees}`;
+
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    await sendReplyButtons({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      to: customer.phone,
+      bodyText,
+      buttons: [
+        { id: 'btn_categories', title: '📋 Add More' },
+        { id: 'btn_cart', title: '🛒 View Cart' },
+        { id: 'btn_place_order', title: '✅ Checkout' },
+      ],
+    });
+  }
+  await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
 }
 
 // ─── Estimated Delivery Time ────────────────
