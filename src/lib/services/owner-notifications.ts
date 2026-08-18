@@ -26,27 +26,32 @@ async function sendWhatsApp(phoneNumberId: string, accessToken: string, to: stri
 }
 
 // ─── Send WhatsApp with Status Reply Buttons ─
+// Button IDs embed the orderId so callbacks target the correct order.
+// Format: "action_orderId" (e.g. "accept_abc-123-def")
 
 async function sendWhatsAppWithButtons(
   phoneNumberId: string,
   accessToken: string,
   to: string,
   body: string,
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled'
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled',
+  orderId?: string
 ) {
   const buttons: { id: string; title: string }[] = [];
+  // WhatsApp button IDs max 256 chars; orderId is a UUID (36 chars) so safe.
+  const suffix = orderId ? `_${orderId}` : '';
   if (status === 'pending') {
-    buttons.push({ id: 'accept', title: '✅ Accept' });
-    buttons.push({ id: 'reject', title: '❌ Reject' });
+    buttons.push({ id: `accept${suffix}`, title: '✅ Accept' });
+    buttons.push({ id: `reject${suffix}`, title: '❌ Reject' });
   } else if (status === 'confirmed') {
-    buttons.push({ id: 'preparing', title: '👨‍🍳 Preparing' });
-    buttons.push({ id: 'ready', title: '📦 Ready' });
-    buttons.push({ id: 'delivered', title: '🎉 Delivered' });
+    buttons.push({ id: `preparing${suffix}`, title: '👨‍🍳 Preparing' });
+    buttons.push({ id: `ready${suffix}`, title: '📦 Ready' });
+    buttons.push({ id: `delivered${suffix}`, title: '🎉 Delivered' });
   } else if (status === 'preparing') {
-    buttons.push({ id: 'ready', title: '📦 Ready' });
-    buttons.push({ id: 'delivered', title: '🎉 Delivered' });
+    buttons.push({ id: `ready${suffix}`, title: '📦 Ready' });
+    buttons.push({ id: `delivered${suffix}`, title: '🎉 Delivered' });
   } else if (status === 'ready' || status === 'out_for_delivery') {
-    buttons.push({ id: 'delivered', title: '🎉 Delivered' });
+    buttons.push({ id: `delivered${suffix}`, title: '🎉 Delivered' });
   }
 
   if (buttons.length > 0) {
@@ -135,7 +140,8 @@ export async function notifyOwnerNewOrder(restaurantId: string, orderId: string)
         rest.whatsapp_access_token!,
         rest.owner_whatsapp!,
         msg,
-        'pending'
+        'pending',
+        orderId  // embed orderId in buttons so callbacks target this specific order
       ).catch(e => console.warn('[OwnerNotify] WhatsApp failed (24h window?):', e));
     }
 
@@ -178,6 +184,22 @@ export async function notifyOwnerNewOrder(restaurantId: string, orderId: string)
   }
 }
 
+// ─── Parse button callback IDs ──────────────
+// Button IDs can be either:
+//   - New format: "action_orderId" (e.g. "accept_abc-123-def") — targets a specific order
+//   - Legacy format: "accept" (no orderId) — falls back to most recent active order
+
+function parseOwnerCommand(raw: string): { action: string; orderId: string | null } {
+  const text = raw.toLowerCase().trim();
+  // Try to extract orderId from button callback (format: action_uuid)
+  // UUIDs are 36 chars: 8-4-4-4-12 hex digits
+  const btnMatch = text.match(/^(accept|reject|preparing|ready|delivered)_(.{36,})$/);
+  if (btnMatch) {
+    return { action: btnMatch[1], orderId: btnMatch[2] };
+  }
+  return { action: text, orderId: null };
+}
+
 // ─── Handle Owner Reply ─────────────────────
 
 export async function handleOwnerReply(
@@ -201,17 +223,36 @@ export async function handleOwnerReply(
 
     if (!restaurant) return false;
 
-    const cmd = text.toLowerCase().trim();
+    // Parse the command — may contain an embedded orderId from the button
+    const { action: cmd, orderId: targetOrderId } = parseOwnerCommand(text);
 
-    // Find the most recent actionable order
-    const { data: order } = await supabaseAdmin
-      .from('orders')
-      .select('id, order_number, customer_phone, status, total, items, customers(saved_name, whatsapp_name, email)')
-      .eq('restaurant_id', restaurant.id)
-      .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    // ── Resolve the target order ──
+    // If the button had an orderId, fetch that specific order (regardless of status).
+    // If no orderId (legacy button or text command), fall back to the most recent active order.
+    let order: Record<string, any> | null = null;
+
+    if (targetOrderId) {
+      const { data } = await supabaseAdmin
+        .from('orders')
+        .select('id, order_number, customer_phone, status, total, items, customers(saved_name, whatsapp_name, email)')
+        .eq('id', targetOrderId)
+        .eq('restaurant_id', restaurant.id)
+        .single();
+      order = data as Record<string, any> | null;
+    }
+
+    // Fallback: no orderId in button OR orderId didn't match — use most recent active order
+    if (!order) {
+      const { data } = await supabaseAdmin
+        .from('orders')
+        .select('id, order_number, customer_phone, status, total, items, customers(saved_name, whatsapp_name, email)')
+        .eq('restaurant_id', restaurant.id)
+        .in('status', ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      order = data as Record<string, any> | null;
+    }
 
     if (!order) {
       if (restaurant.whatsapp_phone_id && restaurant.whatsapp_access_token) {
@@ -221,10 +262,25 @@ export async function handleOwnerReply(
       return true;
     }
 
+    // ── CRITICAL: Guard against stale button actions ──
+    // If the order is already in a terminal state (delivered or cancelled),
+    // reject the action and inform the owner.
+    const currentStatus = order.status as string;
+    const orderNum = (order.order_number as string) || order.id;
+    const isTerminal = currentStatus === 'delivered' || currentStatus === 'cancelled';
+
+    if (isTerminal && cmd !== 'status' && cmd !== 'orders') {
+      if (restaurant.whatsapp_phone_id && restaurant.whatsapp_access_token) {
+        const statusEmoji = currentStatus === 'delivered' ? '✅' : '❌';
+        await sendWhatsApp(restaurant.whatsapp_phone_id, restaurant.whatsapp_access_token, from,
+          `⚠️ *Order #${orderNum} is already ${currentStatus}* ${statusEmoji}\nThis action cannot be performed. Manage orders from the dashboard.`);
+      }
+      return true;
+    }
+
     let newStatus: string | null = null;
     let customerMsg = '';
     let ownerConfirm = '';
-    const orderNum = (order.order_number as string) || order.id;
 
     switch (cmd) {
       case '1':
@@ -272,7 +328,7 @@ export async function handleOwnerReply(
         break;
 
       case 'status':
-      case 'orders':
+      case 'orders': {
         // Show active orders summary
         const { data: activeOrders } = await supabaseAdmin
           .from('orders')
@@ -293,6 +349,7 @@ export async function handleOwnerReply(
             `📋 *Active Orders:*\n${orderList}\n\nReply with: *1* accept · *preparing* · *ready* · *done*`);
         }
         return true;
+      }
 
       default:
         // Not a recognized command
@@ -302,7 +359,6 @@ export async function handleOwnerReply(
     if (newStatus) {
       // Update order status
       const updates: Record<string, unknown> = { status: newStatus };
-      const tsField = `${newStatus === 'out_for_delivery' ? 'out_for_delivery' : newStatus}_at`;
       if (newStatus !== 'out_for_delivery') {
         updates[`${newStatus}_at`] = new Date().toISOString();
       }
@@ -318,14 +374,15 @@ export async function handleOwnerReply(
           order.customer_phone as string, customerMsg);
       }
 
-      // Confirm to owner
+      // Confirm to owner with next-step buttons (embed orderId)
       if (restaurant.whatsapp_phone_id && restaurant.whatsapp_access_token) {
         await sendWhatsAppWithButtons(
           restaurant.whatsapp_phone_id,
           restaurant.whatsapp_access_token,
           from,
           ownerConfirm,
-          newStatus as any
+          newStatus as any,
+          order.id  // embed orderId so next button press targets THIS order
         );
       }
 
