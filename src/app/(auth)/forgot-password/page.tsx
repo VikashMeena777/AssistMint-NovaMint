@@ -35,7 +35,7 @@ export default function ForgotPasswordPage() {
     return (
       <div className="w-full space-y-6 text-center">
         <div className="flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+          <div className="glow-card flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 shadow-inner shadow-primary/10">
             <CheckCircle2 className="h-8 w-8 text-primary" />
           </div>
         </div>
@@ -103,7 +103,7 @@ export default function ForgotPasswordPage() {
         <button
           type="submit"
           disabled={loading}
-          className="flex h-11 w-full items-center justify-center rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 hover:opacity-90 disabled:opacity-50 transition-all"
+          className="flex h-11 w-full items-center justify-center rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-primary/30 hover:opacity-95 active:scale-[0.98] active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" />

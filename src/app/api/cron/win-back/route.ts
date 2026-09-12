@@ -7,6 +7,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { sendReplyButtons } from '@/lib/whatsapp/client';
 
 export const maxDuration = 45;
 export const dynamic = 'force-dynamic';
@@ -18,18 +19,19 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(req: Request) {
-  // Verify CRON_SECRET
+  // Verify CRON_SECRET — fail closed when unset
+  const secret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!secret || authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    // Get all restaurants with WhatsApp configured
+    // Get all restaurants with WhatsApp configured (live column: whatsapp_access_token)
     const { data: restaurants } = await supabaseAdmin
       .from('restaurants')
-      .select('id, name, whatsapp_token, whatsapp_phone_id, business_type')
-      .not('whatsapp_token', 'is', null)
+      .select('id, name, whatsapp_access_token, whatsapp_phone_id, business_type')
+      .not('whatsapp_access_token', 'is', null)
       .not('whatsapp_phone_id', 'is', null);
 
     if (!restaurants || restaurants.length === 0) {
@@ -47,7 +49,7 @@ export async function GET(req: Request) {
 
       const { data: inactiveCustomers } = await supabaseAdmin
         .from('customers')
-        .select('id, phone, name, total_orders, last_order_at')
+        .select('id, phone, saved_name, whatsapp_name, total_orders, last_order_at')
         .eq('restaurant_id', rest.id)
         .eq('is_blocked', false)
         .gte('total_orders', 1) // Must have ordered at least once
@@ -77,45 +79,32 @@ export async function GET(req: Request) {
       const bt = rest.business_type || 'food_beverage';
       const messages = getWinBackMessage(rest.name, bt);
 
+      // Per-restaurant counter — the global total must not be written into
+      // each restaurant's broadcast row
+      let restaurantSent = 0;
+
       for (const customer of inactiveCustomers) {
         const cust = customer as Record<string, unknown>;
-        const phone = (cust.phone as string)?.replace(/\D/g, '');
+        const phone = cust.phone as string;
         if (!phone) continue;
 
-        const name = (cust.name as string) || '';
+        const name = (cust.saved_name as string) || (cust.whatsapp_name as string) || '';
         const personalMsg = name
           ? messages.body.replace('{name}', name)
           : messages.body.replace('Hey {name}! ', '');
 
         try {
-          await fetch(
-            `https://graph.facebook.com/v21.0/${rest.whatsapp_phone_id}/messages`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${rest.whatsapp_token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: phone,
-                type: 'interactive',
-                interactive: {
-                  type: 'button',
-                  body: { text: personalMsg },
-                  action: {
-                    buttons: messages.buttons.map((b) => ({
-                      type: 'reply',
-                      reply: { id: b.id, title: b.title.substring(0, 20) },
-                    })),
-                  },
-                },
-              }),
-            }
-          );
+          await sendReplyButtons({
+            phoneNumberId: rest.whatsapp_phone_id,
+            accessToken: rest.whatsapp_access_token,
+            to: phone,
+            bodyText: personalMsg,
+            buttons: messages.buttons,
+          });
+          restaurantSent++;
           totalSent++;
-        } catch {
-          // Non-critical
+        } catch (err) {
+          console.error('[Win-Back Cron] Send failed:', err instanceof Error ? err.message : err);
         }
 
         // Rate limit: 10 messages/second
@@ -129,7 +118,7 @@ export async function GET(req: Request) {
         message: messages.body.replace('{name}', 'Customer'),
         target_audience: 'inactive',
         total_recipients: inactiveCustomers.length,
-        sent_count: totalSent,
+        sent_count: restaurantSent,
         status: 'sent',
         sent_at: new Date().toISOString(),
       });

@@ -93,7 +93,8 @@ export async function getInquiries(
 export async function updateInquiryStatus(
   inquiryId: string,
   status: Inquiry['status'],
-  notes?: string
+  notes?: string,
+  restaurantId?: string
 ): Promise<{ error: string | null }> {
   const updates: Record<string, unknown> = {
     status,
@@ -104,10 +105,13 @@ export async function updateInquiryStatus(
     updates.followed_up_at = new Date().toISOString();
   }
 
-  const { error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('inquiries')
     .update(updates)
     .eq('id', inquiryId);
+  if (restaurantId) query = query.eq('restaurant_id', restaurantId);
+
+  const { error } = await query;
 
   return { error: error?.message || null };
 }

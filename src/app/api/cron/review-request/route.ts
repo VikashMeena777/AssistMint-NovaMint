@@ -6,6 +6,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { sendReplyButtons } from '@/lib/whatsapp/client';
 
 export const maxDuration = 45;
 export const dynamic = 'force-dynamic';
@@ -17,14 +18,18 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(req: Request) {
-  // Verify CRON_SECRET
+  // Verify CRON_SECRET — fail closed when unset
+  const secret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!secret || authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    // Find orders delivered 1-2 hours ago that haven't been asked for review
+    // Find orders delivered 1-2 hours ago that haven't been asked for review.
+    // review_requested_at dedupes across runs (previously every run re-sent
+    // for the whole hour window); delivered_at (not updated_at) avoids
+    // re-opening the window when the row is touched for other reasons.
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString();
 
@@ -33,8 +38,9 @@ export async function GET(req: Request) {
       .select('id, customer_id, restaurant_id, total, rating')
       .eq('status', 'delivered')
       .is('rating', null)
-      .gte('updated_at', twoHoursAgo)
-      .lte('updated_at', oneHourAgo)
+      .is('review_requested_at', null)
+      .gte('delivered_at', twoHoursAgo)
+      .lte('delivered_at', oneHourAgo)
       .limit(50);
 
     if (!orders || orders.length === 0) {
@@ -45,33 +51,39 @@ export async function GET(req: Request) {
 
     for (const order of orders) {
       const o = order as Record<string, unknown>;
+      const orderId = o.id as string;
 
-      // Get customer phone
+      const markRequested = () =>
+        supabaseAdmin
+          .from('orders')
+          .update({ review_requested_at: new Date().toISOString() })
+          .eq('id', orderId)
+          .then(() => {});
+
+      // Get customer phone (live columns: saved_name / whatsapp_name — no `name`)
       const { data: customer } = await supabaseAdmin
         .from('customers')
-        .select('phone, name')
+        .select('phone')
         .eq('id', o.customer_id)
         .single();
 
-      if (!customer) continue;
+      if (!customer) { await markRequested(); continue; }
       const cust = customer as Record<string, string>;
 
-      // Get restaurant WhatsApp credentials + google_review_url
+      // Get restaurant WhatsApp credentials + google_review_url (live column: whatsapp_access_token)
       const { data: restaurant } = await supabaseAdmin
         .from('restaurants')
-        .select('name, whatsapp_token, whatsapp_phone_id, google_review_url')
+        .select('name, whatsapp_access_token, whatsapp_phone_id, google_review_url')
         .eq('id', o.restaurant_id)
         .single();
 
-      if (!restaurant) continue;
+      if (!restaurant) { await markRequested(); continue; }
       const rest = restaurant as Record<string, string>;
-      if (!rest.whatsapp_token || !rest.whatsapp_phone_id) continue;
+      if (!rest.whatsapp_access_token || !rest.whatsapp_phone_id || !cust.phone) {
+        await markRequested();
+        continue;
+      }
 
-      // Send rating request with buttons
-      const phone = cust.phone?.replace(/\D/g, '');
-      if (!phone) continue;
-
-      const orderId = o.id as string;
       const bodyText = `⭐ *How was your experience?*\n\nWe'd love to hear your feedback on your recent order from *${rest.name}*!\n\nPlease rate us:`;
 
       const buttons = [
@@ -81,35 +93,21 @@ export async function GET(req: Request) {
       ];
 
       try {
-        await fetch(
-          `https://graph.facebook.com/v21.0/${rest.whatsapp_phone_id}/messages`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${rest.whatsapp_token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to: phone,
-              type: 'interactive',
-              interactive: {
-                type: 'button',
-                body: { text: bodyText },
-                action: {
-                  buttons: buttons.map((b) => ({
-                    type: 'reply',
-                    reply: { id: b.id, title: b.title.substring(0, 20) },
-                  })),
-                },
-              },
-            }),
-          }
-        );
+        await sendReplyButtons({
+          phoneNumberId: rest.whatsapp_phone_id,
+          accessToken: rest.whatsapp_access_token,
+          to: cust.phone,
+          bodyText,
+          buttons,
+        });
         sent++;
-      } catch {
-        // Non-critical
+      } catch (err) {
+        console.error('[Review Request Cron] Send failed for order', orderId, err instanceof Error ? err.message : err);
       }
+
+      // Mark requested regardless of send success — a hard-failed send
+      // (bad token/blocked number) should not retry forever
+      await markRequested();
 
       // Rate limit
       await new Promise((resolve) => setTimeout(resolve, 200));

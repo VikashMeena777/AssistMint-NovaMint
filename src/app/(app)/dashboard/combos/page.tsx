@@ -35,6 +35,7 @@ export default function CombosPage() {
   const [menuItems, setMenuItems] = useState<AnyData[]>([]);
   const [categories, setCategories] = useState<AnyData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [businessType, setBusinessType] = useState<string>("food_beverage");
   const [showCreate, setShowCreate] = useState(false);
@@ -51,36 +52,62 @@ export default function CombosPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) {
         setRestaurantId(r.id as string);
         if (r.business_type) setBusinessType(r.business_type as string);
-      } else setLoading(false);
-    })();
+      } else {
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const config = getBusinessTypeConfig(businessType);
   const terms = config.terms;
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const [combosRes, menuRes, catsRes] = await Promise.all([
-      getCombos(restaurantId),
-      getMenuItems(restaurantId),
-      getCategories(restaurantId),
-    ]);
-    setCombos(combosRes.data || []);
-    setMenuItems(menuRes.data || []);
-    setCategories(catsRes.data || []);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const [combosRes, menuRes, catsRes] = await Promise.all([
+        getCombos(restaurantId),
+        getMenuItems(restaurantId),
+        getCategories(restaurantId),
+      ]);
+      setCombos(combosRes.data || []);
+      setMenuItems(menuRes.data || []);
+      setCategories(catsRes.data || []);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load combos:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => {
-    if (restaurantId) loadData();
+    void (async () => {
+      if (restaurantId) loadData();
+    })();
   }, [restaurantId, loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadData();
+    else loadRestaurant();
+  };
 
   const originalPrice = Array.from(selectedItems.values()).reduce(
     (sum, item) => sum + item.price * item.quantity,
@@ -402,7 +429,17 @@ export default function CombosPage() {
 
       {/* Combos Grid */}
       <div className="w-full">
-        {loading ? (
+        {error && !combos.length ? (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : loading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="rounded-2xl border border-border/50 bg-card p-5 space-y-3">

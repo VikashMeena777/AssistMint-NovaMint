@@ -12,7 +12,6 @@ import {
   Copy,
   Percent,
   IndianRupee,
-  Truck,
   Calendar,
   Sparkles,
   RefreshCw,
@@ -45,6 +44,7 @@ function generateCode(): string {
 export default function CouponsPage() {
   const [coupons, setCoupons] = useState<AnyData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,25 +63,49 @@ export default function CouponsPage() {
     first_order_only: false,
   });
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) setRestaurantId(r.id as string);
       else setLoading(false);
-    })();
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const result = await getCoupons(restaurantId);
-    setCoupons(result.data || []);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const result = await getCoupons(restaurantId);
+      setCoupons(result.data || []);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load coupons:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => {
-    if (restaurantId) loadData();
+    void (async () => {
+      if (restaurantId) loadData();
+    })();
   }, [restaurantId, loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadData();
+    else loadRestaurant();
+  };
 
   const handleCreate = async () => {
     if (!restaurantId) return;
@@ -419,7 +443,17 @@ export default function CouponsPage() {
 
       {/* Coupons List */}
       <div className="w-full">
-        {loading ? (
+        {error && !coupons.length ? (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : loading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">

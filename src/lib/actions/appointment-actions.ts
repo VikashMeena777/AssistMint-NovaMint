@@ -100,7 +100,7 @@ export async function changeAppointmentStatus(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const result = await updateAppointmentStatus(appointmentId, status);
+  const result = await updateAppointmentStatus(appointmentId, status, restaurantId);
 
   if (!result.error) {
     logActivity({
@@ -162,7 +162,7 @@ export async function editStaff(
   const restaurantId = await getRestaurantId();
   if (!restaurantId) return { error: 'Unauthorized' };
 
-  const result = await updateStaffMember(staffId, updates);
+  const result = await updateStaffMember(staffId, updates, restaurantId);
   revalidatePath('/dashboard/staff');
   return result;
 }
@@ -174,7 +174,7 @@ export async function removeStaff(staffId: string): Promise<{ error: string | nu
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const result = await deleteStaffMember(staffId);
+  const result = await deleteStaffMember(staffId, restaurantId);
 
   if (!result.error) {
     logActivity({

@@ -30,13 +30,18 @@ import { getBusinessTypeConfig } from '@/lib/utils/business-types';
 export default function InquiriesPage() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [businessType, setBusinessType] = useState<string>('education');
 
   useEffect(() => {
     (async () => {
-      const r = await getCurrentRestaurant();
-      if (r?.business_type) setBusinessType(r.business_type as string);
+      try {
+        const r = await getCurrentRestaurant();
+        if (r?.business_type) setBusinessType(r.business_type as string);
+      } catch (err) {
+        console.error('Failed to load business type:', err);
+      }
     })();
   }, []);
 
@@ -44,15 +49,30 @@ export default function InquiriesPage() {
   const terms = config.terms;
 
   const loadData = useCallback(async () => {
-    setLoading(true);
-    const data = await fetchInquiries(
-      statusFilter !== 'all' ? { status: statusFilter } : undefined
-    );
-    setInquiries(data);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const data = await fetchInquiries(
+        statusFilter !== 'all' ? { status: statusFilter } : undefined
+      );
+      setInquiries(data);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to load inquiries:', err);
+      setError('Could not load. Please retry.');
+      setLoading(false);
+    }
   }, [statusFilter]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    void (async () => {
+      loadData();
+    })();
+  }, [loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    loadData();
+  };
 
   const handleStatusChange = async (id: string, status: Inquiry['status']) => {
     const result = await changeInquiryStatus(id, status);
@@ -120,7 +140,17 @@ export default function InquiriesPage() {
       </div>
 
       {/* Inquiry List */}
-      {loading ? (
+      {error && !inquiries.length ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      ) : loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-24 rounded-2xl bg-card animate-pulse" />

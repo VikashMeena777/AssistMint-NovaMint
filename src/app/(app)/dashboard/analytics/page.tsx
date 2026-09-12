@@ -112,6 +112,7 @@ function AnalyticsSkeleton() {
 
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [stats, setStats] = useState<AnyData>({});
   const [trend, setTrend] = useState<AnyData[]>([]);
@@ -121,39 +122,63 @@ export default function AnalyticsPage() {
   const [insights, setInsights] = useState<AnyData>({});
   const [paymentBreakdown, setPaymentBreakdown] = useState<AnyData>({});
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) setRestaurantId(r.id as string);
       else setLoading(false);
-    })();
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const [s, t, ti, a, ph, ins, pb] = await Promise.all([
-      getDashboardStats(restaurantId),
-      getOrderTrend(restaurantId),
-      getTopSellingItems(restaurantId, 5),
-      getRecentActivity(restaurantId, 10),
-      getPeakHours(restaurantId),
-      getOrderInsights(restaurantId),
-      getRevenueByPaymentMethod(restaurantId),
-    ]);
-    setStats(s);
-    setTrend(t);
-    setTopItems(ti);
-    setActivity(a.data || []);
-    setPeakHours(ph);
-    setInsights(ins);
-    setPaymentBreakdown(pb);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const [s, t, ti, a, ph, ins, pb] = await Promise.all([
+        getDashboardStats(restaurantId),
+        getOrderTrend(restaurantId),
+        getTopSellingItems(restaurantId, 5),
+        getRecentActivity(restaurantId, 10),
+        getPeakHours(restaurantId),
+        getOrderInsights(restaurantId),
+        getRevenueByPaymentMethod(restaurantId),
+      ]);
+      setStats(s);
+      setTrend(t);
+      setTopItems(ti);
+      setActivity(a.data || []);
+      setPeakHours(ph);
+      setInsights(ins);
+      setPaymentBreakdown(pb);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load analytics:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => {
-    if (restaurantId) loadData();
+    void (async () => {
+      if (restaurantId) loadData();
+    })();
   }, [restaurantId, loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadData();
+    else loadRestaurant();
+  };
 
 
 
@@ -168,7 +193,24 @@ export default function AnalyticsPage() {
 
   return (
     <AnimatePresence mode="wait">
-      {loading ? (
+      {error && !loading ? (
+        <motion.div
+          key="error"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </motion.div>
+      ) : loading ? (
         <motion.div
           key="skeleton"
           initial={{ opacity: 0 }}
@@ -413,8 +455,8 @@ export default function AnalyticsPage() {
               <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full h-auto min-h-[180px]" preserveAspectRatio="xMidYMid meet">
                 <defs>
                   <linearGradient id="peakAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.3" />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.02" />
+                    <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.02" />
                   </linearGradient>
                 </defs>
 
@@ -423,8 +465,8 @@ export default function AnalyticsPage() {
                   const y = padT + plotH - pct * plotH;
                   return (
                     <g key={i}>
-                      <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke="hsl(var(--border))" strokeWidth="0.5" strokeDasharray={pct > 0 ? "4,4" : "0"} />
-                      <text x={padL - 5} y={y + 3} textAnchor="end" fontSize="8" fill="hsl(var(--muted-foreground))" fontFamily="monospace">
+                      <line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke="var(--border)" strokeWidth="0.5" strokeDasharray={pct > 0 ? "4,4" : "0"} />
+                      <text x={padL - 5} y={y + 3} textAnchor="end" fontSize="8" fill="var(--muted-foreground)" fontFamily="monospace">
                         {Math.round(maxPeakCount * pct)}
                       </text>
                     </g>
@@ -435,22 +477,22 @@ export default function AnalyticsPage() {
                 <path d={areaD} fill="url(#peakAreaGrad)" />
 
                 {/* Line */}
-                <path d={lineD} fill="none" stroke="hsl(var(--primary))" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                <path d={lineD} fill="none" stroke="var(--primary)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
 
                 {/* Dots + hour labels */}
                 {points.map((p, i) => (
                   <g key={i}>
                     {p.count > 0 && (
                       <>
-                        <circle cx={p.x} cy={p.y} r="4" fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth="2" />
-                        <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="7.5" fill="hsl(var(--muted-foreground))" fontFamily="monospace" fontWeight="600">
+                        <circle cx={p.x} cy={p.y} r="4" fill="var(--primary)" stroke="var(--background)" strokeWidth="2" />
+                        <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize="7.5" fill="var(--muted-foreground)" fontFamily="monospace" fontWeight="600">
                           {p.count}
                         </text>
                       </>
                     )}
                     {/* Show every other label to avoid overlap */}
                     {i % 2 === 0 && (
-                      <text x={p.x} y={chartH - 5} textAnchor="middle" fontSize="7.5" fill="hsl(var(--muted-foreground))">
+                      <text x={p.x} y={chartH - 5} textAnchor="middle" fontSize="7.5" fill="var(--muted-foreground)">
                         {p.hour}
                       </text>
                     )}

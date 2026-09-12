@@ -7,7 +7,7 @@
 import { generateAIResponse } from '@/lib/ai/engine';
 import { getFullMenu, buildMenuContext, getMenuItemById, searchMenuItems } from '@/lib/services/menu-service';
 import { getOrCreateCart, addToCart, removeFromCart, clearCart, formatCartForWhatsApp, convertCartToOrder, updateCartItemQuantity, type CartItem } from '@/lib/services/cart-engine';
-import { getOrCreateCustomer, updateCustomerOrderStats, getSavedAddresses, addSavedAddress, getCustomerOrders, saveOrderRating, updateCustomerPreferences, setCustomerLanguage } from '@/lib/services/customer-service';
+import { getOrCreateCustomer, updateCustomerOrderStats, getSavedAddresses, addSavedAddress, getCustomerOrders, saveOrderRating, setCustomerLanguage } from '@/lib/services/customer-service';
 import { getOrCreateConversation, getRecentMessages, saveMessage, setBotActive } from '@/lib/services/conversation-manager';
 import { getRestaurantByPhoneId, type Restaurant } from '@/lib/services/restaurant-service';
 import { createBotPaymentLink } from '@/lib/services/bot-payment';
@@ -200,7 +200,16 @@ export async function handleIncomingMessage(params: {
     await sendCartSummary(restaurant, customer, conversation);
     return;
   }
-  if (lowerText === 'agent' || lowerText === 'human' || lowerText === 'help') {
+  // The payment-failure recovery message tells customers to "reply with COD" —
+  // this command is what makes that instruction real
+  if (lowerText === 'cod' || lowerText === 'cash on delivery') {
+    await handleCODOrder(restaurant, customer, conversation);
+    return;
+  }
+  // 'help' is a very common customer word ("help me choose") — route it to
+  // the AI instead of permanently disabling the bot. Only explicit
+  // agent/human requests trigger handoff.
+  if (lowerText === 'agent' || lowerText === 'human') {
     await handleHumanHandoff(restaurant, customer, conversation);
     return;
   }
@@ -270,7 +279,7 @@ export async function handleIncomingMessage(params: {
   if (lowerText === 'enquire' || lowerText === 'inquiry' || lowerText === 'enquiry' || lowerText === 'interested') {
     const bt = restaurant.business_type || 'food_beverage';
     if (['education', 'healthcare'].includes(bt)) {
-      await handleInquiryCapture(restaurant, customer, conversation, lowerText);
+      await handleInquiryCapture(restaurant, customer, conversation);
     } else {
       await sendBotReply(restaurant, customer, conversation, '📋 Send *menu* to browse what we offer!');
     }
@@ -356,16 +365,22 @@ export async function handleIncomingMessage(params: {
     // Store address in conversation metadata for order creation
     const cart = await getOrCreateCart(restaurant.id, customer.id);
     if (cart.items.length > 0) {
-      // Update cart metadata with address
+      // Update cart metadata with address (merge — never clobber other keys)
       const { createClient: createAdmin } = await import('@supabase/supabase-js');
       const supabaseAdmin = createAdmin(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         { auth: { persistSession: false } }
       );
+      const { data: cartRow } = await supabaseAdmin
+        .from('cart_sessions')
+        .select('metadata')
+        .eq('id', cart.id)
+        .single();
+      const currentMeta = ((cartRow as Record<string, unknown> | null)?.metadata as Record<string, unknown>) || {};
       await supabaseAdmin
         .from('cart_sessions')
-        .update({ metadata: { delivery_address: address } })
+        .update({ metadata: { ...currentMeta, delivery_address: address } })
         .eq('id', cart.id);
     }
     await sendPaymentChoice(restaurant, customer, conversation);
@@ -571,6 +586,10 @@ async function handleInteractiveReply(
         await sendCategoryItems(restaurant, customer, conversation, btnId.replace('cat_', ''));
       } else if (btnId.startsWith('item_')) {
         await sendItemDetails(restaurant, customer, conversation, btnId.replace('item_', ''));
+      } else if (btnId.startsWith('add_combo_')) {
+        // Combo: add all combo items to cart — MUST be checked before the
+        // generic add_ branch, else add_combo_<id> is stripped to combo_<id>
+        await handleAddComboToCart(restaurant, customer, conversation, btnId.replace('add_combo_', ''));
       } else if (btnId.startsWith('add_')) {
         await handleDirectAddToCart(restaurant, customer, conversation, btnId.replace('add_', ''));
       } else if (btnId.startsWith('inc_')) {
@@ -582,19 +601,21 @@ async function handleInteractiveReply(
         const parts = btnId.replace('rate_', '').split('_');
         const rating = parseInt(parts[0]);
         const orderId = parts.slice(1).join('_');
-        await saveOrderRating(orderId, rating);
+        if (Number.isInteger(rating) && rating >= 1 && rating <= 5) {
+          await saveOrderRating(orderId, rating, restaurant.id);
 
-        if (rating >= 4) {
-          // Check if business has Google Review URL
-          const googleUrl = restaurant.google_review_url;
-          if (googleUrl) {
-            const ratingMsg = `${'⭐'.repeat(rating)} Thank you so much! We're thrilled you loved it! 🎉\n\n🙏 Would you mind sharing your experience on Google? It really helps us!\n\n👉 ${googleUrl}`;
-            await sendBotReply(restaurant, customer, conversation, ratingMsg);
+          if (rating >= 4) {
+            // Check if business has Google Review URL
+            const googleUrl = restaurant.google_review_url;
+            if (googleUrl) {
+              const ratingMsg = `${'⭐'.repeat(rating)} Thank you so much! We're thrilled you loved it! 🎉\n\n🙏 Would you mind sharing your experience on Google? It really helps us!\n\n👉 ${googleUrl}`;
+              await sendBotReply(restaurant, customer, conversation, ratingMsg);
+            } else {
+              await sendBotReply(restaurant, customer, conversation, `${'⭐'.repeat(rating)} Thank you! We're glad you loved it 🎉`);
+            }
           } else {
-            await sendBotReply(restaurant, customer, conversation, `${'⭐'.repeat(rating)} Thank you! We're glad you loved it 🎉`);
+            await sendBotReply(restaurant, customer, conversation, `${'⭐'.repeat(rating)} Thanks for the honest feedback — we'll do better next time 🙏`);
           }
-        } else {
-          await sendBotReply(restaurant, customer, conversation, `${'⭐'.repeat(rating)} Thanks for the honest feedback — we'll do better next time 🙏`);
         }
       } else if (btnId.startsWith('addr_')) {
         const idx = parseInt(btnId.replace('addr_', ''));
@@ -609,7 +630,13 @@ async function handleInteractiveReply(
               process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
               { auth: { persistSession: false } }
             );
-            await supabaseAdmin.from('cart_sessions').update({ metadata: { delivery_address: addresses[idx] } }).eq('id', cart.id);
+            const { data: cartRow } = await supabaseAdmin
+              .from('cart_sessions')
+              .select('metadata')
+              .eq('id', cart.id)
+              .single();
+            const currentMeta = ((cartRow as Record<string, unknown> | null)?.metadata as Record<string, unknown>) || {};
+            await supabaseAdmin.from('cart_sessions').update({ metadata: { ...currentMeta, delivery_address: addresses[idx] } }).eq('id', cart.id);
           }
           await sendPaymentChoice(restaurant, customer, conversation);
         }
@@ -625,9 +652,6 @@ async function handleInteractiveReply(
         if (timeParts.length >= 2) {
           await handleAppointmentTimeSelected(restaurant, customer, conversation, timeParts[0], timeParts[1]);
         }
-      } else if (btnId.startsWith('add_combo_')) {
-        // Combo: add all combo items to cart
-        await handleAddComboToCart(restaurant, customer, conversation, btnId.replace('add_combo_', ''));
       } else if (btnId.startsWith('inq_')) {
         // Inquiry: service selected
         await handleInquirySelected(restaurant, customer, conversation, btnId.replace('inq_', ''));
@@ -695,6 +719,36 @@ async function tryMatchTextToAction(
   const allItems = menu.categories.flatMap(c => c.items).filter(i => i.is_available);
   if (allItems.length === 0) return false;
 
+  // Confirm-phrases MUST be checked before item matching — otherwise short
+  // confirmations like "ok" substring-match items ("Coke") and silently
+  // add them to the cart.
+  const confirmPhrases = ['ok', 'okay', 'yes', 'sure', 'yes please', 'add it', 'go ahead', 'order it', "let's order", 'lets order', 'ok add', 'haan', 'ha', 'theek hai', 'thik hai'];
+  if (confirmPhrases.includes(lower)) {
+    const recentMsgs = await getRecentMessages(conversation.id, 5);
+    const lastBot = [...recentMsgs].reverse().find(m => m.role === 'assistant');
+    if (lastBot) {
+      // Try to extract item name from bot's suggestion
+      const botText = lastBot.content.toLowerCase();
+      const suggestedItem = allItems.find(item =>
+        botText.includes(item.name.toLowerCase())
+      );
+      if (suggestedItem) {
+        console.log(`[Orchestrator] User confirmed suggestion: "${text}" → adding ${suggestedItem.name}`);
+        await handleDirectAddToCart(restaurant, customer, conversation, suggestedItem.id);
+        return true;
+      }
+    }
+    // A bare confirm with no suggestion to confirm — don't fall through to
+    // item matching ("ok" must never add a Coke)
+    return false;
+  }
+
+  // Negations: never auto-add when the customer is declining
+  const negationWords = ['no', 'nope', 'nahi', 'nah', 'dont', "don't", 'cancel', 'remove', 'not'];
+  if (negationWords.some(n => lower === n || lower.startsWith(n + ' '))) {
+    return false; // let the AI/cart handlers deal with removal intent
+  }
+
   // Strip emoji/special chars for matching
   const cleanText = lower
     .replace(/[🛒✅📋🟢🔴⭐·₹\-~]/g, '')
@@ -709,11 +763,12 @@ async function tryMatchTextToAction(
     cleanText === item.name.toLowerCase()
   );
 
-  // Then try if the text contains the item name (or vice versa)
-  if (!matchedItem) {
+  // Then try if the customer's text CONTAINS the item name. The reverse
+  // direction (item name containing the text) used to make any short reply
+  // ("ok" ⊂ "Coke") an add-to-cart action — removed.
+  if (!matchedItem && cleanText.length >= 3) {
     matchedItem = allItems.find(item =>
-      cleanText.includes(item.name.toLowerCase()) ||
-      item.name.toLowerCase().includes(cleanText)
+      cleanText.includes(item.name.toLowerCase())
     );
   }
 
@@ -763,9 +818,10 @@ async function tryMatchTextToAction(
         cleanText === (c.name as string).toLowerCase()
       );
       if (!matchedCombo) {
+        // Customer text must contain the combo name (no reverse-substring —
+        // see the item-matching fix above)
         matchedCombo = activeCombos.find(c =>
-          cleanText.includes((c.name as string).toLowerCase()) ||
-          (c.name as string).toLowerCase().includes(cleanText)
+          cleanText.length >= 3 && cleanText.includes((c.name as string).toLowerCase())
         );
       }
       if (!matchedCombo && cleanText.length >= 4) {
@@ -789,25 +845,7 @@ async function tryMatchTextToAction(
   }
 
 
-  // 3. Check if user is confirming the last bot suggestion
-  // e.g. bot said "You can try our Paneer Makhani for ₹199" → user says "ok" / "yes" / "sure" / "add it"
-  const confirmPhrases = ['ok', 'okay', 'yes', 'sure', 'yes please', 'add it', 'go ahead', 'order it', "let's order", 'lets order', 'ok add', 'haan', 'ha', 'theek hai', 'thik hai'];
-  if (confirmPhrases.includes(lower) || confirmPhrases.some(p => lower === p)) {
-    const recentMsgs = await getRecentMessages(conversation.id, 5);
-    const lastBot = [...recentMsgs].reverse().find(m => m.role === 'assistant');
-    if (lastBot) {
-      // Try to extract item name from bot's suggestion
-      const botText = lastBot.content.toLowerCase();
-      const suggestedItem = allItems.find(item =>
-        botText.includes(item.name.toLowerCase())
-      );
-      if (suggestedItem) {
-        console.log(`[Orchestrator] User confirmed suggestion: "${text}" → adding ${suggestedItem.name}`);
-        await handleDirectAddToCart(restaurant, customer, conversation, suggestedItem.id);
-        return true;
-      }
-    }
-  }
+  // 3. Confirm-phrase handling moved BEFORE item matching (see above).
 
   return false;
 }
@@ -919,7 +957,13 @@ async function handleDirectAddToCart(
   itemId: string
 ): Promise<void> {
   const item = await getMenuItemById(itemId);
-  if (!item) {
+  if (!item || !item.is_available) {
+    await sendBotReply(restaurant, customer, conversation, '❌ Sorry, this item is unavailable.');
+    return;
+  }
+  // Cross-tenant guard: stale carousel cards from another business must not
+  // add that business's items into this restaurant's cart
+  if (item.restaurant_id && item.restaurant_id !== restaurant.id) {
     await sendBotReply(restaurant, customer, conversation, '❌ Sorry, this item is unavailable.');
     return;
   }
@@ -936,7 +980,6 @@ async function handleDirectAddToCart(
   // Fire-and-forget combo suggestion (non-blocking)
   sendComboSuggestions(restaurant, customer, conversation, item.id).catch(e => console.error('[Orchestrator] Combo suggestion failed:', e));
 
-  const priceRupees = (item.price / 100).toFixed(0);
   const itemCount = updatedCart.items.reduce((sum, i) => sum + i.quantity, 0);
   const totalRupees = (updatedCart.total / 100).toFixed(0);
 
@@ -1414,7 +1457,7 @@ async function sendCategoryItems(
           { id: `add_${item.id}`, title: '🛒 Add to Cart' },
         ],
       });
-    } catch (e) {
+    } catch {
       itemsWithoutImages.push(item);
     }
   }
@@ -1589,7 +1632,9 @@ async function askForDeliveryAddress(
     });
     await saveMessage(conversation.id, restaurant.id, 'bot', 'Choose delivery address or type new one', undefined, { phone: customer.phone });
   } else {
-    const bodyText = '📍 *Where should we deliver?*\nType your address or share your location.';
+    // NOTE: the address-capture trigger (section 6.5) matches on the phrase
+    // 'delivery address' in the last bot message — this prompt MUST contain it
+    const bodyText = '📍 *Where should we deliver?*\nType your delivery address or share your location.';
     if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
       await sendReplyButtons({
         phoneNumberId: restaurant.whatsapp_phone_id,
@@ -1751,6 +1796,13 @@ async function handleCODOrder(
     return;
   }
 
+  // Enforce minimum order (min_order_amount is in RUPEES; cart.total in paise)
+  if (restaurant.min_order_amount > 0 && cart.total < restaurant.min_order_amount * 100) {
+    const shortBy = ((restaurant.min_order_amount * 100) - cart.total) / 100;
+    await sendBotReply(restaurant, customer, conversation, `🛒 Minimum order is ₹${restaurant.min_order_amount}. Add ₹${shortBy.toFixed(0)} more to check out — send *menu* to browse.`);
+    return;
+  }
+
   // Prevent duplicate orders from stale button clicks
   if (await hasRecentOrder(restaurant.id, customer.id)) {
     await sendBotReply(restaurant, customer, conversation, '⚠️ You already placed an order just now! Send *orders* to check your order status.');
@@ -1814,6 +1866,13 @@ async function handleOnlinePayOrder(
   const cart = await getOrCreateCart(restaurant.id, customer.id);
   if (cart.items.length === 0) {
     await sendBotReply(restaurant, customer, conversation, '🛒 Cart is empty! Send *menu* to add items.');
+    return;
+  }
+
+  // Enforce minimum order (min_order_amount is in RUPEES; cart.total in paise)
+  if (restaurant.min_order_amount > 0 && cart.total < restaurant.min_order_amount * 100) {
+    const shortBy = ((restaurant.min_order_amount * 100) - cart.total) / 100;
+    await sendBotReply(restaurant, customer, conversation, `🛒 Minimum order is ₹${restaurant.min_order_amount}. Add ₹${shortBy.toFixed(0)} more to check out — send *menu* to browse.`);
     return;
   }
 
@@ -2008,7 +2067,7 @@ ${langInstruction}
 2. NEVER invent menu items. Only recommend what's in the MENU section below.
 3. If customer asks for something not on the menu, say "That's not on our menu right now" and suggest ONE similar item.
 4. For complaints or complex issues, say: "Let me connect you with our team — type *agent*"
-5. Minimum order: ₹${(restaurant.min_order_amount / 100).toFixed(0)}
+5. Minimum order: ₹${restaurant.min_order_amount}
 6. Keep responses conversational. Never use bullet points or numbered lists.
 
 ## CUSTOMER:
@@ -2098,13 +2157,18 @@ async function executeAction(
   switch (action.type) {
     case 'add_to_cart': {
       if (!action.itemId) return;
+      // Clamp AI-emitted quantity — a hallucinated or injected
+      // [ADD_TO_CART:id:999999] must not flood the cart
+      const quantity = Math.min(Math.max(Math.floor(action.quantity || 1), 1), 25);
       const item = await getMenuItemById(action.itemId);
-      if (!item) return;
+      if (!item || !item.is_available) return;
+      // Cross-tenant guard: the AI can only add this restaurant's items
+      if (item.restaurant_id && item.restaurant_id !== restaurant.id) return;
 
       const cartItem: CartItem = {
         item_id: item.id,
         item_name: item.name,
-        quantity: action.quantity || 1,
+        quantity,
         unit_price: item.price,
       };
 
@@ -2169,8 +2233,9 @@ async function handleHumanHandoff(
   customer: { id: string; phone: string },
   conversation: { id: string }
 ): Promise<void> {
-  // Deactivate bot for this conversation
-  await setBotActive(conversation.id, false);
+  // Deactivate bot for this conversation (phone is required — the marker
+  // lookup keys on customer_phone)
+  await setBotActive(conversation.id, false, customer.phone);
 
   const reply = "Connecting you with our team now 🙏\nThey'll respond shortly — feel free to describe your query.";
   await sendBotReply(restaurant, customer, conversation, reply);
@@ -2656,7 +2721,6 @@ async function handleAddComboToCart(
     });
   }
 
-  const comboRupees = (comboPrice / 100).toFixed(0);
   const savings = ((originalPrice - comboPrice) / 100).toFixed(0);
   const itemCount = updatedCart.items.reduce((sum, i) => sum + i.quantity, 0);
   const totalRupees = (updatedCart.total / 100).toFixed(0);
@@ -2801,27 +2865,6 @@ function isBusinessClosed(restaurant: Restaurant): { isClosed: boolean; nextOpen
   }
 
   return { isClosed: true, nextOpen: null };
-}
-
-function getBusinessHoursText(restaurant: Restaurant): string {
-  const hours = restaurant.business_hours;
-  if (!hours || Object.keys(hours).length === 0) return '';
-
-  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-  const dayLabels: Record<string, string> = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' };
-
-  const lines: string[] = [];
-  for (const day of days) {
-    const dayShort = day.substring(0, 3);
-    const h = (hours[day] || hours[dayShort]) as { open?: string; close?: string; closed?: boolean; is_closed?: boolean } | undefined;
-    if (!h) continue;
-    if (h.closed || h.is_closed) {
-      lines.push(`${dayLabels[day]}: Closed`);
-    } else if (h.open && h.close) {
-      lines.push(`${dayLabels[day]}: ${h.open} - ${h.close}`);
-    }
-  }
-  return lines.length > 0 ? `📅 *Our Hours:*\n${lines.join('\n')}` : '';
 }
 
 function getTodayHoursText(restaurant: Restaurant): string {
@@ -2987,7 +3030,6 @@ async function handleAppointmentDateSelected(
   // Get context
   const ctx = conversation.context || {};
   const serviceName = (ctx.booking_service_name as string) || 'Service';
-  const servicePrice = (ctx.booking_service_price as number) || 0;
 
   // Update context with date
   const { createClient: createAdmin } = await import('@supabase/supabase-js');
@@ -3144,8 +3186,7 @@ async function handleAppointmentTimeSelected(
 async function handleInquiryCapture(
   restaurant: Restaurant,
   customer: { id: string; phone: string; name?: string },
-  conversation: { id: string },
-  _trigger: string
+  conversation: { id: string }
 ): Promise<void> {
   // Show services as inquiry options
   const menu = await getFullMenu(restaurant.id);

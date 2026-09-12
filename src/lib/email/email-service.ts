@@ -11,6 +11,19 @@ const resend = process.env.RESEND_API_KEY
 
 const FROM_EMAIL = process.env.DEFAULT_FROM_EMAIL || 'AssistMint <notifications@assistmint.com>';
 
+// ─── Helpers ────────────────────────────────
+
+// Escape dynamic values interpolated into HTML email templates
+// (prevents HTML injection via customer names, addresses, item names, etc.)
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ─── Send New Order Email ───────────────────
 
 interface OrderEmailData {
@@ -36,7 +49,7 @@ export async function sendNewOrderEmail(data: OrderEmailData): Promise<void> {
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${i.quantity}x ${i.item_name}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;">${i.quantity}x ${escapeHtml(i.item_name)}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;text-align:right;">${i.price ? '₹' + (i.price / 100).toFixed(0) : ''}</td>
         </tr>`
     )
@@ -50,8 +63,8 @@ export async function sendNewOrderEmail(data: OrderEmailData): Promise<void> {
       <div style="max-width:520px;margin:0 auto;padding:24px;">
         <!-- Header -->
         <div style="background:linear-gradient(135deg,#10b981,#059669);border-radius:16px 16px 0 0;padding:28px 24px;text-align:center;">
-          <h1 style="margin:0;color:white;font-size:20px;font-weight:700;">🔔 New Order #${data.orderNumber}</h1>
-          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">${data.restaurantName}</p>
+          <h1 style="margin:0;color:white;font-size:20px;font-weight:700;">🔔 New Order #${escapeHtml(data.orderNumber)}</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">${escapeHtml(data.restaurantName)}</p>
         </div>
 
         <!-- Body -->
@@ -59,8 +72,8 @@ export async function sendNewOrderEmail(data: OrderEmailData): Promise<void> {
           <!-- Customer Info -->
           <div style="background:#f9fafb;border-radius:12px;padding:16px;margin-bottom:20px;">
             <p style="margin:0 0 4px;font-size:13px;color:#6b7280;">Customer</p>
-            <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${data.customerName}</p>
-            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${data.customerPhone}</p>
+            <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">${escapeHtml(data.customerName)}</p>
+            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${escapeHtml(data.customerPhone)}</p>
           </div>
 
           <!-- Items -->
@@ -82,8 +95,8 @@ export async function sendNewOrderEmail(data: OrderEmailData): Promise<void> {
 
           <!-- Details -->
           <div style="font-size:13px;color:#6b7280;space-y:6px;">
-            <p style="margin:6px 0;">💳 <strong>Payment:</strong> ${data.paymentMethod}</p>
-            <p style="margin:6px 0;">📍 <strong>Delivery:</strong> ${data.deliveryAddress}</p>
+            <p style="margin:6px 0;">💳 <strong>Payment:</strong> ${escapeHtml(data.paymentMethod)}</p>
+            <p style="margin:6px 0;">📍 <strong>Delivery:</strong> ${escapeHtml(data.deliveryAddress)}</p>
           </div>
 
           <!-- CTA -->
@@ -105,15 +118,20 @@ export async function sendNewOrderEmail(data: OrderEmailData): Promise<void> {
   `;
 
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: FROM_EMAIL,
       to: data.ownerEmail,
       subject: `🔔 New Order #${data.orderNumber} — ₹${totalRupees}`,
       html,
     });
+    if (sendError) {
+      throw new Error(`Resend API error: ${sendError.message}`);
+    }
     console.log(`[Email] New order email sent to ${data.ownerEmail}`);
   } catch (error) {
     console.error('[Email] Failed to send new order email:', error);
+    // Rethrow so callers' .catch handlers fire (e.g. activity_log email.failed rows)
+    throw error;
   }
 }
 
@@ -145,7 +163,7 @@ export async function sendDailySummaryEmail(data: DailySummaryEmailData): Promis
       <div style="max-width:520px;margin:0 auto;padding:24px;">
         <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px 16px 0 0;padding:28px 24px;text-align:center;">
           <h1 style="margin:0;color:white;font-size:20px;font-weight:700;">📊 Daily Summary</h1>
-          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">${data.restaurantName} · ${data.date}</p>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">${escapeHtml(data.restaurantName)} · ${escapeHtml(data.date)}</p>
         </div>
 
         <div style="background:white;padding:24px;border-radius:0 0 16px 16px;border:1px solid #e5e7eb;border-top:none;">
@@ -192,15 +210,20 @@ export async function sendDailySummaryEmail(data: DailySummaryEmailData): Promis
   `;
 
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: FROM_EMAIL,
       to: data.ownerEmail,
       subject: `📊 Daily Summary — ₹${revenueRupees} revenue, ${data.totalOrders} orders`,
       html,
     });
+    if (sendError) {
+      throw new Error(`Resend API error: ${sendError.message}`);
+    }
     console.log(`[Email] Daily summary sent to ${data.ownerEmail}`);
   } catch (error) {
     console.error('[Email] Failed to send daily summary:', error);
+    // Rethrow so callers' .catch handlers fire (e.g. activity_log email.failed rows)
+    throw error;
   }
 }
 
@@ -230,18 +253,18 @@ export async function sendPaymentReceivedEmail(data: PaymentEmailData): Promise<
       <div style="max-width:520px;margin:0 auto;padding:24px;">
         <div style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:16px 16px 0 0;padding:28px 24px;text-align:center;">
           <h1 style="margin:0;color:white;font-size:20px;font-weight:700;">💰 Payment Received</h1>
-          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">${data.restaurantName}</p>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">${escapeHtml(data.restaurantName)}</p>
         </div>
 
         <div style="background:white;padding:24px;border-radius:0 0 16px 16px;border:1px solid #e5e7eb;border-top:none;">
           <div style="text-align:center;margin-bottom:20px;">
             <p style="margin:0;font-size:36px;font-weight:800;color:#16a34a;">₹${amountRupees}</p>
-            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Order #${data.orderNumber}</p>
+            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Order #${escapeHtml(data.orderNumber)}</p>
           </div>
 
           <div style="background:#f9fafb;border-radius:12px;padding:16px;">
-            <p style="margin:4px 0;font-size:13px;color:#6b7280;">👤 <strong>Customer:</strong> ${data.customerName}</p>
-            <p style="margin:4px 0;font-size:13px;color:#6b7280;">💳 <strong>Method:</strong> ${data.paymentMethod}</p>
+            <p style="margin:4px 0;font-size:13px;color:#6b7280;">👤 <strong>Customer:</strong> ${escapeHtml(data.customerName)}</p>
+            <p style="margin:4px 0;font-size:13px;color:#6b7280;">💳 <strong>Method:</strong> ${escapeHtml(data.paymentMethod)}</p>
           </div>
 
           <div style="margin-top:24px;text-align:center;">
@@ -261,14 +284,19 @@ export async function sendPaymentReceivedEmail(data: PaymentEmailData): Promise<
   `;
 
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: FROM_EMAIL,
       to: data.ownerEmail,
       subject: `💰 Payment ₹${amountRupees} received — Order #${data.orderNumber}`,
       html,
     });
+    if (sendError) {
+      throw new Error(`Resend API error: ${sendError.message}`);
+    }
   } catch (error) {
     console.error('[Email] Failed to send payment email:', error);
+    // Rethrow so callers' .catch handlers fire (e.g. activity_log email.failed rows)
+    throw error;
   }
 }
 
@@ -340,14 +368,14 @@ export async function sendOrderStatusEmail(data: StatusEmailData): Promise<void>
     text: '#374151',
     header: 'linear-gradient(135deg, #4b5563, #374151)',
     icon: '🔔',
-    desc: `Your order status has changed to: ${data.status}`,
+    desc: `Your order status has changed to: ${escapeHtml(data.status)}`,
   };
 
   const itemRows = data.items
     .map(
       (i) =>
         `<tr>
-          <td style="padding:10px 14px;border-bottom:1px solid #eaeaea;font-size:14px;color:#333;">${i.quantity}x ${i.item_name}</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #eaeaea;font-size:14px;color:#333;">${i.quantity}x ${escapeHtml(i.item_name)}</td>
         </tr>`
     )
     .join('');
@@ -358,21 +386,21 @@ export async function sendOrderStatusEmail(data: StatusEmailData): Promise<void>
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Order Status Update #${data.orderNumber}</title>
+      <title>Order Status Update #${escapeHtml(data.orderNumber)}</title>
     </head>
     <body style="margin:0;padding:0;background-color:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
       <div style="max-width:540px;margin:0 auto;padding:24px;">
         <!-- Header banner with premium gradient -->
         <div style="background:${currentStatus.header};border-radius:20px 20px 0 0;padding:32px 24px;text-align:center;">
           <span style="font-size:36px;margin-bottom:8px;display:inline-block;">${currentStatus.icon}</span>
-          <h1 style="margin:4px 0 0;color:white;font-size:22px;font-weight:700;letter-spacing:-0.02em;">Order ${data.status.toUpperCase()}</h1>
-          <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:14px;">Order #${data.orderNumber} · ${data.restaurantName}</p>
+          <h1 style="margin:4px 0 0;color:white;font-size:22px;font-weight:700;letter-spacing:-0.02em;">Order ${escapeHtml(data.status.toUpperCase())}</h1>
+          <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:14px;">Order #${escapeHtml(data.orderNumber)} · ${escapeHtml(data.restaurantName)}</p>
         </div>
 
         <!-- Main Card -->
         <div style="background:white;padding:28px 24px;border-radius:0 0 20px 20px;border:1px solid #e2e8f0;border-top:none;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
           <!-- Greeting -->
-          <p style="margin:0 0 16px;font-size:16px;color:#1e293b;font-weight:500;">Hi ${data.customerName || 'there'},</p>
+          <p style="margin:0 0 16px;font-size:16px;color:#1e293b;font-weight:500;">Hi ${escapeHtml(data.customerName || 'there')},</p>
           
           <!-- Status Banner inside Card -->
           <div style="background-color:${currentStatus.bg};border-radius:12px;padding:16px;margin-bottom:24px;border-left:4px solid ${currentStatus.text};">
@@ -402,7 +430,7 @@ export async function sendOrderStatusEmail(data: StatusEmailData): Promise<void>
 
         <!-- Footer -->
         <div style="text-align:center;margin-top:24px;color:#94a3b8;font-size:12px;">
-          <p style="margin:0;">Sent by AssistMint on behalf of <strong>${data.restaurantName}</strong></p>
+          <p style="margin:0;">Sent by AssistMint on behalf of <strong>${escapeHtml(data.restaurantName)}</strong></p>
           <p style="margin:6px 0 0;">Need help? Please contact the restaurant directly.</p>
         </div>
       </div>
@@ -411,15 +439,20 @@ export async function sendOrderStatusEmail(data: StatusEmailData): Promise<void>
   `;
 
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: FROM_EMAIL,
       to: data.customerEmail,
       subject: `${currentStatus.icon} Your order from ${data.restaurantName} is ${data.status}!`,
       html,
     });
+    if (sendError) {
+      throw new Error(`Resend API error: ${sendError.message}`);
+    }
     console.log(`[Email] Order status update email sent to ${data.customerEmail}`);
   } catch (error) {
     console.error('[Email] Failed to send order status email:', error);
+    // Rethrow so callers' .catch handlers fire (e.g. activity_log email.failed rows)
+    throw error;
   }
 }
 

@@ -24,6 +24,7 @@ export interface MenuCategory {
 
 export interface MenuItem {
   id: string;
+  restaurant_id: string;
   category_id: string;
   category_name?: string;
   name: string;
@@ -124,11 +125,26 @@ export async function getFullMenu(restaurantId: string): Promise<FullMenu | null
     });
   }
 
+  // Group addons by their menu_item_id so each item only gets its own addons
+  const addonsByItem = new Map<string, MenuAddon[]>();
+  for (const a of (addons || []) as Record<string, unknown>[]) {
+    const itemId = a.menu_item_id as string;
+    if (!addonsByItem.has(itemId)) addonsByItem.set(itemId, []);
+    addonsByItem.get(itemId)!.push({
+      id: a.id as string,
+      name: a.name as string,
+      price: a.price as number,
+      category: a.category as string | undefined,
+      is_available: a.is_available as boolean,
+    });
+  }
+
   const menuCategories = (categories as Record<string, unknown>[]).map((cat) => {
     const catItems = ((items || []) as Record<string, unknown>[])
       .filter((item) => item.category_id === cat.id)
       .map((item) => ({
         id: item.id as string,
+        restaurant_id: item.restaurant_id as string,
         category_id: item.category_id as string,
         category_name: cat.name as string,
         name: item.name as string,
@@ -141,13 +157,7 @@ export async function getFullMenu(restaurantId: string): Promise<FullMenu | null
         is_available: item.is_available as boolean,
         prep_time_minutes: (item.prep_time_minutes as number) || 15,
         variants: variantsByItem.get(item.id as string) || [],
-        addons: ((addons || []) as Record<string, unknown>[]).map((a) => ({
-          id: a.id as string,
-          name: a.name as string,
-          price: a.price as number,
-          category: a.category as string | undefined,
-          is_available: a.is_available as boolean,
-        })),
+        addons: addonsByItem.get(item.id as string) || [],
       }));
 
     return {
@@ -219,6 +229,7 @@ export async function searchMenuItems(
 
   return ((data || []) as Record<string, unknown>[]).map((item) => ({
     id: item.id as string,
+    restaurant_id: item.restaurant_id as string,
     category_id: item.category_id as string,
     category_name: (item.menu_categories as Record<string, string>)?.name,
     name: item.name as string,
@@ -246,6 +257,7 @@ export async function getMenuItemById(itemId: string): Promise<MenuItem | null> 
 
   return {
     id: item.id as string,
+    restaurant_id: item.restaurant_id as string,
     category_id: item.category_id as string,
     category_name: (item.menu_categories as Record<string, string>)?.name,
     name: item.name as string,

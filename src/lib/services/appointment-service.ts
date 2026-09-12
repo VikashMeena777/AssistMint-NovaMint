@@ -152,12 +152,17 @@ export async function getAppointments(
 
 export async function updateAppointmentStatus(
   appointmentId: string,
-  status: Appointment['status']
+  status: Appointment['status'],
+  restaurantId?: string
 ): Promise<{ error: string | null }> {
-  const { error } = await supabaseAdmin
+  // restaurantId scoping prevents cross-tenant updates via the service-role client
+  let query = supabaseAdmin
     .from('appointments')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', appointmentId);
+  if (restaurantId) query = query.eq('restaurant_id', restaurantId);
+
+  const { error } = await query;
 
   return { error: error?.message || null };
 }
@@ -318,21 +323,31 @@ export async function createStaffMember(data: {
 
 export async function updateStaffMember(
   staffId: string,
-  updates: Partial<Pick<StaffMember, 'name' | 'phone' | 'role' | 'specialization' | 'is_active'>>
+  updates: Partial<Pick<StaffMember, 'name' | 'phone' | 'role' | 'specialization' | 'is_active'>>,
+  restaurantId?: string
 ): Promise<{ error: string | null }> {
-  const { error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('staff')
     .update(updates)
     .eq('id', staffId);
+  if (restaurantId) query = query.eq('restaurant_id', restaurantId);
+
+  const { error } = await query;
 
   return { error: error?.message || null };
 }
 
-export async function deleteStaffMember(staffId: string): Promise<{ error: string | null }> {
-  const { error } = await supabaseAdmin
+export async function deleteStaffMember(
+  staffId: string,
+  restaurantId?: string
+): Promise<{ error: string | null }> {
+  let query = supabaseAdmin
     .from('staff')
     .update({ is_active: false })
     .eq('id', staffId);
+  if (restaurantId) query = query.eq('restaurant_id', restaurantId);
+
+  const { error } = await query;
 
   return { error: error?.message || null };
 }
@@ -343,11 +358,12 @@ export async function deleteStaffMember(staffId: string): Promise<{ error: strin
  * Get appointments that need a reminder (within the next hour, not yet sent).
  */
 export async function getUpcomingReminders(): Promise<Appointment[]> {
-  const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
-  const laterTime = `${String(oneHourLater.getHours()).padStart(2, '0')}:${String(oneHourLater.getMinutes()).padStart(2, '0')}`;
+  // IST (Asia/Kolkata) — business hours and slot strings are IST, the server runs UTC
+  const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  const today = istNow.toISOString().split('T')[0];
+  const currentTime = `${String(istNow.getUTCHours()).padStart(2, '0')}:${String(istNow.getUTCMinutes()).padStart(2, '0')}`;
+  const oneHourLater = new Date(istNow.getTime() + 60 * 60 * 1000);
+  const laterTime = `${String(oneHourLater.getUTCHours()).padStart(2, '0')}:${String(oneHourLater.getUTCMinutes()).padStart(2, '0')}`;
 
   const { data } = await supabaseAdmin
     .from('appointments')

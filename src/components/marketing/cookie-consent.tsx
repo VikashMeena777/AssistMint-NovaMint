@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Cookie, X } from "lucide-react";
 import { getCookie, setCookie } from "cookies-next";
@@ -54,9 +55,9 @@ export function CookieConsent() {
                 <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
                   We use cookies to enhance your experience and analyze site
                   traffic. By accepting, you agree to our{" "}
-                  <a href="#" className="underline text-primary hover:text-primary/80">
+                  <Link href="/cookies" className="underline text-primary hover:text-primary/80">
                     Cookie Policy
-                  </a>
+                  </Link>
                   .
                 </p>
               </div>

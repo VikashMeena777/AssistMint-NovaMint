@@ -10,9 +10,10 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(req: Request) {
-  // Verify cron secret
+  // Verify cron secret (fail-closed: reject if CRON_SECRET is not configured)
+  const secret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!secret || authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -69,7 +70,7 @@ export async function GET(req: Request) {
 
       // Send reminder
       try {
-        await fetch(`https://graph.facebook.com/v25.0/${rest.whatsapp_phone_id}/messages`, {
+        const response = await fetch(`https://graph.facebook.com/v25.0/${rest.whatsapp_phone_id}/messages`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${rest.whatsapp_access_token}`,
@@ -83,13 +84,16 @@ export async function GET(req: Request) {
           }),
         });
 
-        // Mark as sent
-        await supabaseAdmin
-          .from('cart_sessions')
-          .update({ metadata: { ...metadata, reminder_sent: true } })
-          .eq('id', cart.id);
+        // Only mark as sent when WhatsApp accepted the message — otherwise
+        // a failed send would permanently suppress future reminders
+        if (response.ok) {
+          await supabaseAdmin
+            .from('cart_sessions')
+            .update({ metadata: { ...metadata, reminder_sent: true } })
+            .eq('id', cart.id);
 
-        sent++;
+          sent++;
+        }
       } catch { /* silent */ }
     }
 

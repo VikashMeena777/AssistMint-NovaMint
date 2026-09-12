@@ -55,7 +55,7 @@ export async function changeInquiryStatus(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const result = await updateInquiryStatus(inquiryId, status, notes);
+  const result = await updateInquiryStatus(inquiryId, status, notes, restaurantId);
 
   if (!result.error) {
     logActivity({

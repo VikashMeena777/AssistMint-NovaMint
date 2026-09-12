@@ -1,150 +1,161 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import {
-  LayoutDashboard,
-  UtensilsCrossed,
-  ShoppingCart,
-  Users,
-  MessageSquare,
-  BarChart3,
-  Gift,
-  Megaphone,
-  Settings as SettingsIcon,
-  LogOut,
-  Menu as MenuIcon,
-  X,
-  CreditCard,
-  Tag,
-  Layers,
-  ChevronDown,
-  Star,
-  CalendarDays,
-  UserCog,
-  Inbox,
-  Scissors,
-  Stethoscope,
-  BookOpen,
-  ShoppingBag,
-  Wrench,
-  Package,
-  GraduationCap,
-  UserCheck,
-  Activity,
-  Award,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { Menu as HamburgerIcon, X, ChevronDown } from "lucide-react";
+import { motion } from "motion/react";
 import PageTransition from "@/components/dashboard/page-transition";
 import OrderRealtimeListener from "@/components/dashboard/order-realtime-listener";
 import { getBusinessTypeConfig, type BusinessType } from "@/lib/utils/business-types";
+import { springSoft } from "@/components/motion/transitions";
+
+// ─── Lucide-animated icons (draw on parent-row hover) ──────
+import { HomeIcon } from "@/components/icons/home/home";
+import { MenuIcon } from "@/components/icons/menu/menu";
+import { TruckIcon } from "@/components/icons/truck/truck";
+import { UsersIcon } from "@/components/icons/users/users";
+import { UserPlusIcon } from "@/components/icons/user-plus/user-plus";
+import { MessageCircleIcon } from "@/components/icons/message-circle/message-circle";
+import { MessageSquareIcon } from "@/components/icons/message-square/message-square";
+import { CreditCardIcon } from "@/components/icons/credit-card/credit-card";
+import { TicketIcon } from "@/components/icons/ticket/ticket";
+import { SendIcon } from "@/components/icons/send/send";
+import { PartyPopperIcon } from "@/components/icons/party-popper/party-popper";
+import { HeartIcon } from "@/components/icons/heart/heart";
+import { ChartLineIcon } from "@/components/icons/chart-line/chart-line";
+import { ClockIcon } from "@/components/icons/clock/clock";
+import { SettingsIcon } from "@/components/icons/settings/settings";
+import { LogoutIcon } from "@/components/icons/logout/logout";
+import { LayoutGridIcon } from "@/components/icons/layout-grid/layout-grid";
+import { GraduationCapIcon } from "@/components/icons/graduation-cap/graduation-cap";
+import { StethoscopeIcon } from "@/components/icons/stethoscope/stethoscope";
+import { SparklesIcon } from "@/components/icons/sparkles/sparkles";
+import { CompassIcon } from "@/components/icons/compass/compass";
+import { ZapIcon } from "@/components/icons/zap/zap";
+
+// Every lucide-animated icon exposes this exact handle shape
+type SidebarIconHandle = {
+  startAnimation: () => void;
+  stopAnimation: () => void;
+};
+
+type AnimatedSidebarIcon = React.ComponentType<{
+  size?: number;
+  className?: string;
+  ref?: React.Ref<SidebarIconHandle>;
+}>;
+
+interface SidebarItem {
+  href: string;
+  label: string;
+  icon: AnimatedSidebarIcon;
+}
 
 // Isolated sidebar items for each business type
-const getSidebarItems = (businessType: BusinessType) => {
+const getSidebarItems = (businessType: BusinessType): SidebarItem[] => {
   const config = getBusinessTypeConfig(businessType);
   const terms = config.terms;
 
   switch (businessType) {
     case 'salon_spa':
       return [
-        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-        { href: "/dashboard/services", label: terms.catalog, icon: Scissors },
-        { href: "/dashboard/appointments", label: terms.bookings, icon: CalendarDays },
-        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserCog },
-        { href: "/dashboard/clients", label: terms.customers, icon: Users },
-        { href: "/dashboard/packages", label: terms.combo, icon: Sparkles },
-        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
-        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
-        { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
-        { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
-        { href: "/dashboard/loyalty", label: "Loyalty", icon: Gift },
-        { href: "/dashboard/feedback", label: "Reviews", icon: Star },
-        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/dashboard", label: "Overview", icon: HomeIcon },
+        { href: "/dashboard/services", label: terms.catalog, icon: SparklesIcon },
+        { href: "/dashboard/appointments", label: terms.bookings, icon: ClockIcon },
+        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserPlusIcon },
+        { href: "/dashboard/clients", label: terms.customers, icon: UsersIcon },
+        { href: "/dashboard/packages", label: terms.combo, icon: LayoutGridIcon },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageCircleIcon },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCardIcon },
+        { href: "/dashboard/coupons", label: "Coupons", icon: TicketIcon },
+        { href: "/dashboard/campaigns", label: "Campaigns", icon: SendIcon },
+        { href: "/dashboard/loyalty", label: "Loyalty", icon: PartyPopperIcon },
+        { href: "/dashboard/feedback", label: "Reviews", icon: HeartIcon },
+        { href: "/dashboard/analytics", label: "Analytics", icon: ChartLineIcon },
       ];
 
     case 'healthcare':
       return [
-        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-        { href: "/dashboard/services", label: terms.catalog, icon: Stethoscope },
-        { href: "/dashboard/appointments", label: terms.bookings, icon: CalendarDays },
-        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserCheck },
-        { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
-        { href: "/dashboard/patients", label: terms.customers, icon: Users },
-        { href: "/dashboard/packages", label: terms.combo, icon: Activity },
-        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
-        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
-        { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
-        { href: "/dashboard/feedback", label: "Reviews", icon: Star },
-        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/dashboard", label: "Overview", icon: HomeIcon },
+        { href: "/dashboard/services", label: terms.catalog, icon: StethoscopeIcon },
+        { href: "/dashboard/appointments", label: terms.bookings, icon: ClockIcon },
+        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserPlusIcon },
+        { href: "/dashboard/inquiries", label: "Inquiries", icon: MessageSquareIcon },
+        { href: "/dashboard/patients", label: terms.customers, icon: UsersIcon },
+        { href: "/dashboard/packages", label: terms.combo, icon: LayoutGridIcon },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageCircleIcon },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCardIcon },
+        { href: "/dashboard/campaigns", label: "Campaigns", icon: SendIcon },
+        { href: "/dashboard/feedback", label: "Reviews", icon: HeartIcon },
+        { href: "/dashboard/analytics", label: "Analytics", icon: ChartLineIcon },
       ];
 
     case 'education':
       return [
-        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-        { href: "/dashboard/courses", label: terms.catalog, icon: BookOpen },
-        { href: "/dashboard/appointments", label: terms.bookings, icon: CalendarDays },
-        { href: "/dashboard/staff", label: terms.staffTitle, icon: GraduationCap },
-        { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
-        { href: "/dashboard/students", label: terms.customers, icon: Users },
-        { href: "/dashboard/packages", label: terms.combo, icon: Award },
-        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
-        { href: "/dashboard/payments", label: "Fee Payments", icon: CreditCard },
-        { href: "/dashboard/campaigns", label: "Student Broadcasts", icon: Megaphone },
-        { href: "/dashboard/feedback", label: "Reviews", icon: Star },
-        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/dashboard", label: "Overview", icon: HomeIcon },
+        { href: "/dashboard/courses", label: terms.catalog, icon: GraduationCapIcon },
+        { href: "/dashboard/appointments", label: terms.bookings, icon: ClockIcon },
+        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserPlusIcon },
+        { href: "/dashboard/inquiries", label: "Inquiries", icon: MessageSquareIcon },
+        { href: "/dashboard/students", label: terms.customers, icon: UsersIcon },
+        { href: "/dashboard/packages", label: terms.combo, icon: LayoutGridIcon },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageCircleIcon },
+        { href: "/dashboard/payments", label: "Fee Payments", icon: CreditCardIcon },
+        { href: "/dashboard/campaigns", label: "Student Broadcasts", icon: SendIcon },
+        { href: "/dashboard/feedback", label: "Reviews", icon: HeartIcon },
+        { href: "/dashboard/analytics", label: "Analytics", icon: ChartLineIcon },
       ];
 
     case 'retail':
       return [
-        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-        { href: "/dashboard/products", label: terms.catalog, icon: ShoppingBag },
-        { href: "/dashboard/orders", label: terms.bookings, icon: Package },
-        { href: "/dashboard/customers", label: terms.customers, icon: Users },
-        { href: "/dashboard/packages", label: terms.combo, icon: Gift },
-        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
-        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
-        { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
-        { href: "/dashboard/campaigns", label: "Promotions", icon: Megaphone },
-        { href: "/dashboard/loyalty", label: "Loyalty Points", icon: Gift },
-        { href: "/dashboard/feedback", label: "Reviews", icon: Star },
-        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/dashboard", label: "Overview", icon: HomeIcon },
+        { href: "/dashboard/products", label: terms.catalog, icon: CompassIcon },
+        { href: "/dashboard/orders", label: terms.bookings, icon: TruckIcon },
+        { href: "/dashboard/customers", label: terms.customers, icon: UsersIcon },
+        { href: "/dashboard/packages", label: terms.combo, icon: LayoutGridIcon },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageCircleIcon },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCardIcon },
+        { href: "/dashboard/coupons", label: "Coupons", icon: TicketIcon },
+        { href: "/dashboard/campaigns", label: "Promotions", icon: SendIcon },
+        { href: "/dashboard/loyalty", label: "Loyalty Points", icon: PartyPopperIcon },
+        { href: "/dashboard/feedback", label: "Reviews", icon: HeartIcon },
+        { href: "/dashboard/analytics", label: "Analytics", icon: ChartLineIcon },
       ];
 
     case 'services':
       return [
-        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-        { href: "/dashboard/services", label: terms.catalog, icon: Wrench },
-        { href: "/dashboard/appointments", label: terms.bookings, icon: CalendarDays },
-        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserCog },
-        { href: "/dashboard/customers", label: terms.customers, icon: Users },
-        { href: "/dashboard/packages", label: terms.combo, icon: ShieldCheck },
-        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
-        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
-        { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
-        { href: "/dashboard/feedback", label: "Ratings & Reviews", icon: Star },
-        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/dashboard", label: "Overview", icon: HomeIcon },
+        { href: "/dashboard/services", label: terms.catalog, icon: ZapIcon },
+        { href: "/dashboard/appointments", label: terms.bookings, icon: ClockIcon },
+        { href: "/dashboard/staff", label: terms.staffTitle, icon: UserPlusIcon },
+        { href: "/dashboard/customers", label: terms.customers, icon: UsersIcon },
+        { href: "/dashboard/packages", label: terms.combo, icon: LayoutGridIcon },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageCircleIcon },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCardIcon },
+        { href: "/dashboard/campaigns", label: "Campaigns", icon: SendIcon },
+        { href: "/dashboard/feedback", label: "Ratings & Reviews", icon: HeartIcon },
+        { href: "/dashboard/analytics", label: "Analytics", icon: ChartLineIcon },
       ];
 
     case 'food_beverage':
     default:
       return [
-        { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-        { href: "/dashboard/menu", label: terms.catalog, icon: UtensilsCrossed },
-        { href: "/dashboard/orders", label: terms.bookings, icon: ShoppingCart },
-        { href: "/dashboard/customers", label: terms.customers, icon: Users },
-        { href: "/dashboard/combos", label: terms.combo, icon: Layers },
-        { href: "/dashboard/conversations", label: "Conversations", icon: MessageSquare },
-        { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
-        { href: "/dashboard/coupons", label: "Coupons", icon: Tag },
-        { href: "/dashboard/campaigns", label: "Campaigns", icon: Megaphone },
-        { href: "/dashboard/loyalty", label: "Loyalty", icon: Gift },
-        { href: "/dashboard/feedback", label: "Feedback", icon: Star },
-        { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/dashboard", label: "Overview", icon: HomeIcon },
+        { href: "/dashboard/menu", label: terms.catalog, icon: MenuIcon },
+        { href: "/dashboard/orders", label: terms.bookings, icon: TruckIcon },
+        { href: "/dashboard/customers", label: terms.customers, icon: UsersIcon },
+        { href: "/dashboard/combos", label: terms.combo, icon: LayoutGridIcon },
+        { href: "/dashboard/conversations", label: "Conversations", icon: MessageCircleIcon },
+        { href: "/dashboard/payments", label: "Payments", icon: CreditCardIcon },
+        { href: "/dashboard/coupons", label: "Coupons", icon: TicketIcon },
+        { href: "/dashboard/campaigns", label: "Campaigns", icon: SendIcon },
+        { href: "/dashboard/loyalty", label: "Loyalty", icon: PartyPopperIcon },
+        { href: "/dashboard/feedback", label: "Feedback", icon: HeartIcon },
+        { href: "/dashboard/analytics", label: "Analytics", icon: ChartLineIcon },
       ];
   }
 };
@@ -160,6 +171,11 @@ export default function DashboardLayout({
   const [restaurantName, setRestaurantName] = useState("My Business");
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [businessType, setBusinessType] = useState<BusinessType>('food_beverage');
+  // Icon handles keyed by nav href — each row registers its handle on mount,
+  // the row's hover handlers drive the draw animation through this map.
+  const iconRefs = useRef(
+    new Map<string, React.RefObject<SidebarIconHandle | null>>()
+  );
 
   useEffect(() => {
     (async () => {
@@ -180,6 +196,8 @@ export default function DashboardLayout({
     })();
   }, []);
 
+  const businessLabel = getBusinessTypeConfig(businessType).label;
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Real-time order notification listener */}
@@ -199,10 +217,10 @@ export default function DashboardLayout({
         }`}
       >
         <div className="flex h-full flex-col">
-          {/* Logo */}
-          <div className="flex h-16 items-center justify-between border-b border-sidebar-border/40 px-5">
+          {/* Brand header — logo + wordmark + business-type chip */}
+          <div className="flex h-16 items-center justify-between gap-2 border-b border-sidebar-border/40 px-5">
             <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="relative flex h-8 w-8 overflow-hidden rounded-lg border border-sidebar-border/60 transition-transform group-hover:scale-105">
+              <div className="relative flex h-8 w-8 overflow-hidden rounded-lg border border-sidebar-border/60 transition-transform duration-300 group-hover:scale-105">
                 <Image
                   src="/logo.jpg"
                   alt="AssistMint Logo"
@@ -214,12 +232,21 @@ export default function DashboardLayout({
                 Assist<span className="text-sidebar-primary">Mint</span>
               </span>
             </Link>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-sidebar-foreground/60 hover:text-sidebar-foreground"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <span
+                title={businessLabel}
+                className="hidden sm:inline-flex max-w-[120px] truncate rounded-full border border-sidebar-border/60 bg-sidebar-accent/30 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-sidebar-foreground/70"
+              >
+                {businessLabel}
+              </span>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Close menu"
+                className="lg:hidden text-sidebar-foreground/60 hover:text-sidebar-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Nav */}
@@ -230,6 +257,7 @@ export default function DashboardLayout({
                 href={item.href}
                 label={item.label}
                 icon={item.icon}
+                iconRefs={iconRefs}
                 onClick={() => setSidebarOpen(false)}
               />
             ))}
@@ -241,6 +269,7 @@ export default function DashboardLayout({
               href="/dashboard/settings"
               label="Settings"
               icon={SettingsIcon}
+              iconRefs={iconRefs}
               onClick={() => setSidebarOpen(false)}
             />
             <LogoutButton />
@@ -254,9 +283,10 @@ export default function DashboardLayout({
         <header className="flex h-16 items-center gap-4 border-b border-border/20 bg-background/50 backdrop-blur-md px-4 lg:px-8">
           <button
             onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
             className="lg:hidden text-muted-foreground hover:text-foreground"
           >
-            <MenuIcon className="h-5 w-5" />
+            <HamburgerIcon className="h-5 w-5" />
           </button>
 
           <div className="flex-1" />
@@ -264,7 +294,7 @@ export default function DashboardLayout({
           {/* Restaurant Selector → links to Settings */}
           <Link
             href="/dashboard/settings"
-            className="hidden sm:flex items-center gap-2.5 rounded-xl border border-border/30 bg-muted/20 px-3.5 py-1.5 text-xs font-semibold hover:bg-muted/40 hover:border-border/60 transition-all active:scale-[0.98]"
+            className="glass glass-interactive hidden sm:flex items-center gap-2.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold active:scale-[0.98] active:translate-y-0"
           >
             <div className="h-5 w-5 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">
               {restaurantName.charAt(0).toUpperCase()}
@@ -289,27 +319,52 @@ function SidebarLink({
   href,
   label,
   icon: Icon,
+  iconRefs,
   onClick,
 }: {
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: AnimatedSidebarIcon;
+  iconRefs: React.RefObject<Map<string, React.RefObject<SidebarIconHandle | null>>>;
   onClick?: () => void;
 }) {
   const pathname = usePathname();
   const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+  const iconRef = useRef<SidebarIconHandle>(null);
+
+  // Register this row's icon handle in the shared map (keyed by href)
+  useEffect(() => {
+    const map = iconRefs.current;
+    map.set(href, iconRef);
+    return () => {
+      if (map.get(href) === iconRef) map.delete(href);
+    };
+  }, [href, iconRefs, iconRef]);
 
   return (
     <Link
       href={href}
       onClick={onClick}
-      className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+      onMouseEnter={() => iconRefs.current.get(href)?.current?.startAnimation()}
+      onMouseLeave={() => iconRefs.current.get(href)?.current?.stopAnimation()}
+      className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
         isActive
           ? "bg-primary/10 text-primary border border-primary/15 shadow-sm shadow-primary/5"
-          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground hover:translate-x-0.5"
+          : "border border-transparent text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground hover:translate-x-1"
       }`}
     >
-      <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : "text-sidebar-foreground/60"}`} />
+      {isActive && (
+        <motion.span
+          layoutId="sidebar-active-rail"
+          transition={springSoft}
+          className="absolute -left-3 inset-y-1.5 w-[3px] rounded-full bg-primary"
+        />
+      )}
+      <Icon
+        ref={iconRef}
+        size={16}
+        className={`shrink-0 ${isActive ? "text-primary" : "text-sidebar-foreground/60"}`}
+      />
       <span className="truncate">{label}</span>
       {isActive && (
         <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
@@ -323,6 +378,7 @@ function SidebarLink({
 function LogoutButton() {
   const router = useRouter();
   const supabase = createClient();
+  const iconRef = useRef<SidebarIconHandle>(null);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -334,9 +390,11 @@ function LogoutButton() {
   return (
     <button
       onClick={handleLogout}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/60 hover:bg-destructive/10 hover:text-destructive transition-colors"
+      onMouseEnter={() => iconRef.current?.startAnimation()}
+      onMouseLeave={() => iconRef.current?.stopAnimation()}
+      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-sidebar-foreground/60 hover:bg-destructive/10 hover:text-destructive hover:translate-x-1 transition-all duration-200"
     >
-      <LogOut className="h-4 w-4" />
+      <LogoutIcon ref={iconRef} size={16} className="shrink-0" />
       Sign Out
     </button>
   );

@@ -27,6 +27,22 @@ export interface Customer {
 
 // ─── Get or Create Customer ─────────────────
 
+function mapCustomerRow(c: Record<string, unknown>, whatsappName?: string): Customer {
+  return {
+    id: c.id as string,
+    restaurant_id: c.restaurant_id as string,
+    phone: c.phone as string,
+    name: (c.saved_name as string | undefined) || (c.whatsapp_name as string | undefined),
+    whatsapp_name: whatsappName || (c.whatsapp_name as string | undefined),
+    language_preference: (c.preferred_language as string) || 'en',
+    total_orders: (c.total_orders as number) || 0,
+    total_spent: (c.total_spent as number) || 0,
+    loyalty_points: (c.loyalty_points as number) || 0,
+    loyalty_tier: (c.loyalty_tier as string) || 'bronze',
+    is_blocked: (c.is_blocked as boolean) || false,
+  };
+}
+
 export async function getOrCreateCustomer(
   restaurantId: string,
   phone: string,
@@ -51,36 +67,41 @@ export async function getOrCreateCustomer(
         .eq('id', c.id as string);
     }
 
-    return {
-      id: c.id as string,
-      restaurant_id: c.restaurant_id as string,
-      phone: c.phone as string,
-      name: (c.saved_name as string | undefined) || (c.whatsapp_name as string | undefined),
-      whatsapp_name: whatsappName || (c.whatsapp_name as string | undefined),
-      language_preference: (c.preferred_language as string) || 'en',
-      total_orders: (c.total_orders as number) || 0,
-      total_spent: (c.total_spent as number) || 0,
-      loyalty_points: (c.loyalty_points as number) || 0,
-      loyalty_tier: (c.loyalty_tier as string) || 'bronze',
-      is_blocked: (c.is_blocked as boolean) || false,
-    };
+    return mapCustomerRow(c, whatsappName);
   }
 
-  // Create new customer
-  const { data: newCustomer, error: insertError } = await supabaseAdmin
+  // Create new customer — upsert on (restaurant_id, phone) makes concurrent
+  // first-message creates resolve to a single row instead of erroring
+  const { data: newCustomer, error: upsertError } = await supabaseAdmin
     .from('customers')
-    .insert({
-      restaurant_id: restaurantId,
-      phone,
-      whatsapp_name: whatsappName,
-      saved_name: whatsappName,
-      preferred_language: 'en',
-    })
+    .upsert(
+      {
+        restaurant_id: restaurantId,
+        phone,
+        whatsapp_name: whatsappName,
+        saved_name: whatsappName,
+        preferred_language: 'en',
+      },
+      { onConflict: 'restaurant_id,phone' }
+    )
     .select()
     .single();
 
-  if (insertError || !newCustomer) {
-    console.error('[CustomerService] Failed to create customer:', insertError?.message);
+  if (upsertError || !newCustomer) {
+    console.error('[CustomerService] Failed to create customer:', upsertError?.message);
+    // Upsert fails when no unique index exists on (restaurant_id, phone) —
+    // fall back to re-selecting in case a concurrent request already created the row
+    const { data: retry } = await supabaseAdmin
+      .from('customers')
+      .select('*')
+      .eq('restaurant_id', restaurantId)
+      .eq('phone', phone)
+      .single();
+
+    if (retry) {
+      return mapCustomerRow(retry as Record<string, unknown>, whatsappName);
+    }
+
     // Return a safe fallback to prevent crash
     return {
       id: 'unknown',
@@ -97,20 +118,7 @@ export async function getOrCreateCustomer(
     };
   }
 
-  const c = newCustomer as Record<string, unknown>;
-  return {
-    id: c.id as string,
-    restaurant_id: restaurantId,
-    phone,
-    name: whatsappName,
-    whatsapp_name: whatsappName,
-    language_preference: 'en',
-    total_orders: 0,
-    total_spent: 0,
-    loyalty_points: 0,
-    loyalty_tier: 'bronze',
-    is_blocked: false,
-  };
+  return mapCustomerRow(newCustomer as Record<string, unknown>, whatsappName);
 }
 
 // ─── Update Order Stats ─────────────────────
@@ -158,11 +166,11 @@ export async function updateCustomerOrderStats(
 export async function getSavedAddresses(customerId: string): Promise<string[]> {
   const { data } = await supabaseAdmin
     .from('customers')
-    .select('saved_addresses')
+    .select('delivery_addresses')
     .eq('id', customerId)
     .single();
   if (!data) return [];
-  return ((data as Record<string, unknown>).saved_addresses as string[]) || [];
+  return ((data as Record<string, unknown>).delivery_addresses as string[]) || [];
 }
 
 export async function addSavedAddress(customerId: string, address: string): Promise<void> {
@@ -172,7 +180,7 @@ export async function addSavedAddress(customerId: string, address: string): Prom
     if (addresses.length > 5) addresses.pop(); // keep max 5
     await supabaseAdmin
       .from('customers')
-      .update({ saved_addresses: addresses })
+      .update({ delivery_addresses: addresses })
       .eq('id', customerId);
   }
 }
@@ -205,7 +213,7 @@ export async function updateCustomerPreferences(
 export async function setCustomerLanguage(customerId: string, language: string): Promise<void> {
   await supabaseAdmin
     .from('customers')
-    .update({ language_preference: language })
+    .update({ preferred_language: language })
     .eq('id', customerId);
 }
 
@@ -223,10 +231,26 @@ export async function getCustomerOrders(customerId: string, limit = 5): Promise<
 
 // ─── Save Order Rating ──────────────────────
 
-export async function saveOrderRating(orderId: string, rating: number, feedback?: string): Promise<void> {
-  await supabaseAdmin
+export async function saveOrderRating(
+  orderId: string,
+  rating: number,
+  restaurantId?: string,
+  feedback?: string
+): Promise<void> {
+  // Validate the rating before writing — only integers 1-5 are accepted
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) return;
+
+  let query = supabaseAdmin
     .from('orders')
     .update({ rating, feedback: feedback || '' })
     .eq('id', orderId);
+
+  // Scope to the restaurant when known so a stale button can't rate
+  // another restaurant's order
+  if (restaurantId) {
+    query = query.eq('restaurant_id', restaurantId);
+  }
+
+  await query;
 }
 

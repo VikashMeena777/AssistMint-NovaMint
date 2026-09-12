@@ -9,6 +9,14 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
 
+// ─── Helpers ────────────────────────────────
+
+// Strip PostgREST-reserved characters (, ( ) %) from user search input
+// before interpolating into .or() filters to prevent filter injection
+function sanitizeSearchInput(s: string): string {
+  return s.replace(/[,()%]/g, ' ');
+}
+
 // ─── Get Customers ──────────────────────────
 
 export async function getCustomers(
@@ -28,7 +36,10 @@ export async function getCustomers(
     .order('total_orders', { ascending: false });
 
   if (filters?.search) {
-    query = query.or(`saved_name.ilike.%${filters.search}%,whatsapp_name.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
+    const search = sanitizeSearchInput(filters.search.trim());
+    if (search) {
+      query = query.or(`saved_name.ilike.%${search}%,whatsapp_name.ilike.%${search}%,phone.ilike.%${search}%`);
+    }
   }
   if (filters?.tier && filters.tier !== 'all') {
     query = query.eq('loyalty_tier', filters.tier);

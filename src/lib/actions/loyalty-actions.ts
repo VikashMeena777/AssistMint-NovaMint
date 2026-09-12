@@ -35,6 +35,8 @@ export async function awardLoyaltyPoints(
   orderAmount: number // in paise
 ) {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Unauthorized' };
 
   // Get customer's current tier for multiplier
   const { data: customer } = await supabase
@@ -63,14 +65,15 @@ export async function awardLoyaltyPoints(
   else if (newTotal >= TIER_THRESHOLDS.gold) newTier = 'gold';
   else if (newTotal >= TIER_THRESHOLDS.silver) newTier = 'silver';
 
-  // Update customer
+  // Update customer (scoped to the restaurant)
   await supabase
     .from('customers')
     .update({
       loyalty_points: newTotal,
       loyalty_tier: newTier,
     })
-    .eq('id', customerId);
+    .eq('id', customerId)
+    .eq('restaurant_id', restaurantId);
 
   // Log the transaction
   await supabase.from('loyalty_transactions').insert({
@@ -126,18 +129,54 @@ export async function redeemPoints(
     .single();
 
   if (!customer) return { error: 'Customer not found' };
-  const currentPoints = (customer as Record<string, unknown>).loyalty_points as number || 0;
+  let currentPoints = (customer as Record<string, unknown>).loyalty_points as number || 0;
 
   if (currentPoints < points) {
     return { error: `Insufficient points. Customer has ${currentPoints} points.` };
   }
 
-  const newTotal = currentPoints - points;
+  let newTotal = currentPoints - points;
 
-  await supabase
-    .from('customers')
-    .update({ loyalty_points: newTotal })
-    .eq('id', customerId);
+  // Optimistic lock: only apply if the balance is still what we read.
+  // The JS client can't express `loyalty_points = loyalty_points - X` directly,
+  // so we guard the update with .eq('loyalty_points', currentPoints) and
+  // re-read + retry once if a concurrent update won the race.
+  let updated = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data: updatedRows, error: updateError } = await supabase
+      .from('customers')
+      .update({ loyalty_points: newTotal })
+      .eq('id', customerId)
+      .eq('restaurant_id', restaurantId)
+      .eq('loyalty_points', currentPoints)
+      .select();
+
+    if (updateError) return { error: updateError.message };
+    if (updatedRows && updatedRows.length > 0) {
+      updated = true;
+      break;
+    }
+
+    // 0 rows affected — balance changed concurrently. Re-read and retry once.
+    const { data: fresh } = await supabase
+      .from('customers')
+      .select('loyalty_points')
+      .eq('id', customerId)
+      .eq('restaurant_id', restaurantId)
+      .single();
+
+    if (!fresh) return { error: 'Customer not found' };
+    currentPoints = (fresh as Record<string, unknown>).loyalty_points as number || 0;
+
+    if (currentPoints < points) {
+      return { error: `Insufficient points. Customer has ${currentPoints} points.` };
+    }
+    newTotal = currentPoints - points;
+  }
+
+  if (!updated) {
+    return { error: 'Failed to redeem points due to a concurrent update. Please try again.' };
+  }
 
   await supabase.from('loyalty_transactions').insert({
     restaurant_id: restaurantId,

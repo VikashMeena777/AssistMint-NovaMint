@@ -4,6 +4,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js';
+import { sendTextMessage, sendImageMessage } from '@/lib/whatsapp/client';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -77,9 +78,10 @@ export async function getTargetCustomers(
   restaurantId: string,
   audience: Broadcast['target_audience']
 ): Promise<Array<{ id: string; phone: string; name: string | null }>> {
+  // Live customers columns are saved_name / whatsapp_name (no `name` column)
   let query = supabaseAdmin
     .from('customers')
-    .select('id, phone, name')
+    .select('id, phone, saved_name, whatsapp_name')
     .eq('restaurant_id', restaurantId)
     .eq('is_blocked', false);
 
@@ -99,7 +101,11 @@ export async function getTargetCustomers(
   }
 
   const { data } = await query.limit(1000);
-  return (data || []) as unknown as Array<{ id: string; phone: string; name: string | null }>;
+  return ((data || []) as Array<Record<string, string | null>>).map((c) => ({
+    id: c.id || '',
+    phone: c.phone || '',
+    name: c.saved_name || c.whatsapp_name || null,
+  }));
 }
 
 // ─── Send Broadcast ─────────────────────────
@@ -108,34 +114,45 @@ export async function sendBroadcast(
   broadcastId: string,
   restaurantId: string
 ): Promise<{ sent: number; failed: number; error: string | null }> {
-  // Get broadcast details
+  // Scope the fetch by restaurant_id — prevents cross-tenant broadcast leaks
   const { data: broadcast } = await supabaseAdmin
     .from('broadcasts')
     .select('*')
     .eq('id', broadcastId)
+    .eq('restaurant_id', restaurantId)
     .single();
 
   if (!broadcast) return { sent: 0, failed: 0, error: 'Broadcast not found' };
   const bc = broadcast as unknown as Broadcast;
 
-  // Get restaurant WhatsApp credentials
+  // Status guard: only draft/failed broadcasts can be (re)sent
+  if (bc.status === 'sending' || bc.status === 'sent') {
+    return { sent: 0, failed: 0, error: `Broadcast is already ${bc.status}` };
+  }
+
+  // Get restaurant WhatsApp credentials (live column: whatsapp_access_token)
   const { data: restaurant } = await supabaseAdmin
     .from('restaurants')
-    .select('whatsapp_token, whatsapp_phone_id')
+    .select('whatsapp_access_token, whatsapp_phone_id')
     .eq('id', restaurantId)
     .single();
 
   if (!restaurant) return { sent: 0, failed: 0, error: 'Restaurant not found' };
   const rest = restaurant as Record<string, string>;
-  if (!rest.whatsapp_token || !rest.whatsapp_phone_id) {
+  if (!rest.whatsapp_access_token || !rest.whatsapp_phone_id) {
     return { sent: 0, failed: 0, error: 'WhatsApp not configured' };
   }
 
-  // Mark as sending
-  await supabaseAdmin
+  // Atomically claim the broadcast: draft/failed → sending (prevents double-send races)
+  const { data: claimed } = await supabaseAdmin
     .from('broadcasts')
-    .update({ status: 'sending' })
-    .eq('id', broadcastId);
+    .update({ status: 'sending', updated_at: new Date().toISOString() })
+    .eq('id', broadcastId)
+    .in('status', ['draft', 'failed'])
+    .select('id');
+  if (!claimed || claimed.length === 0) {
+    return { sent: 0, failed: 0, error: 'Broadcast is already being sent' };
+  }
 
   // Get target customers
   const customers = await getTargetCustomers(restaurantId, bc.target_audience);
@@ -148,42 +165,32 @@ export async function sendBroadcast(
   let sentCount = 0;
   let failedCount = 0;
 
-  // Send messages (rate limited: 1 per 100ms)
+  // Send via the shared WhatsApp client (number sanitization, retries, v25.0)
   for (const customer of customers) {
     try {
-      const phone = customer.phone.replace(/\D/g, '');
-      if (!phone) { failedCount++; continue; }
-
-      const body: Record<string, unknown> = {
-        messaging_product: 'whatsapp',
-        to: phone,
-        type: 'text',
-        text: { body: bc.message },
-      };
-
-      const response = await fetch(
-        `https://graph.facebook.com/v21.0/${rest.whatsapp_phone_id}/messages`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${rest.whatsapp_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        }
-      );
-
-      if (response.ok) {
-        sentCount++;
+      if (bc.image_url) {
+        await sendImageMessage({
+          phoneNumberId: rest.whatsapp_phone_id,
+          accessToken: rest.whatsapp_access_token,
+          to: customer.phone,
+          imageUrl: bc.image_url,
+          caption: bc.message,
+        });
       } else {
-        failedCount++;
+        await sendTextMessage({
+          phoneNumberId: rest.whatsapp_phone_id,
+          accessToken: rest.whatsapp_access_token,
+          to: customer.phone,
+          text: bc.message,
+        });
       }
-
-      // Rate limit: 10 messages/second
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    } catch {
+      sentCount++;
+    } catch (err) {
+      console.error(`[Broadcast] Failed to send to ${customer.phone}:`, err instanceof Error ? err.message : err);
       failedCount++;
     }
+    // Rate limit: ~10 messages/second
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   // Update broadcast status

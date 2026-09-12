@@ -43,10 +43,10 @@ export async function POST(req: NextRequest) {
           const { data: restaurant } = await supabaseAdmin
             .from('restaurants')
             .select('cashfree_webhook_secret')
-            .eq('id', (payment as any).restaurant_id)
+            .eq('id', (payment as { restaurant_id: string }).restaurant_id)
             .single();
 
-          const r = restaurant as Record<string, any> | null;
+          const r = restaurant as { cashfree_webhook_secret: string | undefined } | null;
           if (r?.cashfree_webhook_secret) {
             webhookSecret = r.cashfree_webhook_secret;
           }
@@ -155,7 +155,7 @@ async function handlePaymentFailed(data: PaymentData) {
     .select('order_id')
     .single();
 
-  const orderId = (payment as any)?.order_id;
+  const orderId = (payment as { order_id: string | null } | null)?.order_id;
   if (orderId) {
     await supabaseAdmin
       .from('orders')
@@ -178,7 +178,7 @@ async function handlePaymentDropped(data: PaymentData) {
     .select('order_id')
     .single();
 
-  const orderId = (payment as any)?.order_id;
+  const orderId = (payment as { order_id: string | null } | null)?.order_id;
   if (orderId) {
     await supabaseAdmin
       .from('orders')
@@ -214,7 +214,7 @@ async function handleRefundStatus(data: RefundData) {
     .eq('cashfree_order_id', cfOrderId)
     .single();
 
-  const orderId = (payment as any)?.order_id;
+  const orderId = (payment as { order_id: string | null } | null)?.order_id;
   if (orderId && refundStatus === 'SUCCESS') {
     await supabaseAdmin
       .from('orders')

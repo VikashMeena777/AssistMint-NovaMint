@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { getInsights } from '@/lib/actions/insights-actions';
 import type { Insight } from '@/lib/services/insights-service';
 import { Sparkles } from 'lucide-react';
@@ -8,14 +8,46 @@ import { Sparkles } from 'lucide-react';
 export default function InsightsPanel() {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
+  const loadData = useCallback(async () => {
+    try {
       const { insights: data } = await getInsights();
       setInsights(data);
       setLoading(false);
-    })();
+    } catch (err) {
+      console.error('Failed to load insights:', err);
+      setError('Could not load. Please retry.');
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadData();
+    })();
+  }, [loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    loadData();
+  };
+
+  if (error && insights.length === 0) {
+    return (
+      <div className="glass rounded-2xl p-6">
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -44,7 +76,6 @@ export default function InsightsPanel() {
       <div className="flex items-center gap-2 mb-4">
         <Sparkles className="h-5 w-5 text-amber-500" />
         <h2 className="text-lg font-semibold">AI Insights</h2>
-        <span className="text-xs text-muted-foreground ml-auto">Updated every 30s</span>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {insights.map((insight) => (

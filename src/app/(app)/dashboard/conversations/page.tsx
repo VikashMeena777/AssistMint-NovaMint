@@ -32,85 +32,110 @@ export default function ConversationsPage() {
   const [messages, setMessages] = useState<AnyData[]>([]);
   const [selectedSession, setSelectedSession] = useState<ConversationSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) setRestaurantId(r.id as string);
       else setLoading(false);
-    })();
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const loadConversations = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const supabase = createClient();
+    try {
+      setLoading(true);
+      const supabase = createClient();
 
-    // Get all messages grouped by customer_phone
-    const { data: allMessages } = await supabase
-      .from("conversations")
-      .select("customer_phone, customer_id, role, content, requires_human, created_at")
-      .eq("restaurant_id", restaurantId)
-      .order("created_at", { ascending: false })
-      .limit(500);
+      // Get all messages grouped by customer_phone
+      const { data: allMessages } = await supabase
+        .from("conversations")
+        .select("customer_phone, customer_id, role, content, requires_human, created_at")
+        .eq("restaurant_id", restaurantId)
+        .order("created_at", { ascending: false })
+        .limit(500);
 
-    if (!allMessages || allMessages.length === 0) {
-      setSessions([]);
-      setLoading(false);
-      return;
-    }
-
-    // Get customer info
-    const { data: customers } = await supabase
-      .from("customers")
-      .select("id, phone, saved_name, whatsapp_name")
-      .eq("restaurant_id", restaurantId);
-
-    const customerMap = new Map<string, { name: string; id: string }>();
-    (customers || []).forEach((c: AnyData) => {
-      customerMap.set(c.phone, {
-        name: c.saved_name || c.whatsapp_name || c.phone,
-        id: c.id,
-      });
-    });
-
-    // Group messages by customer_phone into sessions
-    const sessionMap = new Map<string, ConversationSession>();
-    (allMessages as AnyData[]).forEach((msg) => {
-      const phone = msg.customer_phone;
-      if (!phone) return;
-      if (!sessionMap.has(phone)) {
-        const cust = customerMap.get(phone);
-        sessionMap.set(phone, {
-          customer_phone: phone,
-          customer_id: msg.customer_id || cust?.id || null,
-          customer_name: cust?.name || phone,
-          latest_message: msg.content || "",
-          latest_role: msg.role,
-          latest_time: msg.created_at,
-          requires_human: msg.requires_human || false,
-          message_count: 0,
-        });
+      if (!allMessages || allMessages.length === 0) {
+        setSessions([]);
+        setLoading(false);
+        return;
       }
-      const session = sessionMap.get(phone)!;
-      session.message_count++;
-    });
 
-    setSessions(Array.from(sessionMap.values()));
-    setLoading(false);
+      // Get customer info
+      const { data: customers } = await supabase
+        .from("customers")
+        .select("id, phone, saved_name, whatsapp_name")
+        .eq("restaurant_id", restaurantId);
+
+      const customerMap = new Map<string, { name: string; id: string }>();
+      (customers || []).forEach((c: AnyData) => {
+        customerMap.set(c.phone, {
+          name: c.saved_name || c.whatsapp_name || c.phone,
+          id: c.id,
+        });
+      });
+
+      // Group messages by customer_phone into sessions
+      const sessionMap = new Map<string, ConversationSession>();
+      (allMessages as AnyData[]).forEach((msg) => {
+        const phone = msg.customer_phone;
+        if (!phone) return;
+        if (!sessionMap.has(phone)) {
+          const cust = customerMap.get(phone);
+          sessionMap.set(phone, {
+            customer_phone: phone,
+            customer_id: msg.customer_id || cust?.id || null,
+            customer_name: cust?.name || phone,
+            latest_message: msg.content || "",
+            latest_role: msg.role,
+            latest_time: msg.created_at,
+            requires_human: msg.requires_human || false,
+            message_count: 0,
+          });
+        }
+        const session = sessionMap.get(phone)!;
+        session.message_count++;
+      });
+
+      setSessions(Array.from(sessionMap.values()));
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load conversations:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => {
-    if (restaurantId) loadConversations();
+    void (async () => {
+      if (restaurantId) loadConversations();
+    })();
     // Auto-refresh conversations every 15 seconds
     const interval = setInterval(() => {
       if (restaurantId) loadConversations();
     }, 15000);
     return () => clearInterval(interval);
   }, [restaurantId, loadConversations]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadConversations();
+    else loadRestaurant();
+  };
 
   const refreshMessages = useCallback(async (phone: string) => {
     if (!restaurantId) return;
@@ -156,7 +181,7 @@ export default function ConversationsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Conversations</h1>
           <p className="text-sm text-muted-foreground">
-            Live WhatsApp conversations powered by AI. Take over anytime.
+            Every AI conversation, live. Human handoffs are flagged below.
           </p>
         </div>
         <button
@@ -186,7 +211,19 @@ export default function ConversationsPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {loading ? (
+            {error && !sessions.length ? (
+              <div className="p-4">
+                <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+                  <p className="text-sm text-muted-foreground">{error}</p>
+                  <button
+                    onClick={handleRetry}
+                    className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            ) : loading ? (
               <div className="space-y-1 p-2">
                 {Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} className="flex items-center gap-3 rounded-xl p-3">

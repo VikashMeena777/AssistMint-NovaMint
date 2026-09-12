@@ -35,6 +35,7 @@ const STATUS_ICONS: Record<string, typeof CheckCircle2> = {
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<AnyData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -43,54 +44,78 @@ export default function PaymentsPage() {
     netRevenue: 0,
   });
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) setRestaurantId(r.id as string);
       else setLoading(false);
-    })();
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const supabase = createClient();
+    try {
+      setLoading(true);
+      const supabase = createClient();
 
-    const { data } = await supabase
-      .from("payments")
-      .select("*, orders(order_number, status)")
-      .eq("restaurant_id", restaurantId)
-      .order("created_at", { ascending: false })
-      .limit(100);
+      const { data } = await supabase
+        .from("payments")
+        .select("*, orders(order_number, status)")
+        .eq("restaurant_id", restaurantId)
+        .order("created_at", { ascending: false })
+        .limit(100);
 
-    const paymentList = (data || []) as AnyData[];
-    setPayments(paymentList);
+      const paymentList = (data || []) as AnyData[];
+      setPayments(paymentList);
 
-    // Calculate stats
-    let totalRevenue = 0;
-    let pending = 0;
-    let refunded = 0;
+      // Calculate stats
+      let totalRevenue = 0;
+      let pending = 0;
+      let refunded = 0;
 
-    paymentList.forEach((p) => {
-      const amount = (p.amount || 0) / 100;
-      if (p.status === "completed") totalRevenue += amount;
-      else if (p.status === "pending") pending += amount;
-      else if (p.status === "refunded") refunded += amount;
-    });
+      paymentList.forEach((p) => {
+        const amount = (p.amount || 0) / 100;
+        if (p.status === "completed") totalRevenue += amount;
+        else if (p.status === "pending") pending += amount;
+        else if (p.status === "refunded") refunded += amount;
+      });
 
-    setStats({
-      totalRevenue,
-      pending,
-      refunded,
-      netRevenue: totalRevenue - refunded,
-    });
+      setStats({
+        totalRevenue,
+        pending,
+        refunded,
+        netRevenue: totalRevenue - refunded,
+      });
 
-    setLoading(false);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load payments:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => {
-    if (restaurantId) loadData();
+    void (async () => {
+      if (restaurantId) loadData();
+    })();
   }, [restaurantId, loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadData();
+    else loadRestaurant();
+  };
 
   const statCards = [
     { label: "Total Revenue", value: `₹${stats.totalRevenue.toLocaleString("en-IN")}`, icon: ArrowDownLeft, color: "text-emerald-500" },
@@ -128,8 +153,22 @@ export default function PaymentsPage() {
         ))}
       </div>
 
+      {payments.length === 100 && (
+        <p className="text-xs text-muted-foreground">Showing the latest 100 payments.</p>
+      )}
+
       <div className="rounded-2xl border border-border/50 bg-card">
-        {loading ? (
+        {error && !payments.length ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : loading ? (
           <div className="divide-y divide-border/50">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex items-center justify-between p-4">

@@ -8,7 +8,6 @@ import {
   ThumbsUp,
   ThumbsDown,
   BarChart3,
-  Users,
   Clock,
   ShoppingCart,
 } from "lucide-react";
@@ -78,34 +77,59 @@ function FeedbackSkeleton() {
 
 export default function FeedbackPage() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<AnyData>({});
   const [reviews, setReviews] = useState<AnyData[]>([]);
   const [ratingFilter, setRatingFilter] = useState(0);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) setRestaurantId(r.id as string);
       else setLoading(false);
-    })();
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const [s, r] = await Promise.all([
-      getFeedbackStats(restaurantId),
-      getRecentFeedback(restaurantId, { ratingFilter, limit: 50 }),
-    ]);
-    setStats(s);
-    setReviews(r.data || []);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const [s, r] = await Promise.all([
+        getFeedbackStats(restaurantId),
+        getRecentFeedback(restaurantId, { ratingFilter, limit: 50 }),
+      ]);
+      setStats(s);
+      setReviews(r.data || []);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load feedback:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [restaurantId, ratingFilter]);
 
   useEffect(() => {
-    if (restaurantId) loadData();
+    void (async () => {
+      if (restaurantId) loadData();
+    })();
   }, [restaurantId, loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadData();
+    else loadRestaurant();
+  };
 
   const maxDistribution = Math.max(
     ...Object.values(stats.distribution || { 1: 0 }).map(Number),
@@ -114,7 +138,24 @@ export default function FeedbackPage() {
 
   return (
     <AnimatePresence mode="wait">
-      {loading ? (
+      {error && !reviews.length ? (
+        <motion.div
+          key="error"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </motion.div>
+      ) : loading ? (
         <motion.div
           key="skeleton"
           initial={{ opacity: 0 }}

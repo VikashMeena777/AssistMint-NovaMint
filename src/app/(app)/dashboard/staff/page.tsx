@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchStaff, addStaff, editStaff, removeStaff } from '@/lib/actions/appointment-actions';
 import type { StaffMember } from '@/lib/services/appointment-service';
 import { toast } from 'sonner';
-import { Plus, X, Pencil, Trash2, User, Phone, Briefcase, Star } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, User, Phone, Star } from 'lucide-react';
 
 import { getCurrentRestaurant } from '@/lib/actions/restaurant-actions';
 import { getBusinessTypeConfig } from '@/lib/utils/business-types';
@@ -12,14 +12,19 @@ import { getBusinessTypeConfig } from '@/lib/utils/business-types';
 export default function StaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [businessType, setBusinessType] = useState<string>('salon_spa');
 
   useEffect(() => {
     (async () => {
-      const r = await getCurrentRestaurant();
-      if (r?.business_type) setBusinessType(r.business_type as string);
+      try {
+        const r = await getCurrentRestaurant();
+        if (r?.business_type) setBusinessType(r.business_type as string);
+      } catch (err) {
+        console.error('Failed to load business type:', err);
+      }
     })();
   }, []);
 
@@ -27,13 +32,28 @@ export default function StaffPage() {
   const terms = config.terms;
 
   const loadStaff = useCallback(async () => {
-    setLoading(true);
-    const data = await fetchStaff();
-    setStaff(data);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const data = await fetchStaff();
+      setStaff(data);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to load staff:', err);
+      setError('Could not load. Please retry.');
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { loadStaff(); }, [loadStaff]);
+  useEffect(() => {
+    void (async () => {
+      loadStaff();
+    })();
+  }, [loadStaff]);
+
+  const handleRetry = () => {
+    setError(null);
+    loadStaff();
+  };
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Remove ${name} from staff?`)) return;
@@ -66,7 +86,17 @@ export default function StaffPage() {
       </div>
 
       {/* Staff Grid */}
-      {loading ? (
+      {error && !staff.length ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      ) : loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-40 rounded-2xl bg-card animate-pulse" />

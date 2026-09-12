@@ -95,26 +95,24 @@ export async function generateInsights(restaurantId: string): Promise<Insight[]>
     }
   }
 
-  // 4. Top selling item
-  const { data: orderItems } = await supabaseAdmin
-    .from('order_items')
-    .select('name, quantity')
-    .in(
-      'order_id',
-      (await supabaseAdmin
-        .from('orders')
-        .select('id')
-        .eq('restaurant_id', restaurantId)
-        .gte('created_at', thirtyDaysAgo)
-      ).data?.map((o) => (o as Record<string, string>).id) || []
-    );
+  // 4. Top selling item — aggregated from orders.items JSONB
+  //    (each item: { item_name, quantity, unit_price, ... } — see cart-engine convertCartToOrder)
+  const { data: recentOrders } = await supabaseAdmin
+    .from('orders')
+    .select('items')
+    .eq('restaurant_id', restaurantId)
+    .in('status', ['delivered', 'confirmed'])
+    .gte('created_at', thirtyDaysAgo);
 
-  if (orderItems && orderItems.length > 0) {
+  if (recentOrders && recentOrders.length > 0) {
     const itemCount: Record<string, number> = {};
-    for (const item of orderItems) {
-      const i = item as Record<string, unknown>;
-      const name = i.name as string;
-      itemCount[name] = (itemCount[name] || 0) + (i.quantity as number || 1);
+    for (const order of recentOrders) {
+      const items = ((order as Record<string, unknown>).items as Array<Record<string, unknown>>) || [];
+      for (const item of items) {
+        const name = item.item_name as string;
+        if (!name) continue;
+        itemCount[name] = (itemCount[name] || 0) + ((item.quantity as number) || 1);
+      }
     }
     const topItem = Object.entries(itemCount).sort(([, a], [, b]) => b - a)[0];
     if (topItem) {

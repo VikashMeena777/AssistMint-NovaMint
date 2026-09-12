@@ -22,11 +22,12 @@ async function checkDBHealth(): Promise<{ connected: boolean; latencyMs: number 
 }
 
 export async function GET(req: NextRequest) {
-  // Basic auth check — allow CRON_SECRET or internal requests
+  // Basic auth check — detailed internals are gated behind CRON_SECRET
+  // (fail-closed: no secret configured → no internals exposed)
   const authHeader = req.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     // Return basic status without details for unauthenticated
     return NextResponse.json({
       status: 'ok',

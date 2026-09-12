@@ -13,7 +13,7 @@ import {
   Legend,
   CartesianGrid,
 } from "recharts";
-import { TrendingUp, MessageSquare, ShoppingBag } from "lucide-react";
+import { TrendingUp, ShoppingBag } from "lucide-react";
 
 interface ChartData {
   date: string;
@@ -30,7 +30,9 @@ export default function DashboardCharts({ data }: DashboardChartsProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    void (async () => {
+      setMounted(true);
+    })();
   }, []);
 
   if (!mounted) {
@@ -108,7 +110,7 @@ export default function DashboardCharts({ data }: DashboardChartsProps) {
                   fontSize: "12px",
                   boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
                 }}
-                formatter={(value: any) => [formatCurrency(Number(value || 0)), "Sales"]}
+                formatter={(value) => [formatCurrency(Number(value || 0)), "Sales"]}
                 labelStyle={{ fontWeight: "bold", color: "var(--foreground)" }}
               />
               <Area

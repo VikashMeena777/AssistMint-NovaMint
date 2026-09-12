@@ -4,8 +4,9 @@
 // ============================================
 
 import { NextResponse } from 'next/server';
-import { getUpcomingReminders, markReminderSent } from '@/lib/services/appointment-service';
 import { createClient } from '@supabase/supabase-js';
+import { getUpcomingReminders, markReminderSent } from '@/lib/services/appointment-service';
+import { sendTextMessage } from '@/lib/whatsapp/client';
 
 export const maxDuration = 45;
 
@@ -16,9 +17,10 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(req: Request) {
-  // Verify CRON_SECRET
+  // Verify CRON_SECRET — fail closed when unset
+  const secret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!secret || authHeader !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -30,17 +32,17 @@ export async function GET(req: Request) {
 
     for (const appt of appointments) {
       try {
-        // Get restaurant's WhatsApp config
+        // Per-restaurant WhatsApp credentials (live column: whatsapp_access_token)
         const { data: restaurant } = await supabaseAdmin
           .from('restaurants')
-          .select('whatsapp_phone_id, whatsapp_token, name')
+          .select('whatsapp_phone_id, whatsapp_access_token, name')
           .eq('id', appt.restaurant_id)
           .single();
 
         if (!restaurant) continue;
         const r = restaurant as Record<string, unknown>;
         const phoneId = r.whatsapp_phone_id as string;
-        const token = r.whatsapp_token as string;
+        const token = r.whatsapp_access_token as string;
         const bizName = r.name as string;
 
         if (!phoneId || !token || !appt.customer_phone) continue;
@@ -51,7 +53,7 @@ export async function GET(req: Request) {
         const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
         const timeStr = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 
-        // Send WhatsApp reminder
+        // Send WhatsApp reminder via shared client (sanitization + retries + v25.0)
         const message = `🔔 *Appointment Reminder*\n\n`
           + `Hi${appt.customer_name ? ` ${appt.customer_name}` : ''}! `
           + `Your appointment at *${bizName}* is coming up:\n\n`
@@ -60,29 +62,15 @@ export async function GET(req: Request) {
           + (appt.staff_name ? `🧑‍💼 ${appt.staff_name}\n` : '')
           + `\nSee you soon! 😊`;
 
-        const response = await fetch(
-          `https://graph.facebook.com/v21.0/${phoneId}/messages`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to: appt.customer_phone.replace(/\D/g, ''),
-              type: 'text',
-              text: { body: message },
-            }),
-          }
-        );
+        await sendTextMessage({
+          phoneNumberId: phoneId,
+          accessToken: token,
+          to: appt.customer_phone,
+          text: message,
+        });
 
-        if (response.ok) {
-          await markReminderSent(appt.id);
-          sent++;
-        } else {
-          failed++;
-        }
+        await markReminderSent(appt.id);
+        sent++;
       } catch {
         failed++;
       }

@@ -5,7 +5,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js';
-import { convertCartToOrder, type Cart } from '@/lib/services/cart-engine';
+import { convertCartToOrder, type Cart, type CartItem } from '@/lib/services/cart-engine';
 import { notifyOwnerNewOrder } from '@/lib/services/owner-notifications';
 import { sendTextMessage } from '@/lib/whatsapp/client';
 
@@ -40,7 +40,7 @@ export async function createBotPaymentLink(
     .eq('id', restaurantId)
     .single();
 
-  const rData = restaurant as Record<string, any> | null;
+  const rData = restaurant as { cashfree_client_id?: string | null; cashfree_client_secret?: string | null } | null;
   const clientId = rData?.cashfree_client_id || process.env.CASHFREE_CLIENT_ID;
   const clientSecret = rData?.cashfree_client_secret || process.env.CASHFREE_CLIENT_SECRET;
 
@@ -110,7 +110,7 @@ export async function createBotPaymentLink(
         .select('metadata')
         .eq('id', orderId)
         .single();
-      const currentMeta = (cartData as any)?.metadata || {};
+      const currentMeta = (cartData as { metadata?: Record<string, unknown> } | null)?.metadata || {};
       await supabaseAdmin
         .from('cart_sessions')
         .update({
@@ -215,7 +215,7 @@ async function createFallbackPaymentSession(
         .select('metadata')
         .eq('id', orderId)
         .single();
-      const currentMeta = (cartData as any)?.metadata || {};
+      const currentMeta = (cartData as { metadata?: Record<string, unknown> } | null)?.metadata || {};
       await supabaseAdmin
         .from('cart_sessions')
         .update({
@@ -292,11 +292,16 @@ export async function processSuccessfulPayment(
       .single();
     return {
       success: true,
-      orderId: (existingPayment as any)?.order_id || null,
+      orderId: (existingPayment as { order_id?: string | null } | null)?.order_id || null,
     };
   }
 
-  const payment = payments[0] as Record<string, any>;
+  const payment = payments[0] as {
+    order_id: string | null;
+    restaurant_id: string;
+    amount: number | null;
+    metadata: { cart_id?: string } | null;
+  };
   let orderId = payment.order_id;
   const restaurantId = payment.restaurant_id;
 
@@ -322,7 +327,18 @@ export async function processSuccessfulPayment(
       return { success: false, orderId: null };
     }
 
-    const cData = cartData as Record<string, any>;
+    const cData = cartData as {
+      id: string;
+      restaurant_id: string;
+      customer_id: string;
+      items: CartItem[] | null;
+      subtotal: number | string | null;
+      coupon_code: string | null;
+      discount: number | string | null;
+      delivery_fee: number | string | null;
+      tax: number | string | null;
+      total: number | string | null;
+    };
     const cartObj: Cart = {
       id: cData.id,
       restaurant_id: cData.restaurant_id,
@@ -356,9 +372,9 @@ export async function processSuccessfulPayment(
 
     // Update customer stats
     const { updateCustomerOrderStats } = await import('@/lib/services/customer-service').catch(() => ({
-      updateCustomerOrderStats: async (cid: string, total: number) => {}
+      updateCustomerOrderStats: (async () => {}) as (customerId: string, orderAmount: number) => Promise<void>,
     }));
-    await updateCustomerOrderStats(cData.customer_id, cartObj.total).catch((e: any) => console.error('[PaymentProcessor] Failed to update customer order stats:', e));
+    await updateCustomerOrderStats(cData.customer_id, cartObj.total).catch((e) => console.error('[PaymentProcessor] Failed to update customer order stats:', e));
 
     console.log(`[PaymentProcessor] Created order ${orderId} successfully from cart!`);
   }
@@ -385,7 +401,7 @@ export async function processSuccessfulPayment(
         .single();
 
       if (order) {
-        const o = order as Record<string, any>;
+        const o = order as { customer_id: string; total: number | null; order_number: string | number | null };
         const { data: customer } = await supabaseAdmin
           .from('customers')
           .select('phone')
@@ -399,8 +415,13 @@ export async function processSuccessfulPayment(
           .single();
 
         if (customer && restaurant) {
-          const c = customer as Record<string, any>;
-          const r = restaurant as Record<string, any>;
+          const c = customer as { phone: string };
+          const r = restaurant as {
+            id: string;
+            name: string;
+            whatsapp_phone_id: string | null;
+            whatsapp_access_token: string | null;
+          };
           if (r.whatsapp_phone_id && r.whatsapp_access_token) {
             const totalRupees = ((o.total || 0) / 100).toFixed(0);
 

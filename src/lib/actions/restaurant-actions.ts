@@ -108,6 +108,20 @@ export async function createRestaurant(formData: {
 
 // ─── Update Restaurant Settings ─────────────
 
+// Fields the owner is allowed to change via the dashboard.
+// NEVER add plan/billing/credential columns here — those are set only by
+// the payment webhook, the plan-expiry cron, or dedicated admin actions.
+const SETTINGS_ALLOWED_FIELDS = new Set([
+  'name', 'description', 'phone', 'address', 'city', 'state', 'pincode',
+  'cuisine_type', 'ai_persona', 'business_hours', 'delivery_zones',
+  'delivery_fee_rules', 'min_order_amount', 'currency', 'language',
+  'supported_languages', 'gst_number', 'tax_rate', 'tax_inclusive_pricing',
+  'business_type', 'delivery_enabled', 'pickup_enabled', 'business_config',
+  'logo_url', 'cover_image_url', 'google_review_url',
+  'owner_whatsapp', 'notification_email',
+  'notify_new_order', 'notify_payment', 'notify_human_handoff', 'notify_daily_summary',
+]);
+
 export async function updateRestaurantSettings(
   restaurantId: string,
   updates: Record<string, unknown>
@@ -127,9 +141,19 @@ export async function updateRestaurantSettings(
     return { error: 'Not authorized to update this restaurant' };
   }
 
+  // Allowlist: silently drop anything the owner must not set directly
+  // (plan, plan_expires_at, trial_used, owner_id, cashfree_*, whatsapp_*, is_active, ...)
+  const safeUpdates: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (SETTINGS_ALLOWED_FIELDS.has(key)) safeUpdates[key] = value;
+  }
+  if (Object.keys(safeUpdates).length === 0) {
+    return { error: 'No valid fields to update' };
+  }
+
   const { error } = await supabase
     .from('restaurants')
-    .update(updates)
+    .update(safeUpdates)
     .eq('id', restaurantId);
 
   if (error) return { error: error.message };
@@ -312,8 +336,8 @@ export async function updateRestaurantPaymentConfig(
     return { error: 'Not authorized to update this restaurant' };
   }
 
-  const r = restaurant as Record<string, any>;
-  
+  const r = restaurant as { cashfree_client_secret: string | null; cashfree_webhook_secret: string | null };
+
   // Mask protection: if the user didn't change the masked secret, preserve the database value
   let finalClientSecret = config.cashfree_client_secret;
   if (finalClientSecret === '••••••••••••••••••••••••••••••••') {
@@ -366,7 +390,7 @@ export async function getRestaurantPaymentConfig(restaurantId: string) {
     return { error: 'Not authorized' };
   }
 
-  const r = restaurant as Record<string, any>;
+  const r = restaurant as { cashfree_client_id: string | null; cashfree_client_secret: string | null; cashfree_webhook_secret: string | null };
   return {
     success: true,
     cashfree_client_id: r.cashfree_client_id || '',

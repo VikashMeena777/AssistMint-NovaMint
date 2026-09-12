@@ -429,26 +429,6 @@ export async function sendLocationMessage(
   });
 }
 
-// ─── Mark Message as Read ───────────────────
-
-export async function markAsRead(
-  options: SendMessageOptions & { messageId: string }
-): Promise<void> {
-  const { phoneNumberId, accessToken, messageId } = options;
-  await fetch(`${WHATSAPP_API_URL}/${phoneNumberId}/messages`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      status: 'read',
-      message_id: messageId,
-    }),
-  });
-}
-
 // ─── Send Document Message ──────────────────
 
 export async function sendDocumentMessage(

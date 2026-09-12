@@ -43,10 +43,10 @@ export async function GET(req: NextRequest) {
     const { data: restaurant } = await supabaseAdmin
       .from('restaurants')
       .select('cashfree_client_id, cashfree_client_secret')
-      .eq('id', (payment as any).restaurant_id)
+      .eq('id', (payment as { restaurant_id: string }).restaurant_id)
       .single();
 
-    const r = restaurant as Record<string, any> | null;
+    const r = restaurant as { cashfree_client_id: string | undefined; cashfree_client_secret: string | undefined } | null;
     if (r?.cashfree_client_id && r?.cashfree_client_secret) {
       clientId = r.cashfree_client_id;
       clientSecret = r.cashfree_client_secret;

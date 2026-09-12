@@ -76,7 +76,7 @@ export async function getDashboardStats(restaurantId: string) {
     .from('conversations')
     .select('*', { count: 'exact', head: true })
     .eq('restaurant_id', restaurantId)
-    .gte('last_message_at', dayAgo.toISOString());
+    .gte('created_at', dayAgo.toISOString());
 
   // Menu items count
   const { count: menuItems } = await supabase

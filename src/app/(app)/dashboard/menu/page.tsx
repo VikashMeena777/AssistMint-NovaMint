@@ -37,11 +37,12 @@ import {
   TrendingUp,
   Heart,
   Check,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { updateMenuItem } from "@/lib/actions/menu-actions";
 
-const getTagsForBusinessType = (type: string) => {
+const getTagsForBusinessType = (type: string): { value: string; label: string; icon: LucideIcon; color: string }[] => {
   switch (type) {
     case 'salon_spa':
       return [
@@ -183,6 +184,7 @@ export default function MenuPage() {
   const [items, setItems] = useState<AnyData[]>([]);
   const [categories, setCategories] = useState<AnyData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [businessType, setBusinessType] = useState<BusinessType>('food_beverage');
   const [filter, setFilter] = useState("All");
@@ -209,31 +211,57 @@ export default function MenuPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) {
         setRestaurantId(r.id as string);
         if (r.business_type) setBusinessType(r.business_type as BusinessType);
-      } else setLoading(false);
-    })();
+      } else {
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const [itemsResult, catsResult] = await Promise.all([
-      getMenuItems(restaurantId),
-      getCategories(restaurantId),
-    ]);
-    setItems(itemsResult.data || []);
-    setCategories(catsResult.data || []);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const [itemsResult, catsResult] = await Promise.all([
+        getMenuItems(restaurantId),
+        getCategories(restaurantId),
+      ]);
+      setItems(itemsResult.data || []);
+      setCategories(catsResult.data || []);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load menu:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => {
-    if (restaurantId) loadData();
+    void (async () => {
+      if (restaurantId) loadData();
+    })();
   }, [restaurantId, loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadData();
+    else loadRestaurant();
+  };
 
   const handleAddCategory = async () => {
     if (!restaurantId || !newCategoryName.trim()) return;
@@ -341,6 +369,7 @@ export default function MenuPage() {
 
   const handleDelete = async (itemId: string) => {
     if (!restaurantId) return;
+    if (!confirm('Delete this item? This cannot be undone.')) return;
     const result = await deleteMenuItem(restaurantId, itemId);
     if (result.error) toast.error(result.error);
     else {
@@ -649,7 +678,17 @@ export default function MenuPage() {
 
       {/* Menu Items */}
       <div className="w-full">
-        {loading ? (
+        {error && !items.length ? (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="rounded-2xl border border-border/50 bg-card p-5 space-y-4">
@@ -773,7 +812,7 @@ export default function MenuPage() {
                         </span>
                       )}
                       {(item.tags as string[] || []).filter((t: string) => t !== 'bestseller').map((tag: string) => {
-                        const tagDef = getTagsForBusinessType(businessType).find((t: { value: string; label: string; icon: any; color: string }) => t.value === tag);
+                        const tagDef = getTagsForBusinessType(businessType).find((t) => t.value === tag);
                         if (!tagDef) return null;
                         const Icon = tagDef.icon;
                         return (
@@ -820,7 +859,7 @@ export default function MenuPage() {
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tags</label>
                         <div className="flex flex-wrap gap-1">
-                          {getTagsForBusinessType(businessType).map((tag: { value: string; label: string; icon: any; color: string }) => {
+                          {getTagsForBusinessType(businessType).map((tag) => {
                             const currentTags: string[] = (editValues.tags as string[]) ?? (item.tags as string[] || []);
                             const isActive = tag.value === 'bestseller'
                               ? (editValues.is_bestseller !== undefined ? editValues.is_bestseller as boolean : item.is_bestseller)

@@ -24,6 +24,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   getCurrentRestaurant,
   updateRestaurantSettings,
@@ -43,29 +44,51 @@ const SETTINGS_TABS = [
   { id: "payments", label: "Payments", icon: CreditCard },
   { id: "language", label: "Languages", icon: Globe },
   { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "api", label: "API & Webhooks", icon: Webhook },
 ] as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RestaurantData = Record<string, any>;
+
+type SettingsValue = string | boolean | string[] | Record<string, unknown>;
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<string>("billing");
   const [saving, setSaving] = useState(false);
   const [restaurant, setRestaurant] = useState<RestaurantData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<RestaurantData>({});
 
-  useEffect(() => {
-    (async () => {
+  const loadSettings = useCallback(async () => {
+    try {
       const data = await getCurrentRestaurant();
       setRestaurant(data as RestaurantData);
       setFormData(data || {});
       setLoading(false);
+    } catch (err) {
+      console.error("Failed to load settings:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadSettings();
+    })();
+  }, [loadSettings]);
+
+  // Open a specific tab via ?tab= query param
+  useEffect(() => {
+    void (async () => {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      if (tab && SETTINGS_TABS.some((t) => t.id === tab)) {
+        setActiveTab(tab);
+      }
     })();
   }, []);
 
-  const handleChange = (key: string, value: string | boolean | string[]) => {
+  const handleChange = (key: string, value: SettingsValue) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -142,6 +165,25 @@ export default function SettingsPage() {
     }
   }, [restaurant, formData]);
 
+  const handleRetry = () => {
+    setError(null);
+    loadSettings();
+  };
+
+  if (error && !restaurant) {
+    return (
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+        <p className="text-sm text-muted-foreground">{error}</p>
+        <button
+          onClick={handleRetry}
+          className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -159,12 +201,12 @@ export default function SettingsPage() {
         <p className="text-sm text-muted-foreground mt-1 mb-4">
           Complete onboarding to set up your restaurant.
         </p>
-        <a
+        <Link
           href="/onboarding"
           className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
         >
           Complete Setup →
-        </a>
+        </Link>
       </div>
     );
   }
@@ -253,7 +295,6 @@ export default function SettingsPage() {
             <LanguageSettings data={formData} onChange={handleChange} />
           )}
           {activeTab === "notifications" && restaurant?.id && <NotificationSettings restaurantId={restaurant.id} />}
-          {activeTab === "api" && <APISettings />}
           {activeTab === "billing" && restaurant?.id && (
             <BillingSection restaurantId={restaurant.id} />
           )}
@@ -268,7 +309,7 @@ function RestaurantSettings({
   onChange,
 }: {
   data: RestaurantData;
-  onChange: (key: string, value: any) => void;
+  onChange: (key: string, value: SettingsValue) => void;
 }) {
   const bType = (data.business_type as string) || "food_beverage";
   const settingsLabelMap: Record<string, { nameLabel: string; namePlaceholder: string; secondLabel: string; secondPlaceholder: string; tabName: string }> = {
@@ -306,21 +347,23 @@ function RestaurantSettings({
 
   // Sync apply-to-all inputs with currently configured business hours on mount/data change
   useEffect(() => {
-    if (data?.business_hours) {
-      const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-      for (const d of days) {
-        const config = data.business_hours[d];
-        if (config && config.open && config.close) {
-          setDefaultOpen(config.open);
-          setDefaultClose(config.close);
-          break;
+    void (async () => {
+      if (data?.business_hours) {
+        const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+        for (const d of days) {
+          const config = data.business_hours[d];
+          if (config && config.open && config.close) {
+            setDefaultOpen(config.open);
+            setDefaultClose(config.close);
+            break;
+          }
         }
       }
-    }
+    })();
   }, [data?.business_hours]);
 
   const applyDefaultToAll = () => {
-    const updated: Record<string, any> = {};
+    const updated: Record<string, { open: string; close: string; closed: boolean }> = {};
     daysOfWeek.forEach((day) => {
       updated[day.key] = {
         open: defaultOpen,
@@ -332,7 +375,7 @@ function RestaurantSettings({
     toast.success("Applied default hours to all days! 🕐");
   };
 
-  const updateDayHour = (dayKey: string, field: "open" | "close" | "closed", val: any) => {
+  const updateDayHour = (dayKey: string, field: "open" | "close" | "closed", val: string | boolean) => {
     const currentHours = data.business_hours || {
       mon: { open: "10:00", close: "22:00" },
       tue: { open: "10:00", close: "22:00" },
@@ -509,6 +552,14 @@ function WhatsAppSettings({
   const [showManual, setShowManual] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showIceBreakers, setShowIceBreakers] = useState(false);
+  const [origin, setOrigin] = useState('');
+
+  // Read origin after mount so SSR and client render identical values
+  useEffect(() => {
+    void (async () => {
+      setOrigin(window.location.origin);
+    })();
+  }, []);
 
   // Animated connecting steps
   const CONNECT_STEPS = [
@@ -522,7 +573,9 @@ function WhatsAppSettings({
   // Auto-progress connecting steps for visual feedback
   useEffect(() => {
     if (!connecting) {
-      setConnectStep(0);
+      void (async () => {
+        setConnectStep(0);
+      })();
       return;
     }
     const timers = [1200, 2800, 4400, 6000].map((delay, i) =>
@@ -1005,7 +1058,7 @@ function WhatsAppSettings({
         <div className="mt-4 rounded-xl bg-primary/5 border border-primary/20 p-4">
           <p className="text-sm text-primary font-medium">Webhook URL</p>
           <code className="mt-1 block text-xs text-muted-foreground break-all">
-            {typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/webhooks/whatsapp
+            {origin}/api/webhooks/whatsapp
           </code>
         </div>
       </div>
@@ -1333,14 +1386,26 @@ function PaymentSettings({ restaurantId }: { restaurantId: string }) {
   const [webhookSecret, setWebhookSecret] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [origin, setOrigin] = useState("");
+
+  // Read origin after mount so SSR and client render identical values
+  useEffect(() => {
+    void (async () => {
+      setOrigin(window.location.origin);
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {
-      const data = await getRestaurantPaymentConfig(restaurantId);
-      if (data && data.success) {
-        setClientId(data.cashfree_client_id || "");
-        setClientSecret(data.cashfree_client_secret || "");
-        setWebhookSecret(data.cashfree_webhook_secret || "");
+      try {
+        const data = await getRestaurantPaymentConfig(restaurantId);
+        if (data && data.success) {
+          setClientId(data.cashfree_client_id || "");
+          setClientSecret(data.cashfree_client_secret || "");
+          setWebhookSecret(data.cashfree_webhook_secret || "");
+        }
+      } catch (err) {
+        console.error("Failed to load payment settings:", err);
       }
       setLoading(false);
     })();
@@ -1431,7 +1496,7 @@ function PaymentSettings({ restaurantId }: { restaurantId: string }) {
           In your Cashfree Dashboard under Webhooks, make sure to add the following notification URL for status sync:
         </p>
         <code className="mt-3 block rounded-lg bg-background p-3 text-xs font-mono text-muted-foreground break-all border border-border/50">
-          {typeof window !== "undefined" ? window.location.origin : "https://your-domain.com"}/api/webhooks/cashfree
+          {origin}/api/webhooks/cashfree
         </code>
       </div>
 
@@ -1512,22 +1577,26 @@ function NotificationSettings({ restaurantId }: { restaurantId: string }) {
 
   useEffect(() => {
     (async () => {
-      const supabase = (await import("@/lib/supabase/client")).createClient();
-      const { data } = await supabase
-        .from("restaurants")
-        .select("notification_email, notify_new_order, notify_payment, notify_human_handoff, notify_daily_summary")
-        .eq("id", restaurantId)
-        .single();
+      try {
+        const supabase = (await import("@/lib/supabase/client")).createClient();
+        const { data } = await supabase
+          .from("restaurants")
+          .select("notification_email, notify_new_order, notify_payment, notify_human_handoff, notify_daily_summary")
+          .eq("id", restaurantId)
+          .single();
 
-      if (data) {
-        const d = data as Record<string, unknown>;
-        setEmail((d.notification_email as string) || "");
-        setToggles({
-          notify_new_order: d.notify_new_order !== false,
-          notify_payment: d.notify_payment !== false,
-          notify_human_handoff: d.notify_human_handoff !== false,
-          notify_daily_summary: d.notify_daily_summary !== false,
-        });
+        if (data) {
+          const d = data as Record<string, unknown>;
+          setEmail((d.notification_email as string) || "");
+          setToggles({
+            notify_new_order: d.notify_new_order !== false,
+            notify_payment: d.notify_payment !== false,
+            notify_human_handoff: d.notify_human_handoff !== false,
+            notify_daily_summary: d.notify_daily_summary !== false,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load notification settings:", err);
       }
       setLoading(false);
     })();
@@ -1639,30 +1708,6 @@ function NotificationSettings({ restaurantId }: { restaurantId: string }) {
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         Save Preferences
       </button>
-    </div>
-  );
-}
-
-function APISettings() {
-  return (
-    <div className="rounded-2xl border border-border/50 bg-card p-6">
-      <h3 className="text-base font-semibold mb-1">API & Webhooks</h3>
-      <p className="text-sm text-muted-foreground mb-4">
-        Configure POS integration and external webhook endpoints.
-      </p>
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">POS Webhook URL</label>
-          <input
-            type="url"
-            placeholder="https://your-pos-system.com/webhook"
-            className="flex h-10 w-full rounded-xl border border-input bg-muted/30 px-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
-          />
-          <p className="text-xs text-muted-foreground">
-            New orders will be forwarded to this URL for POS integration.
-          </p>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1970,27 +2015,32 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
 
   useEffect(() => {
     (async () => {
-      const [planData, usageData] = await Promise.all([
-        getCurrentPlan(restaurantId),
-        getPlanUsage(restaurantId),
-      ]);
-      setPlan(planData);
-      setUsage(usageData);
-      setLoading(false);
+      try {
+        const [planData, usageData] = await Promise.all([
+          getCurrentPlan(restaurantId),
+          getPlanUsage(restaurantId),
+        ]);
+        setPlan(planData);
+        setUsage(usageData);
+        setLoading(false);
 
-      // Check for payment return
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("status") === "success" && params.get("order_id")) {
-        const result = await verifyPlanPayment(restaurantId, params.get("order_id")!);
-        if (result.success) {
-          toast.success("Plan upgraded successfully! 🎉");
-          window.history.replaceState({}, "", "/dashboard/settings?tab=billing");
-          // Reload data
-          const refreshed = await getCurrentPlan(restaurantId);
-          setPlan(refreshed);
-        } else if (result.error) {
-          toast.error(result.error);
+        // Check for payment return
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("status") === "success" && params.get("order_id")) {
+          const result = await verifyPlanPayment(restaurantId, params.get("order_id")!);
+          if (result.success) {
+            toast.success("Plan upgraded successfully! 🎉");
+            window.history.replaceState({}, "", "/dashboard/settings?tab=billing");
+            // Reload data
+            const refreshed = await getCurrentPlan(restaurantId);
+            setPlan(refreshed);
+          } else if (result.error) {
+            toast.error(result.error);
+          }
         }
+      } catch (err) {
+        console.error("Failed to load billing data:", err);
+        setLoading(false);
       }
     })();
   }, [restaurantId]);

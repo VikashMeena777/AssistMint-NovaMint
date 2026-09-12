@@ -300,7 +300,7 @@ export interface Coupon {
   created_at: string;
 }
 
-export type DiscountType = 'percent' | 'flat' | 'free_delivery' | 'free_item';
+export type DiscountType = 'percentage' | 'flat' | 'free_delivery' | 'free_item';
 
 // ─── Conversation ───────────────────────────
 export interface Conversation {
@@ -355,7 +355,7 @@ export interface Reward {
   created_at: string;
 }
 
-export type RewardType = 'discount_percent' | 'discount_flat' | 'free_item';
+export type RewardType = 'free_item' | 'discount' | 'free_delivery';
 
 // ─── Staff ──────────────────────────────────
 export interface Staff {
@@ -423,98 +423,6 @@ export interface WhatsAppStatus {
   timestamp: string;
   recipient_id: string;
 }
-
-// ─── Plan Limits ────────────────────────────
-export const PLAN_LIMITS: Record<PlanTier, PlanConfig> = {
-  free: {
-    conversations_per_month: 100,
-    ai_enabled: false,
-    ordering_enabled: false,
-    payments_enabled: false,
-    campaigns_enabled: false,
-    loyalty_enabled: false,
-    voice_ordering: false,
-    scheduled_ordering: false,
-    coupons_enabled: false,
-    combos_enabled: false,
-    whatsapp_flows: false,
-    multi_branch: false,
-    staff_roles: false,
-    kds_enabled: false,
-    api_access: false,
-    white_label: false,
-    max_menu_items: 50,
-    max_staff: 1,
-    branding: true,
-    languages: ['en'],
-  },
-  starter: {
-    conversations_per_month: 1000,
-    ai_enabled: true,
-    ordering_enabled: true,
-    payments_enabled: false,
-    campaigns_enabled: false,
-    loyalty_enabled: false,
-    voice_ordering: false,
-    scheduled_ordering: true,
-    coupons_enabled: true,
-    combos_enabled: false,
-    whatsapp_flows: false,
-    multi_branch: false,
-    staff_roles: false,
-    kds_enabled: false,
-    api_access: false,
-    white_label: false,
-    max_menu_items: 200,
-    max_staff: 3,
-    branding: false,
-    languages: ['en', 'hi'],
-  },
-  growth: {
-    conversations_per_month: -1, // unlimited
-    ai_enabled: true,
-    ordering_enabled: true,
-    payments_enabled: true,
-    campaigns_enabled: true,
-    loyalty_enabled: true,
-    voice_ordering: true,
-    scheduled_ordering: true,
-    coupons_enabled: true,
-    combos_enabled: true,
-    whatsapp_flows: true,
-    multi_branch: false,
-    staff_roles: false,
-    kds_enabled: false,
-    api_access: false,
-    white_label: false,
-    max_menu_items: -1,
-    max_staff: 10,
-    branding: false,
-    languages: ['en', 'hi', 'ta', 'te', 'mr', 'bn', 'kn'],
-  },
-  enterprise: {
-    conversations_per_month: -1,
-    ai_enabled: true,
-    ordering_enabled: true,
-    payments_enabled: true,
-    campaigns_enabled: true,
-    loyalty_enabled: true,
-    voice_ordering: true,
-    scheduled_ordering: true,
-    coupons_enabled: true,
-    combos_enabled: true,
-    whatsapp_flows: true,
-    multi_branch: true,
-    staff_roles: true,
-    kds_enabled: true,
-    api_access: true,
-    white_label: true,
-    max_menu_items: -1,
-    max_staff: -1,
-    branding: false,
-    languages: ['en', 'hi', 'ta', 'te', 'mr', 'bn', 'kn', 'ml', 'gu', 'pa'],
-  },
-};
 
 export interface PlanConfig {
   conversations_per_month: number;

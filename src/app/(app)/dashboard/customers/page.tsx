@@ -8,7 +8,6 @@ import {
   ShoppingBag,
   Shield,
   ShieldOff,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getCustomers, toggleCustomerBlock } from "@/lib/actions/customer-actions";
@@ -23,38 +22,65 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [customers, setCustomers] = useState<AnyData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [businessType, setBusinessType] = useState<string>("food_beverage");
   const [count, setCount] = useState(0);
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) {
         setRestaurantId(r.id as string);
         if (r.business_type) setBusinessType(r.business_type as string);
-      } else setLoading(false);
-    })();
+      } else {
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const config = getBusinessTypeConfig(businessType);
   const terms = config.terms;
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const result = await getCustomers(restaurantId, {
-      search: search || undefined,
-      limit: 50,
-    });
-    setCustomers(result.data || []);
-    setCount(result.count || 0);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const result = await getCustomers(restaurantId, {
+        search: search || undefined,
+        limit: 50,
+      });
+      setCustomers(result.data || []);
+      setCount(result.count || 0);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load customers:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [restaurantId, search]);
 
   useEffect(() => {
-    if (restaurantId) loadData();
+    void (async () => {
+      if (restaurantId) loadData();
+    })();
   }, [restaurantId, loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadData();
+    else loadRestaurant();
+  };
 
   const handleBlock = async (customerId: string, block: boolean) => {
     if (!restaurantId) return;
@@ -87,7 +113,17 @@ export default function CustomersPage() {
       </div>
 
       <div className="rounded-2xl border border-border/50 bg-card">
-        {loading ? (
+        {error && !customers.length ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : loading ? (
           <div className="divide-y divide-border/50">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center justify-between p-4">

@@ -7,6 +7,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { sendTextMessage, sendReplyButtons, sanitizeWhatsAppNumber } from '@/lib/whatsapp/client';
 import { sendNewOrderEmail, sendDailySummaryEmail, sendOrderStatusEmail } from '@/lib/email/email-service';
+import type { CartItem, OrderStatus } from '@/types';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -115,9 +116,10 @@ export async function notifyOwnerNewOrder(restaurantId: string, orderId: string)
       .eq('restaurant_id', restaurantId)
       .single();
 
-    const customerName = (customer as any)?.saved_name || (customer as any)?.whatsapp_name || 'Customer';
-    const items = (order.items as any[]) || [];
-    const itemList = items.map((i: any) => `  ${i.quantity}x ${i.item_name}`).join('\n');
+    const customerRow = customer as { saved_name: string | null; whatsapp_name: string | null } | null;
+    const customerName = customerRow?.saved_name || customerRow?.whatsapp_name || 'Customer';
+    const items = (order.items as CartItem[]) || [];
+    const itemList = items.map((i) => `  ${i.quantity}x ${i.item_name}`).join('\n');
     const totalRupees = ((order.total as number) / 100).toFixed(0);
     const payment = (order.payment_method as string) === 'online' ? '💳 Online' : '💵 COD';
     
@@ -125,7 +127,8 @@ export async function notifyOwnerNewOrder(restaurantId: string, orderId: string)
     let address = 'Pickup';
     if (rawAddress) {
       if (typeof rawAddress === 'object') {
-        address = (rawAddress as any).raw || (rawAddress as any).full_address || JSON.stringify(rawAddress);
+        const addr = rawAddress as { raw?: string; full_address?: string };
+        address = addr.raw || addr.full_address || JSON.stringify(rawAddress);
       } else {
         address = String(rawAddress);
       }
@@ -202,6 +205,17 @@ function parseOwnerCommand(raw: string): { action: string; orderId: string | nul
 
 // ─── Handle Owner Reply ─────────────────────
 
+// Shape of the order rows fetched in handleOwnerReply (select with nested customers)
+interface OwnerOrderRow {
+  id: string;
+  order_number: string | number | null;
+  customer_phone: string;
+  status: string;
+  total: number | null;
+  items: CartItem[] | null;
+  customers?: { saved_name: string | null; whatsapp_name: string | null; email: string | null } | null;
+}
+
 export async function handleOwnerReply(
   phoneNumberId: string,
   from: string,
@@ -229,7 +243,7 @@ export async function handleOwnerReply(
     // ── Resolve the target order ──
     // If the button had an orderId, fetch that specific order (regardless of status).
     // If no orderId (legacy button or text command), fall back to the most recent active order.
-    let order: Record<string, any> | null = null;
+    let order: OwnerOrderRow | null = null;
 
     if (targetOrderId) {
       const { data } = await supabaseAdmin
@@ -238,10 +252,20 @@ export async function handleOwnerReply(
         .eq('id', targetOrderId)
         .eq('restaurant_id', restaurant.id)
         .single();
-      order = data as Record<string, any> | null;
+      order = data as OwnerOrderRow | null;
+
+      // Stale button: the embedded orderId didn't resolve (order deleted or belongs
+      // to another restaurant) — do NOT fall back to a different order
+      if (!order) {
+        if (restaurant.whatsapp_phone_id && restaurant.whatsapp_access_token) {
+          await sendWhatsApp(restaurant.whatsapp_phone_id, restaurant.whatsapp_access_token, from,
+            '⚠️ Order not found. It may have been removed — please manage orders from the dashboard.');
+        }
+        return true;
+      }
     }
 
-    // Fallback: no orderId in button OR orderId didn't match — use most recent active order
+    // Fallback: legacy buttons / text commands with no orderId — use most recent active order
     if (!order) {
       const { data } = await supabaseAdmin
         .from('orders')
@@ -251,7 +275,7 @@ export async function handleOwnerReply(
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
-      order = data as Record<string, any> | null;
+      order = data as OwnerOrderRow | null;
     }
 
     if (!order) {
@@ -342,7 +366,7 @@ export async function handleOwnerReply(
           await sendWhatsApp(restaurant.whatsapp_phone_id!, restaurant.whatsapp_access_token!, from,
             '📭 No active orders right now.');
         } else {
-          const orderList = activeOrders.map((o: any) =>
+          const orderList = activeOrders.map((o: { order_number: string | number; status: string; total: number | null }) =>
             `#${o.order_number} · ${o.status} · ₹${((o.total || 0) / 100).toFixed(0)}`
           ).join('\n');
           await sendWhatsApp(restaurant.whatsapp_phone_id!, restaurant.whatsapp_access_token!, from,
@@ -381,7 +405,7 @@ export async function handleOwnerReply(
           restaurant.whatsapp_access_token,
           from,
           ownerConfirm,
-          newStatus as any,
+          newStatus as OrderStatus,
           order.id  // embed orderId so next button press targets THIS order
         );
       }
@@ -408,16 +432,16 @@ export async function handleOwnerReply(
       }
 
       // If customer has email, send email notification
-      const customer = order.customers as any;
+      const customer = order.customers;
       if (customer?.email) {
         sendOrderStatusEmail({
           customerEmail: customer.email,
           customerName: customer.saved_name || customer.whatsapp_name || 'Valued Customer',
-          orderNumber: order.order_number || order.id,
+          orderNumber: String(order.order_number || order.id),
           restaurantName: restaurant.name || 'AssistMint Partner',
           status: newStatus,
           total: order.total || 0,
-          items: (order.items as any) || [],
+          items: order.items || [],
         }).catch(e => console.error('[OwnerNotif] Email status notification failed:', e));
       }
     }
@@ -444,9 +468,11 @@ export async function sendDailySummary(restaurantId: string): Promise<void> {
     const hasEmail = rest.notification_email;
     if (!hasWhatsApp && !hasEmail) return;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayISO = today.toISOString();
+    // IST midnight (00:00 IST) expressed as a UTC instant — "today" for
+    // Indian restaurants, not UTC midnight
+    const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    const istMidnightUTC = new Date(istNow.toISOString().split('T')[0] + 'T00:00:00+05:30');
+    const todayISO = istMidnightUTC.toISOString();
 
     // Count orders today
     const { count: totalOrders } = await supabaseAdmin
@@ -477,7 +503,7 @@ export async function sendDailySummary(restaurantId: string): Promise<void> {
       .eq('status', 'delivered')
       .gte('created_at', todayISO);
 
-    const revenue = (revenueData || []).reduce((sum, o: any) => sum + (o.total || 0), 0);
+    const revenue = (revenueData || []).reduce((sum, o: { total: number | null }) => sum + (o.total || 0), 0);
     const revenueRupees = (revenue / 100).toFixed(0);
 
     // Unique customers
@@ -487,7 +513,7 @@ export async function sendDailySummary(restaurantId: string): Promise<void> {
       .eq('restaurant_id', restaurantId)
       .gte('created_at', todayISO);
 
-    const uniqueCustomers = new Set((customerData || []).map((o: any) => o.customer_phone)).size;
+    const uniqueCustomers = new Set((customerData || []).map((o: { customer_phone: string }) => o.customer_phone)).size;
 
     const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 

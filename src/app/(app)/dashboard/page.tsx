@@ -1,12 +1,7 @@
 import {
   ShoppingCart,
-  CreditCard,
-  MessageSquare,
-  Users,
-  TrendingUp,
   ArrowUpRight,
   CheckCircle2,
-  Clock,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
@@ -80,7 +75,7 @@ export default async function DashboardPage() {
     );
 
     // Active conversations (last 24 hours)
-    const yesterday = new Date(Date.now() - 86400000);
+    const yesterday = new Date(new Date().getTime() - 86400000);
     const { count: chatCount } = await supabase
       .from("conversations")
       .select("*", { count: "exact", head: true })

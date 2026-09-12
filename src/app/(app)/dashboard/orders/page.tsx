@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Search,
   ShoppingCart,
@@ -61,6 +61,9 @@ export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedRef = useRef(false);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [stats, setStats] = useState<Record<string, number>>({});
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
@@ -72,8 +75,8 @@ export default function OrdersPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) {
         setRestaurantId(r.id as string);
@@ -82,36 +85,64 @@ export default function OrdersPage() {
           router.replace("/dashboard/appointments");
         }
       } else setLoading(false);
-    })();
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [router]);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const loadOrders = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const [orderResult, statsResult] = await Promise.all([
-      getOrders(restaurantId, {
-        status: activeTab !== "all" ? activeTab : undefined,
-        search: search || undefined,
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined,
-        paymentStatus: paymentFilter !== "all" ? paymentFilter : undefined,
-        limit: 50,
-      }),
-      getOrderStats(restaurantId),
-    ]);
-    setOrders(orderResult.data || []);
-    setTotalCount(orderResult.count || 0);
-    setStats(statsResult.counts || {});
-    setLoading(false);
+    // Full-page skeleton only on the very first load; later loads (poll, filters) keep the list visible
+    if (hasLoadedRef.current) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const [orderResult, statsResult] = await Promise.all([
+        getOrders(restaurantId, {
+          status: activeTab !== "all" ? activeTab : undefined,
+          search: search || undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          paymentStatus: paymentFilter !== "all" ? paymentFilter : undefined,
+          limit: 50,
+        }),
+        getOrderStats(restaurantId),
+      ]);
+      setOrders(orderResult.data || []);
+      setTotalCount(orderResult.count || 0);
+      setStats(statsResult.counts || {});
+      hasLoadedRef.current = true;
+    } catch (err) {
+      console.error("Failed to load orders:", err);
+      setError("Could not load. Please retry.");
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
   }, [restaurantId, activeTab, search, dateFrom, dateTo, paymentFilter]);
 
   useEffect(() => {
-    if (restaurantId) loadOrders();
+    void (async () => {
+      if (restaurantId) loadOrders();
+    })();
     const interval = setInterval(() => {
       if (restaurantId) loadOrders();
     }, 30000);
     return () => clearInterval(interval);
   }, [restaurantId, loadOrders]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadOrders();
+    else loadRestaurant();
+  };
 
   const handleStatusUpdate = async (
     orderId: string,
@@ -336,7 +367,17 @@ export default function OrdersPage() {
 
       {/* Orders List */}
       <div className="rounded-2xl border border-border/50 bg-card">
-        {loading ? (
+        {error && !orders.length ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              onClick={handleRetry}
+              className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : loading ? (
           <div className="divide-y divide-border/50">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center justify-between p-4">
@@ -378,7 +419,7 @@ export default function OrdersPage() {
             )}
           </div>
         ) : (
-          <div className="divide-y divide-border/50">
+          <div className={`divide-y divide-border/50 ${refreshing ? "opacity-60 pointer-events-none" : ""}`}>
             {orders.map((order) => {
               const next = getNextStatus(order.status);
               const isExpanded = expandedOrder === order.id;

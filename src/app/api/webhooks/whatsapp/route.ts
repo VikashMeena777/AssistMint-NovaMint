@@ -18,7 +18,11 @@ const APP_SECRET = process.env.WHATSAPP_APP_SECRET || '';
 // ─── Signature Verification ─────────────────
 function verifySignature(rawBody: string, signatureHeader: string | null): boolean {
   if (!APP_SECRET) {
-    console.warn('[WhatsApp Webhook] ⚠️ WHATSAPP_APP_SECRET not set — signature verification DISABLED. Set it in production!');
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[WhatsApp Webhook] WHATSAPP_APP_SECRET not set — rejecting webhook. Configure it to enable signature verification.');
+      return false;
+    }
+    console.warn('[WhatsApp Webhook] ⚠️ WHATSAPP_APP_SECRET not set — signature verification DISABLED (dev only). Set it in production!');
     return true;
   }
   if (!signatureHeader) return false;

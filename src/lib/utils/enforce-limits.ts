@@ -4,7 +4,7 @@
 // ============================================
 
 import { createClient } from '@/lib/supabase/server';
-import { getPlanConfig, isUnlimited, type PlanConfig } from './plan-limits';
+import { getPlanConfig, isUnlimited } from './plan-limits';
 
 // ─── Types ──────────────────────────────────
 

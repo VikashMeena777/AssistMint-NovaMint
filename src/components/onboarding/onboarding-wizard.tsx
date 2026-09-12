@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createRestaurant, updateWhatsAppConfig, startStarterTrial } from '@/lib/actions/restaurant-actions';
 import { createCategory, createMenuItem } from '@/lib/actions/menu-actions';
@@ -73,6 +73,14 @@ export default function OnboardingWizard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [restaurantId, setRestaurantId] = useState('');
+  const [origin, setOrigin] = useState('');
+
+  // Read origin after mount so SSR and client render identical values
+  useEffect(() => {
+    void (async () => {
+      setOrigin(window.location.origin);
+    })();
+  }, []);
 
   const [restaurant, setRestaurant] = useState<RestaurantData>({
     name: '',
@@ -427,7 +435,7 @@ export default function OnboardingWizard() {
               <div>
                 <label className="block text-sm text-white/60 mb-1">URL Slug</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-white/30 text-sm shrink-0">assistmint.novamintnetworks.in/</span>
+                  <span className="text-white/30 text-sm shrink-0">{origin}/</span>
                   <input
                     type="text"
                     value={restaurant.slug}
@@ -527,7 +535,7 @@ export default function OnboardingWizard() {
                               setError(result.error);
                             } else {
                               toast.success('WhatsApp connected! 🎉');
-                              setStep(2);
+                              setStep(3);
                             }
                           })
                           .catch(() => {
@@ -611,7 +619,7 @@ export default function OnboardingWizard() {
               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-300">
                 <strong>Webhook URL:</strong>
                 <code className="block mt-1 text-xs text-emerald-400/70 break-all">
-                  {typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/webhooks/whatsapp
+                  {origin}/api/webhooks/whatsapp
                 </code>
               </div>
 

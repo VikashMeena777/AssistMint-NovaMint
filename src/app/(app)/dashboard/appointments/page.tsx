@@ -71,6 +71,7 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showNewForm, setShowNewForm] = useState(false);
@@ -78,8 +79,12 @@ export default function AppointmentsPage() {
 
   useEffect(() => {
     (async () => {
-      const r = await getCurrentRestaurant();
-      if (r?.business_type) setBusinessType(r.business_type as string);
+      try {
+        const r = await getCurrentRestaurant();
+        if (r?.business_type) setBusinessType(r.business_type as string);
+      } catch (err) {
+        console.error('Failed to load business type:', err);
+      }
     })();
   }, []);
 
@@ -87,20 +92,35 @@ export default function AppointmentsPage() {
   const terms = config.terms;
 
   const loadData = useCallback(async () => {
-    setLoading(true);
-    const [appts, staffList] = await Promise.all([
-      fetchAppointments({
-        date: selectedDate,
-        ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
-      }),
-      fetchStaff(),
-    ]);
-    setAppointments(appts);
-    setStaff(staffList);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const [appts, staffList] = await Promise.all([
+        fetchAppointments({
+          date: selectedDate,
+          ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+        }),
+        fetchStaff(),
+      ]);
+      setAppointments(appts);
+      setStaff(staffList);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to load appointments:', err);
+      setError('Could not load. Please retry.');
+      setLoading(false);
+    }
   }, [selectedDate, statusFilter]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    void (async () => {
+      loadData();
+    })();
+  }, [loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    loadData();
+  };
 
   const handleStatusChange = async (id: string, status: Appointment['status']) => {
     const result = await changeAppointmentStatus(id, status);
@@ -206,7 +226,17 @@ export default function AppointmentsPage() {
       </div>
 
       {/* Appointment List */}
-      {loading ? (
+      {error && !appointments.length ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      ) : loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-24 rounded-2xl bg-card animate-pulse" />

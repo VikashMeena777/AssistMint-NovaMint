@@ -49,6 +49,7 @@ export default function LoyaltyPage() {
   const [transactions, setTransactions] = useState<AnyData[]>([]);
   const [menuItems, setMenuItems] = useState<AnyData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,33 +64,57 @@ export default function LoyaltyPage() {
     reward_item_id: "",
   });
 
-  useEffect(() => {
-    (async () => {
+  const loadRestaurant = useCallback(async () => {
+    try {
       const r = await getCurrentRestaurant();
       if (r?.id) setRestaurantId(r.id as string);
       else setLoading(false);
-    })();
+    } catch (err) {
+      console.error("Failed to load restaurant:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      loadRestaurant();
+    })();
+  }, [loadRestaurant]);
 
   const loadData = useCallback(async () => {
     if (!restaurantId) return;
-    setLoading(true);
-    const [statsRes, rewardsRes, txRes, menuRes] = await Promise.all([
-      getLoyaltyStats(restaurantId),
-      getRewards(restaurantId),
-      getLoyaltyTransactions(restaurantId, { limit: 15 }),
-      getMenuItems(restaurantId),
-    ]);
-    setStats(statsRes);
-    setRewards(rewardsRes.data || []);
-    setTransactions(txRes.data || []);
-    setMenuItems(menuRes.data || []);
-    setLoading(false);
+    try {
+      setLoading(true);
+      const [statsRes, rewardsRes, txRes, menuRes] = await Promise.all([
+        getLoyaltyStats(restaurantId),
+        getRewards(restaurantId),
+        getLoyaltyTransactions(restaurantId, { limit: 15 }),
+        getMenuItems(restaurantId),
+      ]);
+      setStats(statsRes);
+      setRewards(rewardsRes.data || []);
+      setTransactions(txRes.data || []);
+      setMenuItems(menuRes.data || []);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load loyalty data:", err);
+      setError("Could not load. Please retry.");
+      setLoading(false);
+    }
   }, [restaurantId]);
 
   useEffect(() => {
-    if (restaurantId) loadData();
+    void (async () => {
+      if (restaurantId) loadData();
+    })();
   }, [restaurantId, loadData]);
+
+  const handleRetry = () => {
+    setError(null);
+    if (restaurantId) loadData();
+    else loadRestaurant();
+  };
 
   const handleCreate = async () => {
     if (!restaurantId) return;
@@ -134,6 +159,20 @@ export default function LoyaltyPage() {
     if (result.error) toast.error(result.error as string);
     else { toast.success(currentActive ? "Reward deactivated" : "Reward activated"); loadData(); }
   };
+
+  if (error && !rewards.length) {
+    return (
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
+        <p className="text-sm text-muted-foreground">{error}</p>
+        <button
+          onClick={handleRetry}
+          className="mt-4 rounded-xl border px-4 py-2 text-sm hover:bg-secondary transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

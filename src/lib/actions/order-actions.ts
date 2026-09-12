@@ -9,6 +9,20 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
 
+// ─── Helpers ────────────────────────────────
+
+// Strip PostgREST-reserved characters (, ( ) %) from user search input
+// before interpolating into .or() filters to prevent filter injection
+function sanitizeSearchInput(s: string): string {
+  return s.replace(/[,()%]/g, ' ');
+}
+
+// Neutralize CSV formula injection: prefix any value that starts with
+// =, +, -, or @ with a single quote so spreadsheet apps treat it as text
+function csvCell(value: string): string {
+  return /^[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
 // ─── Get Orders ─────────────────────────────
 
 export async function getOrders(
@@ -38,16 +52,19 @@ export async function getOrders(
     if (searchTrim.startsWith('#')) {
       searchTrim = searchTrim.substring(1).trim();
     }
-    const isNumeric = /^\d+$/.test(searchTrim);
-    if (isNumeric) {
-      const searchNum = parseInt(searchTrim, 10);
-      if (!isNaN(searchNum)) {
-        query = query.or(`order_number.eq.${searchNum},customer_phone.ilike.%${searchTrim}%`);
+    searchTrim = sanitizeSearchInput(searchTrim).trim();
+    if (searchTrim) {
+      const isNumeric = /^\d+$/.test(searchTrim);
+      if (isNumeric) {
+        const searchNum = parseInt(searchTrim, 10);
+        if (!isNaN(searchNum)) {
+          query = query.or(`order_number.eq.${searchNum},customer_phone.ilike.%${searchTrim}%`);
+        } else {
+          query = query.or(`customer_phone.ilike.%${searchTrim}%`);
+        }
       } else {
         query = query.or(`customer_phone.ilike.%${searchTrim}%`);
       }
-    } else {
-      query = query.or(`customer_phone.ilike.%${searchTrim}%`);
     }
   }
   if (filters?.dateFrom) {
@@ -119,13 +136,20 @@ export async function updateOrderStatus(
       break;
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('orders')
     .update(updates)
     .eq('id', orderId)
-    .eq('restaurant_id', restaurantId);
+    .eq('restaurant_id', restaurantId)
+    .select();
 
   if (error) return { error: error.message };
+
+  // Verify a row was actually affected — otherwise the order doesn't exist
+  // (or belongs to another restaurant) and we must not notify the customer
+  if (!updated || updated.length === 0) {
+    return { error: 'Order not found or not accessible' };
+  }
 
   // Map status to action
   const actionMap: Record<string, string> = {
@@ -184,7 +208,7 @@ async function sendOrderStatusWhatsApp(
   if (!restaurant?.whatsapp_phone_id || !restaurant?.whatsapp_access_token) return;
 
   // Send email notification to customer if they have an email address
-  const customer = order?.customers as any;
+  const customer = order?.customers as { email?: string | null; saved_name?: string | null; whatsapp_name?: string | null } | null | undefined;
   if (customer?.email) {
     const { sendOrderStatusEmail } = await import('@/lib/email/email-service');
     sendOrderStatusEmail({
@@ -194,7 +218,7 @@ async function sendOrderStatusWhatsApp(
       restaurantName: restaurant.name || 'AssistMint Partner',
       status,
       total: order.total || 0,
-      items: (order.items as any) || [],
+      items: (order.items as { item_name: string; quantity: number }[]) || [],
     }).catch(e => console.error('[Orders] Email status notification failed:', e));
   }
 
@@ -353,30 +377,31 @@ export async function exportOrdersCsv(
     let addressStr = '';
     if (rawAddress) {
       if (typeof rawAddress === 'object') {
-        addressStr = (rawAddress as any).raw || (rawAddress as any).full_address || JSON.stringify(rawAddress);
+        const addr = rawAddress as { raw?: string; full_address?: string };
+        addressStr = addr.raw || addr.full_address || JSON.stringify(rawAddress);
       } else {
         addressStr = String(rawAddress);
       }
     }
 
     return [
-      o.order_number || '',
-      new Date(o.created_at as string).toLocaleString('en-IN'),
-      cust?.saved_name || cust?.whatsapp_name || '',
-      cust?.phone || o.customer_phone || '',
-      `"${items.replace(/"/g, '""')}"`,
-      ((o.subtotal as number || 0) / 100).toFixed(2),
-      ((o.tax as number || 0) / 100).toFixed(2),
-      ((o.delivery_fee as number || 0) / 100).toFixed(2),
-      ((o.total as number || 0) / 100).toFixed(2),
-      o.payment_method || 'cod',
-      o.payment_status || '',
-      o.status || '',
-      o.delivery_type || '',
-      `"${addressStr.replace(/"/g, '""')}"`,
-      o.rating || '',
-      `"${((o.feedback as string) || '').replace(/"/g, '""')}"`,
-      o.delivered_at ? new Date(o.delivered_at as string).toLocaleString('en-IN') : '',
+      csvCell(String(o.order_number || '')),
+      csvCell(new Date(o.created_at as string).toLocaleString('en-IN')),
+      csvCell(cust?.saved_name || cust?.whatsapp_name || ''),
+      csvCell(String(cust?.phone || o.customer_phone || '')),
+      `"${csvCell(items).replace(/"/g, '""')}"`,
+      csvCell(((o.subtotal as number || 0) / 100).toFixed(2)),
+      csvCell(((o.tax as number || 0) / 100).toFixed(2)),
+      csvCell(((o.delivery_fee as number || 0) / 100).toFixed(2)),
+      csvCell(((o.total as number || 0) / 100).toFixed(2)),
+      csvCell(String(o.payment_method || 'cod')),
+      csvCell(String(o.payment_status || '')),
+      csvCell(String(o.status || '')),
+      csvCell(String(o.delivery_type || '')),
+      `"${csvCell(addressStr).replace(/"/g, '""')}"`,
+      csvCell(String(o.rating || '')),
+      `"${csvCell((o.feedback as string) || '').replace(/"/g, '""')}"`,
+      csvCell(o.delivered_at ? new Date(o.delivered_at as string).toLocaleString('en-IN') : ''),
     ].join(',');
   });
 

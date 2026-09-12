@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, useInView } from "framer-motion";
+import { motion, useInView } from "motion/react";
 
 // ─── Animated Counter ───────────────────────
 
@@ -120,6 +120,8 @@ export function StaggerItem({
 }
 
 // ─── Marquee ────────────────────────────────
+// Children are duplicated; pass a single flex row whose `pr` equals its
+// internal `gap` so the -50% translate loop lands exactly on the seam.
 
 export function Marquee({
   children,

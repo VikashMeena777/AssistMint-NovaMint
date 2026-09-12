@@ -1,6 +1,17 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+// Build a redirect response that carries over any cookies the Supabase
+// client set during this request (e.g. refreshed auth tokens) — otherwise
+// the refreshed session is lost on redirect
+function redirectWithCookies(url: URL, supabaseResponse: NextResponse): NextResponse {
+  const redirectResponse = NextResponse.redirect(url);
+  for (const cookie of supabaseResponse.cookies.getAll()) {
+    redirectResponse.cookies.set(cookie);
+  }
+  return redirectResponse;
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -47,23 +58,25 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(url);
+    return redirectWithCookies(url, supabaseResponse);
   }
 
   if (isAuthRoute && user) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
+    return redirectWithCookies(url, supabaseResponse);
   }
 
   // For authenticated users hitting dashboard or onboarding,
   // check if they have a restaurant set up
   if (user && (isDashboardRoute || isOnboardingRoute)) {
+    // limit(1).maybeSingle() — owners can own multiple restaurants
     const { data: restaurant } = await supabase
       .from('restaurants')
       .select('id')
       .eq('owner_id', user.id)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     const hasRestaurant = !!restaurant;
 
@@ -71,14 +84,14 @@ export async function updateSession(request: NextRequest) {
     if (!hasRestaurant && !isOnboardingRoute) {
       const url = request.nextUrl.clone();
       url.pathname = '/onboarding';
-      return NextResponse.redirect(url);
+      return redirectWithCookies(url, supabaseResponse);
     }
 
     // Has restaurant → don't let them revisit onboarding
     if (hasRestaurant && isOnboardingRoute) {
       const url = request.nextUrl.clone();
       url.pathname = '/dashboard';
-      return NextResponse.redirect(url);
+      return redirectWithCookies(url, supabaseResponse);
     }
   }
 

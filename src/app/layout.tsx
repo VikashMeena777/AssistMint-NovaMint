@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Inter, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import { PostHogProvider } from "@/lib/analytics/posthog-provider";
 import FacebookSDK from "@/components/facebook-sdk";
 import "./globals.css";
@@ -12,45 +12,46 @@ const inter = Inter({
   display: "swap",
 });
 
-const plusJakarta = Plus_Jakarta_Sans({
+const spaceGrotesk = Space_Grotesk({
   variable: "--font-heading",
   subsets: ["latin"],
   display: "swap",
-  weight: ["400", "500", "600", "700", "800"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-geist-mono",
+  variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "AssistMint — AI-Powered WhatsApp Ordering for Restaurants",
+    default: "AssistMint — AI WhatsApp Assistant for Local Business",
     template: "%s | AssistMint",
   },
   description:
-    "Transform your restaurant with AI-powered WhatsApp chatbot. Automated ordering, payments, and customer engagement — 24/7.",
+    "Put your business on WhatsApp with an AI assistant that takes orders, books appointments, collects payments and runs loyalty — 24/7, zero commission.",
   keywords: [
-    "restaurant automation",
+    "whatsapp business automation",
     "whatsapp chatbot",
     "ai ordering",
-    "food ordering",
-    "restaurant saas",
+    "appointment booking whatsapp",
+    "restaurant saas india",
+    "local business automation",
   ],
   authors: [{ name: "AssistMint" }],
   openGraph: {
-    title: "AssistMint — AI-Powered WhatsApp Ordering",
-    description: "Transform your restaurant with AI-powered WhatsApp chatbot.",
+    title: "AssistMint — AI WhatsApp Assistant for Local Business",
+    description: "Orders, bookings, payments and loyalty on WhatsApp — on autopilot.",
     type: "website",
     locale: "en_IN",
     siteName: "AssistMint",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AssistMint — AI-Powered WhatsApp Ordering",
-    description: "Transform your restaurant with AI-powered WhatsApp chatbot.",
+    title: "AssistMint — AI WhatsApp Assistant",
+    description: "Orders, bookings, payments and loyalty on WhatsApp — on autopilot.",
   },
   robots: { index: true, follow: true },
 };
@@ -64,12 +65,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${plusJakarta.variable} ${jetbrainsMono.variable} h-full`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
+          defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
         >

@@ -369,7 +369,7 @@ export async function convertCartToOrder(
       .eq('id', cart.id)
       .single();
     if (sessionData && sessionData.metadata) {
-      finalAddress = (sessionData.metadata as any).delivery_address || undefined;
+      finalAddress = (sessionData.metadata as Record<string, unknown>).delivery_address as string | undefined || undefined;
     }
   }
 

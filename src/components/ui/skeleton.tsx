@@ -55,15 +55,6 @@ export function SkeletonTable({ rows = 5, cols = 5 }: { rows?: number; cols?: nu
   );
 }
 
-export function SkeletonChart() {
-  return (
-    <div className="rounded-2xl border border-border/50 bg-card p-6">
-      <div className="h-5 w-36 animate-pulse rounded bg-muted mb-4" />
-      <div className="h-64 animate-pulse rounded-xl bg-muted" />
-    </div>
-  );
-}
-
 export function SkeletonToolbar() {
   return (
     <div className="flex items-center justify-between gap-4">
@@ -90,39 +81,6 @@ export function SkeletonItemGrid({ count = 6 }: { count?: number }) {
           </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-export function SkeletonConversationList({ count = 8 }: { count?: number }) {
-  return (
-    <div className="space-y-2">
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-xl border border-border/50 bg-card p-4 flex items-center gap-3">
-          <div className="h-10 w-10 animate-pulse rounded-full bg-muted shrink-0" />
-          <div className="flex-1 space-y-2">
-            <div className="h-4 w-32 animate-pulse rounded bg-muted" />
-            <div className="h-3 w-48 animate-pulse rounded bg-muted" />
-          </div>
-          <div className="h-3 w-12 animate-pulse rounded bg-muted" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function SkeletonFormSection() {
-  return (
-    <div className="rounded-2xl border border-border/50 bg-card p-6 space-y-4">
-      <div className="h-6 w-40 animate-pulse rounded bg-muted" />
-      <div className="space-y-3">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="space-y-1.5">
-            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-            <div className="h-10 w-full animate-pulse rounded-lg bg-muted" />
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

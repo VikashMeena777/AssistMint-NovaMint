@@ -29,7 +29,7 @@ interface OrderRealtimeListenerProps {
 // Notification sound — short pleasant chime using Web Audio API
 function playNotificationSound() {
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioCtx = window.AudioContext || (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
 
@@ -110,7 +110,7 @@ export default function OrderRealtimeListener({ restaurantId }: OrderRealtimeLis
           table: "orders",
           filter: `restaurant_id=eq.${restaurantId}`,
         },
-        handleNewOrder as any
+        handleNewOrder
       )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
