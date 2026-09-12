@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { getCustomers, toggleCustomerBlock } from "@/lib/actions/customer-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 import { getBusinessTypeConfig } from "@/lib/utils/business-types";
 
@@ -95,9 +96,9 @@ export default function CustomersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{terms.customers}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{terms.customers}</h1>
         <p className="text-sm text-muted-foreground">
-          {count} total {terms.customers.toLowerCase()} · Manage your WhatsApp {terms.customer.toLowerCase()} base.
+          <span className="font-mono tabular-nums">{count}</span> total {terms.customers.toLowerCase()} · Manage your WhatsApp {terms.customer.toLowerCase()} base.
         </p>
       </div>
 
@@ -142,21 +143,18 @@ export default function CustomersPage() {
             ))}
           </div>
         ) : customers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 mb-6">
-              <Users className="h-9 w-9 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">No {terms.customers.toLowerCase()} yet</h3>
-            <p className="mt-2 text-sm text-muted-foreground max-w-md">
-              {terms.customer} profiles are created automatically when they message your WhatsApp bot.
-            </p>
-          </div>
+          <EmptyState
+            className="m-4"
+            icon={Users}
+            title={`No ${terms.customers.toLowerCase()} yet`}
+            description={`${terms.customer} profiles are created automatically when they message your WhatsApp bot.`}
+          />
         ) : (
           <div className="divide-y divide-border/50">
             {customers.map((c) => (
               <div
                 key={c.id}
-                className={`flex items-center justify-between p-4 hover:bg-muted/20 transition-colors ${c.is_blocked ? "opacity-50" : ""}`}
+                className={`flex items-center justify-between p-4 hover:bg-secondary/60 transition-colors ${c.is_blocked ? "opacity-50" : ""}`}
               >
                 <div className="flex items-center gap-4 min-w-0">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary shrink-0">
@@ -166,9 +164,9 @@ export default function CustomersPage() {
                     <p className="text-sm font-semibold truncate">{c.saved_name || c.whatsapp_name || "Unknown"}</p>
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Phone className="h-3 w-3" />
-                      {c.phone || "—"}
+                      <span className="font-mono tabular-nums">{c.phone || "—"}</span>
                       {c.loyalty_tier && (
-                        <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 uppercase">
+                        <span className="ml-2 rounded-full border border-warning/25 bg-warning/10 px-2 py-0.5 text-[11px] font-medium uppercase text-warning">
                           {c.loyalty_tier}
                         </span>
                       )}
@@ -177,17 +175,21 @@ export default function CustomersPage() {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <p className="text-sm font-semibold flex items-center gap-1">
+                    <p className="text-sm font-semibold flex items-center justify-end gap-1 font-mono tabular-nums">
                       <ShoppingBag className="h-3.5 w-3.5 text-muted-foreground" />
                       {c.total_orders || 0} orders
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground font-mono tabular-nums">
                       ₹{((c.total_spent || 0) / 100).toLocaleString("en-IN")} spent
                     </p>
                   </div>
                   <button
                     onClick={() => handleBlock(c.id, !c.is_blocked)}
-                    className={`p-2 rounded-lg transition-colors ${c.is_blocked ? "hover:bg-emerald-50 text-emerald-600" : "hover:bg-red-50 text-red-500"}`}
+                    className={`p-2 rounded-lg transition-colors ${
+                      c.is_blocked
+                        ? "hover:bg-success/10 text-success"
+                        : "hover:bg-destructive/10 text-destructive"
+                    }`}
                     title={c.is_blocked ? "Unblock" : "Block"}
                   >
                     {c.is_blocked ? <ShieldOff className="h-4 w-4" /> : <Shield className="h-4 w-4" />}

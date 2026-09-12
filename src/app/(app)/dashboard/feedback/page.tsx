@@ -36,11 +36,11 @@ const itemVariants: Variants = {
 };
 
 const RATING_LABELS: Record<number, { label: string; emoji: string; color: string }> = {
-  5: { label: "Excellent", emoji: "🤩", color: "text-emerald-500" },
-  4: { label: "Good", emoji: "😊", color: "text-emerald-400" },
-  3: { label: "Okay", emoji: "😐", color: "text-amber-500" },
-  2: { label: "Poor", emoji: "😕", color: "text-orange-500" },
-  1: { label: "Bad", emoji: "😠", color: "text-red-500" },
+  5: { label: "Excellent", emoji: "🤩", color: "text-success" },
+  4: { label: "Good", emoji: "😊", color: "text-success" },
+  3: { label: "Okay", emoji: "😐", color: "text-warning" },
+  2: { label: "Poor", emoji: "😕", color: "text-destructive" },
+  1: { label: "Bad", emoji: "😠", color: "text-destructive" },
 };
 
 function FeedbackSkeleton() {
@@ -174,7 +174,7 @@ export default function FeedbackPage() {
         >
           {/* Header */}
           <motion.div variants={itemVariants}>
-            <h1 className="text-2xl font-bold tracking-tight">Customer Feedback</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Customer Feedback</h1>
             <p className="text-sm text-muted-foreground">
               Ratings and reviews from your customers across all delivered orders.
             </p>
@@ -188,43 +188,43 @@ export default function FeedbackPage() {
             {/* Average Rating */}
             <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40">
               <div className="flex items-center justify-between mb-3">
-                <Star className="h-5 w-5 text-amber-500" />
+                <Star className="h-5 w-5 text-seal" />
               </div>
-              <p className="text-3xl font-bold font-mono tracking-tight">
+              <p className="text-3xl font-bold font-mono tabular-nums tracking-tight">
                 {stats.avgRating || "0"}
               </p>
               <p className="text-sm text-muted-foreground">Average Rating</p>
               <p className="text-xs text-muted-foreground mt-1">
-                <span className="font-mono">{stats.totalRatings || 0}</span> total ratings
+                <span className="font-mono tabular-nums">{stats.totalRatings || 0}</span> total ratings
               </p>
             </div>
 
             {/* Positive Rate */}
             <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40">
               <div className="flex items-center justify-between mb-3">
-                <ThumbsUp className="h-5 w-5 text-emerald-500" />
+                <ThumbsUp className="h-5 w-5 text-success" />
               </div>
-              <p className="text-3xl font-bold font-mono tracking-tight text-emerald-500">
+              <p className="text-3xl font-bold font-mono tabular-nums tracking-tight text-success">
                 {stats.positivePercent || 0}%
               </p>
               <p className="text-sm text-muted-foreground">Positive (4-5★)</p>
               <p className="text-xs text-muted-foreground mt-1">
-                <span className="font-mono text-red-400">{stats.negativePercent || 0}%</span> negative
+                <span className="font-mono tabular-nums text-destructive">{stats.negativePercent || 0}%</span> negative
               </p>
             </div>
 
             {/* Response Rate */}
             <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40">
               <div className="flex items-center justify-between mb-3">
-                <MessageSquare className="h-5 w-5 text-blue-500" />
+                <MessageSquare className="h-5 w-5 text-primary" />
               </div>
-              <p className="text-3xl font-bold font-mono tracking-tight">
+              <p className="text-3xl font-bold font-mono tabular-nums tracking-tight">
                 {stats.responseRate || 0}%
               </p>
               <p className="text-sm text-muted-foreground">Response Rate</p>
               <p className="text-xs text-muted-foreground mt-1">
-                <span className="font-mono">{stats.totalRatings || 0}</span> of{" "}
-                <span className="font-mono">{stats.totalDelivered || 0}</span> orders
+                <span className="font-mono tabular-nums">{stats.totalRatings || 0}</span> of{" "}
+                <span className="font-mono tabular-nums">{stats.totalDelivered || 0}</span> orders
               </p>
             </div>
 
@@ -269,15 +269,15 @@ export default function FeedbackPage() {
                         }`}
                       >
                         <span className="text-sm font-mono font-bold w-6 text-right">{r}</span>
-                        <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400 shrink-0" />
+                        <Star className="h-3.5 w-3.5 text-seal fill-seal shrink-0" />
                         <div className="flex-1 h-3 rounded-full bg-muted/30 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${
                               r >= 4
-                                ? "bg-emerald-500"
+                                ? "bg-success"
                                 : r === 3
-                                ? "bg-amber-500"
-                                : "bg-red-500"
+                                ? "bg-warning"
+                                : "bg-destructive"
                             }`}
                             style={{ width: `${pct}%` }}
                           />
@@ -315,7 +315,7 @@ export default function FeedbackPage() {
                         key={s}
                         className={`h-6 w-6 ${
                           s <= Math.round(stats.avgRating || 0)
-                            ? "text-amber-400 fill-amber-400"
+                            ? "text-seal fill-seal"
                             : "text-muted-foreground/30"
                         }`}
                       />
@@ -326,12 +326,12 @@ export default function FeedbackPage() {
                   </p>
                   <div className="mt-6 flex items-center gap-6">
                     <div className="flex items-center gap-2">
-                      <ThumbsUp className="h-4 w-4 text-emerald-500" />
-                      <span className="text-sm font-semibold text-emerald-500">{stats.positivePercent}% positive</span>
+                      <ThumbsUp className="h-4 w-4 text-success" />
+                      <span className="text-sm font-semibold text-success">{stats.positivePercent}% positive</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <ThumbsDown className="h-4 w-4 text-red-400" />
-                      <span className="text-sm font-semibold text-red-400">{stats.negativePercent}% negative</span>
+                      <ThumbsDown className="h-4 w-4 text-destructive" />
+                      <span className="text-sm font-semibold text-destructive">{stats.negativePercent}% negative</span>
                     </div>
                   </div>
                 </>
@@ -391,10 +391,10 @@ export default function FeedbackPage() {
                       <div
                         className={`flex h-10 w-10 items-center justify-center rounded-xl shrink-0 text-lg ${
                           review.rating >= 4
-                            ? "bg-emerald-500/10"
+                            ? "bg-success/10"
                             : review.rating === 3
-                            ? "bg-amber-500/10"
-                            : "bg-red-500/10"
+                            ? "bg-warning/10"
+                            : "bg-destructive/10"
                         }`}
                       >
                         {info.emoji}
@@ -408,7 +408,7 @@ export default function FeedbackPage() {
                                 key={s}
                                 className={`h-3 w-3 ${
                                   s <= review.rating
-                                    ? "text-amber-400 fill-amber-400"
+                                    ? "text-seal fill-seal"
                                     : "text-muted-foreground/20"
                                 }`}
                               />

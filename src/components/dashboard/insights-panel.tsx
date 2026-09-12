@@ -53,7 +53,7 @@ export default function InsightsPanel() {
     return (
       <div className="bg-card shadow-sm rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="h-5 w-5 text-amber-500" />
+          <Sparkles className="h-5 w-5 text-seal" />
           <h2 className="text-lg font-semibold">AI Insights</h2>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -74,7 +74,7 @@ export default function InsightsPanel() {
   return (
     <div className="bg-card shadow-sm rounded-2xl p-6">
       <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="h-5 w-5 text-amber-500" />
+        <Sparkles className="h-5 w-5 text-seal" />
         <h2 className="text-lg font-semibold">AI Insights</h2>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -83,9 +83,9 @@ export default function InsightsPanel() {
             key={insight.id}
             className={`rounded-xl border p-4 transition-colors ${
               insight.type === 'positive'
-                ? 'border-emerald-500/20 bg-emerald-500/5'
+                ? 'border-success/25 bg-success/5'
                 : insight.type === 'warning'
-                ? 'border-amber-500/20 bg-amber-500/5'
+                ? 'border-warning/25 bg-warning/5'
                 : 'border-border/30 bg-muted/20'
             }`}
           >

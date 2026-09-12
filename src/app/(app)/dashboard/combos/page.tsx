@@ -24,6 +24,7 @@ import {
 } from "@/lib/actions/combo-actions";
 import { getMenuItems, getCategories } from "@/lib/actions/menu-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 import { getBusinessTypeConfig } from "@/lib/utils/business-types";
 
@@ -219,7 +220,7 @@ export default function CombosPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{terms.combo}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{terms.combo}</h1>
           <p className="text-sm text-muted-foreground">
             {terms.comboDesc}
           </p>
@@ -228,13 +229,13 @@ export default function CombosPage() {
           <button
             onClick={loadData}
             disabled={loading}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-muted transition-colors"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-secondary transition-colors"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 transition-all"
+            className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-all"
           >
             <Plus className="h-4 w-4" />
             {terms.comboAdd}
@@ -333,7 +334,7 @@ export default function CombosPage() {
                     <img src={imagePreview} alt="Preview" className="h-12 w-12 rounded-lg object-cover border border-border" />
                     <button
                       onClick={() => { setImageFile(null); setImagePreview(null); }}
-                      className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-white flex items-center justify-center text-xs"
+                      className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
                     >
                       ×
                     </button>
@@ -356,7 +357,7 @@ export default function CombosPage() {
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-muted-foreground">Customer saves</span>
-                        <span className={`font-bold ${savings > 0 ? "text-emerald-600" : "text-red-500"}`}>
+                        <span className={`font-bold ${savings > 0 ? "text-success" : "text-destructive"}`}>
                           {savings > 0 ? `${savings}% off` : "Price must be lower"}
                         </span>
                       </div>
@@ -418,7 +419,7 @@ export default function CombosPage() {
             <button
               onClick={handleCreate}
               disabled={saving}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 disabled:opacity-50 transition-all"
+              className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50 transition-all"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Create Combo
@@ -453,22 +454,20 @@ export default function CombosPage() {
             ))}
           </div>
         ) : combos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center px-4 rounded-2xl border border-border/50 bg-card">
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 mb-6">
-              <Package className="h-9 w-9 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">No combos yet</h3>
-            <p className="mt-2 text-sm text-muted-foreground max-w-md">
-              Bundle menu items together at a special price. Combos increase average order value and delight customers.
-            </p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="mt-6 inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              Create Your First Combo
-            </button>
-          </div>
+          <EmptyState
+            icon={Package}
+            title="No combos yet"
+            description="Bundle menu items together at a special price. Combos increase average order value and delight customers."
+            action={
+              <button
+                onClick={() => setShowCreate(true)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform duration-150 ease-out hover:-translate-y-0.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create your first combo →
+              </button>
+            }
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {combos.map((combo) => {
@@ -493,7 +492,7 @@ export default function CombosPage() {
                         className="w-full h-full object-cover"
                       />
                       {comboSavings > 0 && (
-                        <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-bold text-white shadow-lg">
+                        <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-success px-2.5 py-1 text-xs font-bold text-success-foreground shadow-sm">
                           <BadgePercent className="h-3 w-3" />
                           {comboSavings}% OFF
                         </div>
@@ -507,11 +506,11 @@ export default function CombosPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="relative h-44 flex flex-col items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 border-b border-border/30">
+                    <div className="relative h-44 flex flex-col items-center justify-center bg-secondary/50 border-b border-border/30">
                       <Package className="h-10 w-10 text-primary/40 mb-2" />
                       <span className="text-xs text-muted-foreground">No image</span>
                       {comboSavings > 0 && (
-                        <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-bold text-white shadow-lg">
+                        <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-success px-2.5 py-1 text-xs font-bold text-success-foreground shadow-sm">
                           <BadgePercent className="h-3 w-3" />
                           {comboSavings}% OFF
                         </div>
@@ -553,7 +552,7 @@ export default function CombosPage() {
                     {/* Expiry Date */}
                     {combo.valid_until && (
                       <div className={`flex items-center gap-1.5 text-[10px] font-medium ${
-                        new Date(combo.valid_until) < new Date() ? 'text-red-500' : 'text-muted-foreground'
+                        new Date(combo.valid_until) < new Date() ? 'text-destructive' : 'text-muted-foreground'
                       }`}>
                         <Calendar className="h-3 w-3" />
                         {new Date(combo.valid_until) < new Date() ? 'Expired: ' : 'Expires: '}
@@ -567,8 +566,8 @@ export default function CombosPage() {
                         onClick={() => handleToggle(combo.id, combo.is_active)}
                         className={`inline-flex h-9 px-3 items-center gap-1.5 rounded-xl border text-xs font-semibold transition-all ${
                           combo.is_active
-                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20"
-                            : "border-border text-muted-foreground hover:bg-muted"
+                            ? "border-success/25 bg-success/10 text-success hover:bg-success/20"
+                            : "border-border text-muted-foreground hover:bg-secondary"
                         }`}
                       >
                         {combo.is_active ? (
@@ -579,7 +578,7 @@ export default function CombosPage() {
                       </button>
                       <button
                         onClick={() => handleDelete(combo.id, combo.name)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-500/10 text-red-500 hover:bg-red-500/10 transition-all"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-destructive/25 text-destructive hover:bg-destructive/10 transition-all"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

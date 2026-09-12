@@ -55,6 +55,29 @@ import {
 } from "@/components/dashboard/command-palette";
 import { getBusinessTypeConfig, type BusinessType } from "@/lib/utils/business-types";
 import { spring } from "@/components/motion/tokens";
+import { HomeIcon } from "@/components/icons/home/home";
+import { MessageSquareIcon } from "@/components/icons/message-square/message-square";
+import { IndianRupeeIcon } from "@/components/icons/indian-rupee/indian-rupee";
+import { MenuIcon } from "@/components/icons/menu/menu";
+import { ClockIcon } from "@/components/icons/clock/clock";
+import { UsersIcon } from "@/components/icons/users/users";
+import { SendIcon } from "@/components/icons/send/send";
+import { ChartLineIcon } from "@/components/icons/chart-line/chart-line";
+import { SettingsIcon } from "@/components/icons/settings/settings";
+import { LogoutIcon } from "@/components/icons/logout/logout";
+
+// Animated rail icons — the wrapper div fills the button (size-11), so the
+// icon's self-hover draw fires from anywhere on the rail button.
+type RailAnimated = React.ComponentType<{ size?: number; className?: string }>;
+const RAIL_ANIMATED: Record<string, RailAnimated> = {
+  inbox: MessageSquareIcon,
+  sell: IndianRupeeIcon,
+  appointments: ClockIcon,
+  catalog: MenuIcon,
+  people: UsersIcon,
+  grow: SendIcon,
+  insights: ChartLineIcon,
+};
 
 // ─── Rail configuration ──────────────────────────────────────
 
@@ -366,6 +389,19 @@ export default function DashboardLayout({
 
   // Rail state
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  // Vertical position of the hovered rail button — the flyout opens beside
+  // the icon that spawned it (clamped so it never runs off-screen)
+  const [openGroupTop, setOpenGroupTop] = useState(72);
+
+  const openGroupAt = (id: string, buttonTop: number) => {
+    const estFlyoutHeight = 320;
+    const maxTop =
+      typeof window !== "undefined"
+        ? Math.max(72, window.innerHeight - estFlyoutHeight - 16)
+        : 600;
+    setOpenGroupTop(Math.max(60, Math.min(buttonTop, maxTop)));
+    setOpenGroupId(id);
+  };
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [isXl, setIsXl] = useState(false);
 
@@ -554,7 +590,7 @@ export default function DashboardLayout({
           <RailLinkButton
             href="/dashboard"
             label="Overview"
-            icon={Home}
+            icon={HomeIcon}
             active={pathname === "/dashboard"}
             onHover={() => setOpenGroupId(null)}
           />
@@ -566,7 +602,7 @@ export default function DashboardLayout({
                 group={group}
                 isOpen={openGroupId === group.id}
                 isActive={isGroupActive(group)}
-                onOpen={(id) => setOpenGroupId(id)}
+                onOpen={openGroupAt}
                 onToggle={(id) =>
                   setOpenGroupId((current) => (current === id ? null : id))
                 }
@@ -579,7 +615,7 @@ export default function DashboardLayout({
           <RailLinkButton
             href="/dashboard/settings"
             label="Settings"
-            icon={Settings}
+            icon={SettingsIcon}
             active={isItemActive("/dashboard/settings")}
             onHover={() => setOpenGroupId(null)}
           />
@@ -694,7 +730,8 @@ export default function DashboardLayout({
               exit={{ opacity: 0, x: -12, transition: { duration: 0.12 } }}
               transition={spring.settle}
               onMouseLeave={() => setOpenGroupId(null)}
-              className={`absolute top-[4.5rem] z-50 max-h-[calc(100vh-6rem)] w-[260px] overflow-y-auto rounded-xl border bg-card p-2 shadow-lg ${
+              style={{ top: openGroupTop }}
+              className={`absolute z-50 max-h-[calc(100vh-6rem)] w-[260px] overflow-y-auto rounded-xl border bg-card p-2 shadow-lg ${
                 pinnedActive ? "left-[332px]" : "left-[72px]"
               }`}
             >
@@ -877,16 +914,17 @@ export default function DashboardLayout({
 function RailLinkButton({
   href,
   label,
-  icon: Icon,
+  icon,
   active,
   onHover,
 }: {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: RailAnimated;
   active: boolean;
   onHover?: () => void;
 }) {
+  const AnimatedIcon = icon;
   return (
     <Link
       href={href}
@@ -900,12 +938,11 @@ function RailLinkButton({
       }`}
     >
       <motion.span
-        whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.92 }}
         transition={spring.snappy}
-        className="absolute inset-0 grid place-items-center"
+        className="absolute inset-0"
       >
-        <Icon className="size-5" strokeWidth={active ? 2.25 : 2} />
+        <AnimatedIcon size={20} className="grid size-11 place-items-center" />
       </motion.span>
       {active && (
         <span className="absolute right-2 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-primary" />
@@ -926,18 +963,27 @@ function RailGroupButton({
   group: RailGroup;
   isOpen: boolean;
   isActive: boolean;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, buttonTop: number) => void;
   onToggle: (id: string) => void;
 }) {
   const Icon = group.icon;
+  const AnimatedIcon = RAIL_ANIMATED[group.id];
   return (
     <motion.button
       type="button"
       aria-label={group.label}
       aria-expanded={isOpen}
-      onClick={() => onToggle(group.id)}
+      onClick={(e) => {
+        if (isOpen) {
+          onToggle(group.id);
+        } else {
+          onOpen(group.id, e.currentTarget.getBoundingClientRect().top);
+        }
+      }}
       onPointerEnter={(e) => {
-        if (e.pointerType === "mouse") onOpen(group.id);
+        if (e.pointerType === "mouse") {
+          onOpen(group.id, e.currentTarget.getBoundingClientRect().top);
+        }
       }}
       className={`relative grid size-11 place-items-center rounded-xl transition-colors ${
         isActive
@@ -948,12 +994,20 @@ function RailGroupButton({
       }`}
     >
       <motion.span
-        whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.92 }}
         transition={spring.snappy}
-        className="absolute inset-0 grid place-items-center"
+        className="absolute inset-0"
       >
-        <Icon className="size-5" strokeWidth={isActive || isOpen ? 2.25 : 2} />
+        {AnimatedIcon ? (
+          <AnimatedIcon
+            size={20}
+            className="grid size-11 place-items-center"
+          />
+        ) : (
+          <span className="grid size-11 place-items-center">
+            <Icon className="size-5" strokeWidth={isActive || isOpen ? 2.25 : 2} />
+          </span>
+        )}
       </motion.span>
       {isActive && (
         <span className="absolute right-2 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-primary" />
@@ -1024,12 +1078,11 @@ function SignOutButton() {
       className="relative mt-1 grid size-11 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
     >
       <motion.span
-        whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.92 }}
         transition={spring.snappy}
-        className="absolute inset-0 grid place-items-center"
+        className="absolute inset-0"
       >
-        <LogOut className="size-5" />
+        <LogoutIcon size={20} className="grid size-11 place-items-center" />
       </motion.span>
     </button>
   );

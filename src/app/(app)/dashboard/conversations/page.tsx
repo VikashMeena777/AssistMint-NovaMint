@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   MessageSquare,
   Search,
@@ -37,6 +37,14 @@ export default function ConversationsPage() {
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
+  // Customer directory changes rarely — fetch once, not on every poll
+  const customerMapRef = useRef<Map<string, { name: string; id: string }>>(new Map());
+  // Signature of the last fetched message set — lets polls skip
+  // re-rendering (and re-grouping) when nothing changed
+  const lastSignatureRef = useRef<string>("");
+  // Full-page skeleton only on the very first load; polls stay quiet
+  const hasLoadedRef = useRef(false);
+
   const loadRestaurant = useCallback(async () => {
     try {
       const r = await getCurrentRestaurant();
@@ -55,10 +63,34 @@ export default function ConversationsPage() {
     })();
   }, [loadRestaurant]);
 
+  // Customer directory — one fetch per restaurant
+  useEffect(() => {
+    if (!restaurantId) return;
+    void (async () => {
+      try {
+        const supabase = createClient();
+        const { data: customers } = await supabase
+          .from("customers")
+          .select("id, phone, saved_name, whatsapp_name")
+          .eq("restaurant_id", restaurantId);
+        const map = new Map<string, { name: string; id: string }>();
+        (customers || []).forEach((c: AnyData) => {
+          map.set(c.phone, {
+            name: c.saved_name || c.whatsapp_name || c.phone,
+            id: c.id,
+          });
+        });
+        customerMapRef.current = map;
+      } catch {
+        // Non-fatal — sessions fall back to phone numbers
+      }
+    })();
+  }, [restaurantId]);
+
   const loadConversations = useCallback(async () => {
     if (!restaurantId) return;
+    if (!hasLoadedRef.current) setLoading(true);
     try {
-      setLoading(true);
       const supabase = createClient();
 
       // Get all messages grouped by customer_phone
@@ -71,23 +103,21 @@ export default function ConversationsPage() {
 
       if (!allMessages || allMessages.length === 0) {
         setSessions([]);
+        hasLoadedRef.current = true;
         setLoading(false);
         return;
       }
 
-      // Get customer info
-      const { data: customers } = await supabase
-        .from("customers")
-        .select("id, phone, saved_name, whatsapp_name")
-        .eq("restaurant_id", restaurantId);
+      // Cheap change detection: newest message id + total count
+      const signature = `${allMessages[0].created_at}:${allMessages.length}`;
+      if (signature === lastSignatureRef.current) {
+        hasLoadedRef.current = true;
+        setLoading(false);
+        return;
+      }
+      lastSignatureRef.current = signature;
 
-      const customerMap = new Map<string, { name: string; id: string }>();
-      (customers || []).forEach((c: AnyData) => {
-        customerMap.set(c.phone, {
-          name: c.saved_name || c.whatsapp_name || c.phone,
-          id: c.id,
-        });
-      });
+      const customerMap = customerMapRef.current;
 
       // Group messages by customer_phone into sessions
       const sessionMap = new Map<string, ConversationSession>();
@@ -112,6 +142,7 @@ export default function ConversationsPage() {
       });
 
       setSessions(Array.from(sessionMap.values()));
+      hasLoadedRef.current = true;
       setLoading(false);
     } catch (err) {
       console.error("Failed to load conversations:", err);
@@ -124,9 +155,10 @@ export default function ConversationsPage() {
     void (async () => {
       if (restaurantId) loadConversations();
     })();
-    // Auto-refresh conversations every 15 seconds
+    // Auto-refresh conversations every 15 seconds — paused while the
+    // tab is hidden so background tabs stop hitting Supabase
     const interval = setInterval(() => {
-      if (restaurantId) loadConversations();
+      if (restaurantId && !document.hidden) loadConversations();
     }, 15000);
     return () => clearInterval(interval);
   }, [restaurantId, loadConversations]);
@@ -159,11 +191,12 @@ export default function ConversationsPage() {
     setLoadingMessages(false);
   };
 
-  // Auto-refresh selected conversation messages every 10 seconds
+  // Auto-refresh selected conversation messages every 10 seconds —
+  // paused while the tab is hidden
   useEffect(() => {
     if (!selectedSession) return;
     const interval = setInterval(() => {
-      refreshMessages(selectedSession.customer_phone);
+      if (!document.hidden) refreshMessages(selectedSession.customer_phone);
     }, 10000);
     return () => clearInterval(interval);
   }, [selectedSession, refreshMessages]);
@@ -179,14 +212,14 @@ export default function ConversationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Conversations</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Conversations</h1>
           <p className="text-sm text-muted-foreground">
             Every AI conversation, live. Human handoffs are flagged below.
           </p>
         </div>
         <button
           onClick={loadConversations}
-          className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/50 bg-card px-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/50 bg-card px-3 text-sm font-medium hover:bg-secondary transition-colors"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Refresh
@@ -249,7 +282,7 @@ export default function ConversationsPage() {
                   <button
                     key={s.customer_phone}
                     onClick={() => loadMessages(s)}
-                    className={`flex w-full items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors ${
+                    className={`flex w-full items-center gap-3 p-3 text-left hover:bg-secondary/60 transition-colors ${
                       selectedSession?.customer_phone === s.customer_phone ? "bg-primary/5 border-l-2 border-primary" : ""
                     }`}
                   >
@@ -317,12 +350,12 @@ export default function ConversationsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {!selectedSession.requires_human ? (
-                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-600">
-                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="flex items-center gap-1.5 rounded-full bg-success/10 border border-success/25 px-3 py-1 text-xs font-medium text-success">
+                      <div className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                       AI Active
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-xs font-medium text-amber-600">
+                    <span className="flex items-center gap-1.5 rounded-full bg-warning/10 border border-warning/25 px-3 py-1 text-xs font-medium text-warning">
                       Manual Mode
                     </span>
                   )}
@@ -384,9 +417,9 @@ export default function ConversationsPage() {
                 Your AI chatbot is handling conversations automatically. Select a
                 conversation from the left to view the chat history.
               </p>
-              <div className="mt-4 flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5">
-                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs font-medium text-emerald-600">Bot Online</span>
+              <div className="mt-4 flex items-center gap-2 rounded-full bg-success/10 border border-success/25 px-3 py-1.5">
+                <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                <span className="text-xs font-medium text-success">Bot Online</span>
               </div>
             </div>
           )}

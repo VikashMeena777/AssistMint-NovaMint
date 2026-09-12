@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { updateMenuItem } from "@/lib/actions/menu-actions";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 const getTagsForBusinessType = (type: string): { value: string; label: string; icon: LucideIcon; color: string }[] => {
   switch (type) {
@@ -402,7 +403,7 @@ export default function MenuPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{catalog.title}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{catalog.title}</h1>
           <p className="text-sm text-muted-foreground">
             {catalog.subtitle}
           </p>
@@ -410,14 +411,14 @@ export default function MenuPage() {
         <div className="flex gap-2">
           <button
             onClick={() => setShowAddCategory(true)}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold hover:bg-muted transition-colors"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold hover:bg-secondary transition-colors"
           >
             <Plus className="h-4 w-4" />
             Category
           </button>
           <button
             onClick={() => setShowAddItem(true)}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 transition-all"
+            className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-all"
           >
             <Plus className="h-4 w-4" />
             {catalog.addItemLabel}
@@ -504,13 +505,13 @@ export default function MenuPage() {
               {categories.map((cat) => (
                 <div
                   key={cat.id}
-                  className="group flex items-center gap-2 bg-muted/50 border border-border/60 pl-3 pr-2 py-1.5 rounded-xl text-xs hover:border-red-300 transition-colors"
+                  className="group flex items-center gap-2 bg-muted/50 border border-border/60 pl-3 pr-2 py-1.5 rounded-xl text-xs hover:border-destructive/40 transition-colors"
                 >
                   <span className="font-medium text-foreground">{cat.name}</span>
                   <button
                     onClick={() => handleDeleteCategory(cat.id)}
                     disabled={saving}
-                    className="flex items-center justify-center h-5 w-5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                    className="flex items-center justify-center h-5 w-5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
                     title={`Delete "${cat.name}" category`}
                   >
                     <Trash2 className="h-3 w-3" />
@@ -633,7 +634,7 @@ export default function MenuPage() {
                 <Leaf className="h-3.5 w-3.5 text-green-600" /> Veg
               </label>
             )}
-            <label className="flex items-center gap-2 text-sm cursor-pointer border border-dashed border-primary/40 rounded-xl px-3 py-2 hover:bg-primary/5 transition-colors">
+            <label className="flex items-center gap-2 text-sm cursor-pointer border border-dashed border-primary/40 rounded-xl px-3 py-2 hover:bg-secondary transition-colors">
               <input
                 type="file"
                 accept="image/*"
@@ -658,7 +659,7 @@ export default function MenuPage() {
                 <img src={imagePreview} alt="Preview" className="h-12 w-12 rounded-lg object-cover border border-border" />
                 <button
                   onClick={() => { setImageFile(null); setImagePreview(null); }}
-                  className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-white flex items-center justify-center text-xs"
+                  className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
                 >
                   ×
                 </button>
@@ -668,7 +669,7 @@ export default function MenuPage() {
           <button
             onClick={handleAddItem}
             disabled={saving}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 disabled:opacity-50 transition-all"
+            className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50 transition-all"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Add to Menu
@@ -706,15 +707,20 @@ export default function MenuPage() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center px-4 rounded-2xl border border-border/50 bg-card">
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 mb-6">
-              <UtensilsCrossed className="h-9 w-9 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">No menu items yet</h3>
-            <p className="mt-2 text-sm text-muted-foreground max-w-md">
-              Start building your menu by adding categories and items.
-            </p>
-          </div>
+          <EmptyState
+            icon={UtensilsCrossed}
+            title="No menu items yet"
+            description="Start building your menu by adding categories and items."
+            action={
+              <button
+                onClick={() => setShowAddItem(true)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform duration-150 ease-out hover:-translate-y-0.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add your first menu item →
+              </button>
+            }
+          />
         ) : (
           <motion.div
             variants={containerVariants}
@@ -750,19 +756,15 @@ export default function MenuPage() {
                       )}
                     </div>
                   ) : (
-                    <div className={`relative rounded-xl mb-4 h-40 flex flex-col items-center justify-center border border-border/40 ${
-                      catalog.isFood && item.is_veg 
-                        ? "bg-gradient-to-br from-emerald-500/10 to-teal-500/5 dark:from-emerald-500/20 dark:to-teal-500/10" 
-                        : "bg-gradient-to-br from-primary/10 to-accent/5 dark:from-primary/20 dark:to-accent/10"
-                    }`}>
-                      <div className="text-4xl filter drop-shadow-md mb-2">
+                    <div className="relative rounded-xl mb-4 h-40 flex flex-col items-center justify-center border border-border/40 bg-secondary/50">
+                      <div className="text-4xl mb-2">
                         {catalog.isFood ? (item.is_veg ? "🌿" : "🍖") : catalog.defaultEmoji}
                       </div>
                       {catalog.isFood && (
-                        <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md ${
-                          item.is_veg 
-                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" 
-                            : "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                        <span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          item.is_veg
+                            ? "border-success/25 bg-success/10 text-success"
+                            : "border-destructive/25 bg-destructive/10 text-destructive"
                         }`}>
                           {item.is_veg ? "Veg" : "Non-Veg"}
                         </span>
@@ -807,7 +809,7 @@ export default function MenuPage() {
                     {/* Tag pills */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {item.is_bestseller && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 border border-amber-500/20">
+                        <span className="inline-flex items-center gap-0.5 rounded-full border border-warning/25 bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
                           <Star className="h-2.5 w-2.5 fill-current" /> Bestseller
                         </span>
                       )}
@@ -920,9 +922,9 @@ export default function MenuPage() {
                       <button
                         onClick={() => handleToggle(item.id, item.is_available)}
                         className={`inline-flex h-9 px-3 items-center justify-center rounded-xl border transition-all ${
-                          item.is_available 
-                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20" 
-                            : "border-border text-muted-foreground hover:bg-muted"
+                          item.is_available
+                            ? "border-success/25 bg-success/10 text-success hover:bg-success/20"
+                            : "border-border text-muted-foreground hover:bg-secondary"
                         }`}
                         title={item.is_available ? "Mark unavailable" : "Mark available"}
                       >
@@ -934,7 +936,7 @@ export default function MenuPage() {
                       </button>
                       <button
                         onClick={() => handleDelete(item.id)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-500/10 text-red-500 hover:bg-red-500/10 transition-all"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-destructive/25 text-destructive hover:bg-destructive/10 transition-all"
                         title="Delete item"
                       >
                         <Trash2 className="h-4 w-4" />

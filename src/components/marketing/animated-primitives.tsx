@@ -154,9 +154,24 @@ export function Marquee({
   children: React.ReactNode;
   className?: string;
 }) {
+  // Pause the CSS track while the tab is hidden — no compositor work for
+  // nobody. (Style-only, zero re-renders.)
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const onVis = () => {
+      track.style.animationPlayState = document.hidden ? "paused" : "running";
+    };
+    document.addEventListener("visibilitychange", onVis);
+    onVis();
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
   return (
     <div className={`overflow-hidden ${className}`}>
-      <div className="animate-marquee flex w-max whitespace-nowrap">
+      <div ref={trackRef} className="animate-marquee flex w-max whitespace-nowrap">
         <div className="flex items-center gap-8 pr-8">{children}</div>
         <div className="flex items-center gap-8 pr-8" aria-hidden="true">
           {children}

@@ -6,9 +6,8 @@ import {
   CreditCard,
   MessageSquare,
   Users,
-  TrendingUp,
-  Clock,
 } from "lucide-react";
+import { StatusPill, orderStatusTone } from "@/components/dashboard/status-pill";
 
 const statsContainerVariants: Variants = {
   hidden: { opacity: 0 },
@@ -24,6 +23,39 @@ const statsItemVariants: Variants = {
   hidden: { opacity: 0, y: 10 },
   show: { opacity: 1, y: 0, transition: { duration: 0.28, ease: "easeOut" } },
 };
+
+interface StatCardProps {
+  label: string;
+  value: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconClassName: string;
+  /** The active/primary stat carries a 3px cobalt left accent */
+  accent?: boolean;
+}
+
+function StatCard({ label, value, icon: Icon, iconClassName, accent = false }: StatCardProps) {
+  return (
+    <motion.div
+      variants={statsItemVariants}
+      className={`relative rounded-2xl border border-border/50 bg-card p-5 shadow-sm transition-[box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md ${
+        accent ? "border-l-[3px] border-l-primary" : ""
+      }`}
+    >
+      {/* Hairline top rule with a small mono label */}
+      <div className="flex items-center justify-between border-t border-border pt-2">
+        <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+          {label}
+        </span>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary">
+          <Icon className={`h-4 w-4 ${iconClassName}`} />
+        </div>
+      </div>
+      <p className="mt-3 font-mono text-2xl font-bold tabular-nums tracking-tight text-foreground">
+        {value}
+      </p>
+    </motion.div>
+  );
+}
 
 interface DashboardStatsGridProps {
   todayOrders: number;
@@ -45,49 +77,31 @@ export function DashboardStatsGrid({
       animate="show"
       className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
     >
-      <motion.div variants={statsItemVariants} className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 transition-all">
-        <div className="flex items-center justify-between">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-            <ShoppingCart className="h-5 w-5 text-primary" />
-          </div>
-          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-        <p className="mt-3 text-2xl font-bold font-mono">{todayOrders}</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">Today&apos;s Orders</p>
-      </motion.div>
-
-      <motion.div variants={statsItemVariants} className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 transition-all">
-        <div className="flex items-center justify-between">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
-            <CreditCard className="h-5 w-5 text-emerald-500" />
-          </div>
-          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-        <p className="mt-3 text-2xl font-bold font-mono">₹{(todayRevenue / 100).toLocaleString("en-IN")}</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">Revenue</p>
-      </motion.div>
-
-      <motion.div variants={statsItemVariants} className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 transition-all">
-        <div className="flex items-center justify-between">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
-            <MessageSquare className="h-5 w-5 text-blue-500" />
-          </div>
-          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-        <p className="mt-3 text-2xl font-bold font-mono">{activeChats}</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">Active Chats</p>
-      </motion.div>
-
-      <motion.div variants={statsItemVariants} className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 transition-all">
-        <div className="flex items-center justify-between">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10">
-            <Users className="h-5 w-5 text-amber-500" />
-          </div>
-          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-        <p className="mt-3 text-2xl font-bold font-mono">{totalCustomers}</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">Customers</p>
-      </motion.div>
+      <StatCard
+        label="Orders Today"
+        value={todayOrders.toLocaleString("en-IN")}
+        icon={ShoppingCart}
+        iconClassName="text-primary"
+        accent
+      />
+      <StatCard
+        label="Revenue Today"
+        value={`₹${(todayRevenue / 100).toLocaleString("en-IN")}`}
+        icon={CreditCard}
+        iconClassName="text-success"
+      />
+      <StatCard
+        label="Active Chats"
+        value={activeChats.toLocaleString("en-IN")}
+        icon={MessageSquare}
+        iconClassName="text-primary"
+      />
+      <StatCard
+        label="Customers"
+        value={totalCustomers.toLocaleString("en-IN")}
+        icon={Users}
+        iconClassName="text-primary"
+      />
     </motion.div>
   );
 }
@@ -109,19 +123,18 @@ export function RecentOrdersList({ recentOrders }: RecentOrdersListProps) {
         <motion.div
           key={order.id}
           variants={statsItemVariants}
-          className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+          className="flex items-center justify-between rounded-lg py-3 first:pt-0 last:pb-0 hover:bg-secondary/60"
         >
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-secondary">
               <ShoppingCart className="h-4 w-4 text-primary" />
             </div>
-            <div>
-              <p className="text-sm font-medium">
-                <span className="font-mono">#{order.order_number}</span> ·{" "}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">
+                <span className="font-mono tabular-nums">#{order.order_number}</span> ·{" "}
                 {order.customers?.saved_name || order.customers?.whatsapp_name || "Customer"}
               </p>
-              <p className="text-xs text-muted-foreground flex items-center gap-1 font-mono">
-                <Clock className="h-3 w-3" />
+              <p className="flex items-center gap-1 font-mono text-xs tabular-nums text-muted-foreground">
                 {new Date(order.created_at).toLocaleString("en-IN", {
                   hour: "2-digit",
                   minute: "2-digit",
@@ -131,21 +144,13 @@ export function RecentOrdersList({ recentOrders }: RecentOrdersListProps) {
               </p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold font-mono">
+          <div className="flex shrink-0 items-center gap-3 text-right">
+            <p className="font-mono text-sm font-semibold tabular-nums">
               ₹{((order.total || 0) / 100).toLocaleString("en-IN")}
             </p>
-            <span
-              className={`inline-block mt-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                order.status === "delivered"
-                  ? "bg-emerald-500/10 text-emerald-600"
-                  : order.status === "cancelled"
-                  ? "bg-red-500/10 text-red-600"
-                  : "bg-amber-500/10 text-amber-600"
-              }`}
-            >
+            <StatusPill tone={orderStatusTone(order.status)}>
               {order.status}
-            </span>
+            </StatusPill>
           </div>
         </motion.div>
       ))}

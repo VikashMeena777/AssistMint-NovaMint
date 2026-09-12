@@ -5,7 +5,6 @@ import {
   CreditCard,
   ArrowDownLeft,
   ArrowUpRight,
-  Loader2,
   RefreshCw,
   CheckCircle2,
   Clock,
@@ -14,16 +13,11 @@ import {
 } from "lucide-react";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
 import { createClient } from "@/lib/supabase/client";
+import { StatusPill, paymentStatusTone } from "@/components/dashboard/status-pill";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyData = Record<string, any>;
-
-const STATUS_COLORS: Record<string, string> = {
-  completed: "bg-emerald-500/10 text-emerald-600",
-  pending: "bg-amber-500/10 text-amber-600",
-  failed: "bg-red-500/10 text-red-600",
-  refunded: "bg-blue-500/10 text-blue-600",
-};
 
 const STATUS_ICONS: Record<string, typeof CheckCircle2> = {
   completed: CheckCircle2,
@@ -128,7 +122,7 @@ export default function PaymentsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Payments</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Payments</h1>
           <p className="text-sm text-muted-foreground">
             Track all Cashfree payments, refunds, and settlements.
           </p>
@@ -136,7 +130,7 @@ export default function PaymentsPage() {
         <button
           onClick={loadData}
           disabled={loading}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-muted transition-colors"
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-secondary transition-colors"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Refresh
@@ -147,7 +141,7 @@ export default function PaymentsPage() {
         {statCards.map((stat) => (
           <div key={stat.label} className="rounded-xl border border-border/50 bg-card p-4">
             <stat.icon className={`h-4 w-4 ${stat.color} mb-2`} />
-            <p className="text-2xl font-bold">{stat.value}</p>
+            <p className="text-2xl font-bold font-mono tabular-nums">{stat.value}</p>
             <p className="text-xs text-muted-foreground">{stat.label}</p>
           </div>
         ))}
@@ -187,72 +181,67 @@ export default function PaymentsPage() {
             ))}
           </div>
         ) : payments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 mb-6">
-              <CreditCard className="h-9 w-9 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">No payments yet</h3>
-            <p className="mt-2 text-sm text-muted-foreground max-w-md">
-              Payments will appear here once customers complete orders via
-              Cashfree UPI or payment links.
-            </p>
-          </div>
+          <EmptyState
+            className="m-4"
+            icon={CreditCard}
+            title="No payments yet"
+            description="Payments will appear here once customers complete orders via Cashfree UPI or payment links."
+          />
         ) : (
-          <div className="divide-y divide-border/50">
-            <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              <span>Payment</span>
-              <span>Amount</span>
-              <span>Status</span>
-              <span>Date</span>
-            </div>
-            {payments.map((p) => {
-              const StatusIcon = STATUS_ICONS[p.status] || Clock;
-              return (
-                <div
-                  key={p.id}
-                  className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-4 hover:bg-muted/30 transition-colors"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold truncate">
-                      {p.cashfree_order_id || "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Order #{p.orders?.order_number || "—"}
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold tabular-nums">
-                    ₹{((p.amount || 0) / 100).toLocaleString("en-IN")}
-                  </p>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${STATUS_COLORS[p.status] || "bg-muted text-muted-foreground"}`}
+          <div className="overflow-x-auto">
+            <div className="min-w-[560px] divide-y divide-border/50">
+              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <span>Payment</span>
+                <span className="text-right">Amount</span>
+                <span>Status</span>
+                <span className="text-right">Date</span>
+              </div>
+              {payments.map((p) => {
+                const StatusIcon = STATUS_ICONS[p.status] || Clock;
+                return (
+                  <div
+                    key={p.id}
+                    className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-4 hover:bg-secondary/60 transition-colors"
                   >
-                    <StatusIcon className="h-3 w-3" />
-                    {p.status}
-                  </span>
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(p.created_at).toLocaleString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-sm font-semibold">
+                        {p.cashfree_order_id || "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Order #{p.orders?.order_number || "—"}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold tabular-nums">
+                      ₹{((p.amount || 0) / 100).toLocaleString("en-IN")}
                     </p>
-                    {p.payment_link && (
-                      <a
-                        href={p.payment_link}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline mt-1"
-                      >
-                        <ExternalLink className="h-2.5 w-2.5" />
-                        Link
-                      </a>
-                    )}
+                    <StatusPill tone={paymentStatusTone(p.status)} icon={StatusIcon}>
+                      {p.status}
+                    </StatusPill>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(p.created_at).toLocaleString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                      {p.payment_link && (
+                        <a
+                          href={p.payment_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-2.5 w-2.5" />
+                          Link
+                        </a>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

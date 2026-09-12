@@ -14,8 +14,12 @@ export default function AuthLayout({
   return (
     <div className="paper relative flex min-h-screen flex-col items-center justify-center bg-background px-4 py-12">
       <div className="relative z-10 w-full max-w-md space-y-6">
-        {/* Paper card */}
-        <div className="rounded-2xl border bg-card p-8 shadow-sm">
+        {/* Paper card — hairline double-border: outer edge + inset ledger rule */}
+        <div className="relative rounded-2xl border bg-card p-8 shadow-sm">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-2.5 rounded-xl border border-border/60"
+          />
           {/* Logo + wordmark */}
           <div className="flex flex-col items-center gap-3">
             <div className="relative h-12 w-12 overflow-hidden rounded-xl border">
@@ -31,7 +35,7 @@ export default function AuthLayout({
             <h1 className="font-heading text-2xl font-semibold tracking-tight">
               Assist<span className="text-primary">Mint</span>
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="font-heading text-sm italic text-muted-foreground">
               The AI front desk on WhatsApp
             </p>
           </div>

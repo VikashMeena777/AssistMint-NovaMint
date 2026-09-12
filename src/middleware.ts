@@ -6,15 +6,15 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // Auth session handling ONLY where it's needed. Marketing pages, public
+  // business pages, and API routes are served without the middleware (and
+  // its Supabase getUser round trip) — this keeps static pages instant.
+  // Dashboard/onboarding need the session check; login/signup need the
+  // signed-in redirect.
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - api/webhooks (webhook endpoints — no auth needed)
-     * - api/cron (cron endpoints — use CRON_SECRET instead)
-     */
-    '/((?!_next/static|_next/image|favicon.ico|api/webhooks|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/dashboard/:path*',
+    '/onboarding/:path*',
+    '/login',
+    '/signup',
   ],
 };

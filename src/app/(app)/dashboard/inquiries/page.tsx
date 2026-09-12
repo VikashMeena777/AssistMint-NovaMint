@@ -10,18 +10,17 @@ import {
   User,
   Clock,
   Filter,
-  CheckCircle2,
-  Mail,
-  UserCheck,
-  XCircle,
+  Inbox,
 } from 'lucide-react';
+import { StatusPill, type StatusTone } from '@/components/dashboard/status-pill';
+import { EmptyState } from '@/components/dashboard/empty-state';
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  new: { label: '🆕 New', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: <Mail className="w-3.5 h-3.5" /> },
-  contacted: { label: '📞 Contacted', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: <Phone className="w-3.5 h-3.5" /> },
-  interested: { label: '⭐ Interested', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: <CheckCircle2 className="w-3.5 h-3.5" /> },
-  enrolled: { label: '✅ Enrolled', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20', icon: <UserCheck className="w-3.5 h-3.5" /> },
-  closed: { label: '❌ Closed', color: 'bg-gray-500/10 text-gray-400 border-gray-500/20', icon: <XCircle className="w-3.5 h-3.5" /> },
+const STATUS_CONFIG: Record<string, { label: string; tone: StatusTone }> = {
+  new: { label: 'New', tone: 'primary' },
+  contacted: { label: 'Contacted', tone: 'warning' },
+  interested: { label: 'Interested', tone: 'success' },
+  enrolled: { label: 'Enrolled', tone: 'success' },
+  closed: { label: 'Closed', tone: 'muted' },
 };
 
 import { getCurrentRestaurant } from '@/lib/actions/restaurant-actions';
@@ -95,8 +94,8 @@ export default function InquiriesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">{terms.customer} Inquiries</h1>
-        <p className="text-muted-foreground text-sm mt-1">
+        <h1 className="text-xl font-semibold tracking-tight">{terms.customer} Inquiries</h1>
+        <p className="text-sm text-muted-foreground">
           Track and follow up on {terms.customer.toLowerCase()} inquiries and lead requests
         </p>
       </div>
@@ -105,19 +104,19 @@ export default function InquiriesPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-card border border-border/50 rounded-2xl p-4">
           <p className="text-xs text-muted-foreground">Total</p>
-          <p className="text-2xl font-bold">{counts.total}</p>
+          <p className="text-2xl font-bold font-mono tabular-nums">{counts.total}</p>
         </div>
-        <div className="bg-card border border-blue-500/20 rounded-2xl p-4">
-          <p className="text-xs text-blue-400">New</p>
-          <p className="text-2xl font-bold text-blue-400">{counts.new_count}</p>
+        <div className="bg-card border border-primary/25 rounded-2xl p-4">
+          <p className="text-xs text-primary">New</p>
+          <p className="text-2xl font-bold font-mono tabular-nums text-primary">{counts.new_count}</p>
         </div>
-        <div className="bg-card border border-amber-500/20 rounded-2xl p-4">
-          <p className="text-xs text-amber-400">Contacted</p>
-          <p className="text-2xl font-bold text-amber-400">{counts.contacted}</p>
+        <div className="bg-card border border-warning/25 rounded-2xl p-4">
+          <p className="text-xs text-warning">Contacted</p>
+          <p className="text-2xl font-bold font-mono tabular-nums text-warning">{counts.contacted}</p>
         </div>
-        <div className="bg-card border border-emerald-500/20 rounded-2xl p-4">
-          <p className="text-xs text-emerald-400">Interested</p>
-          <p className="text-2xl font-bold text-emerald-400">{counts.interested}</p>
+        <div className="bg-card border border-success/25 rounded-2xl p-4">
+          <p className="text-xs text-success">Interested</p>
+          <p className="text-2xl font-bold font-mono tabular-nums text-success">{counts.interested}</p>
         </div>
       </div>
 
@@ -131,7 +130,7 @@ export default function InquiriesPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
               statusFilter === s
                 ? 'bg-primary/10 text-primary border-primary/30'
-                : 'bg-card border-border/50 hover:bg-muted'
+                : 'bg-card border-border/50 hover:bg-secondary'
             }`}
           >
             {s === 'all' ? 'All' : STATUS_CONFIG[s]?.label || s}
@@ -153,17 +152,15 @@ export default function InquiriesPage() {
       ) : loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 rounded-2xl bg-card animate-pulse" />
+            <div key={i} className="h-24 rounded-2xl border border-border/50 bg-card animate-pulse" />
           ))}
         </div>
       ) : inquiries.length === 0 ? (
-        <div className="text-center py-16 bg-card border border-border/50 rounded-2xl">
-          <div className="text-4xl mb-3">📩</div>
-          <p className="text-lg font-medium mb-1">No inquiries yet</p>
-          <p className="text-muted-foreground text-sm">
-            When customers ask questions on WhatsApp, their inquiries will appear here
-          </p>
-        </div>
+        <EmptyState
+          icon={Inbox}
+          title="No inquiries yet"
+          description="When customers ask questions on WhatsApp, their inquiries will appear here."
+        />
       ) : (
         <div className="space-y-3">
           {inquiries.map((inq) => (
@@ -192,15 +189,15 @@ function InquiryCard({
   const timeAgo = getTimeAgo(inq.created_at);
 
   return (
-    <div className="bg-card border border-border/50 rounded-2xl p-4 hover:border-border transition-colors">
+    <div className="bg-card border border-border/50 rounded-2xl p-4 hover:bg-secondary/60 transition-colors">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           {/* Header */}
           <div className="flex items-center gap-3 mb-2">
-            <span className={`text-xs px-2 py-0.5 rounded-full border ${config.color}`}>
+            <StatusPill tone={config.tone}>
               {config.label}
-            </span>
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
+            </StatusPill>
+            <span className="text-xs text-muted-foreground flex items-center gap-1 tabular-nums">
               <Clock className="w-3 h-3" />
               {timeAgo}
             </span>
@@ -233,12 +230,12 @@ function InquiryCard({
 
           {/* Message */}
           {inq.message && (
-            <p className="text-xs text-muted-foreground mt-1.5 italic">📝 {inq.message}</p>
+            <p className="text-xs text-muted-foreground mt-1.5 italic">{inq.message}</p>
           )}
 
           {/* Follow-up notes */}
           {inq.follow_up_notes && (
-            <p className="text-xs text-emerald-400/70 mt-1">✅ {inq.follow_up_notes}</p>
+            <p className="text-xs text-success mt-1">{inq.follow_up_notes}</p>
           )}
         </div>
 
@@ -247,33 +244,33 @@ function InquiryCard({
           {inq.status === 'new' && (
             <button
               onClick={() => onStatusChange(inq.id, 'contacted')}
-              className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors"
+              className="text-xs px-3 py-1.5 rounded-lg bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
             >
-              📞 Contacted
+              Contacted
             </button>
           )}
           {(inq.status === 'new' || inq.status === 'contacted') && (
             <button
               onClick={() => onStatusChange(inq.id, 'interested')}
-              className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+              className="text-xs px-3 py-1.5 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors"
             >
-              ⭐ Interested
+              Interested
             </button>
           )}
           {inq.status === 'interested' && (
             <button
               onClick={() => onStatusChange(inq.id, 'enrolled')}
-              className="text-xs px-3 py-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+              className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
             >
-              ✅ Enrolled
+              Enrolled
             </button>
           )}
           {inq.status !== 'closed' && inq.status !== 'enrolled' && (
             <button
               onClick={() => onStatusChange(inq.id, 'closed')}
-              className="text-xs px-3 py-1.5 rounded-lg bg-gray-500/10 text-gray-400 hover:bg-gray-500/20 transition-colors"
+              className="text-xs px-3 py-1.5 rounded-lg bg-muted text-muted-foreground hover:bg-secondary transition-colors"
             >
-              ✕ Close
+              Close
             </button>
           )}
         </div>

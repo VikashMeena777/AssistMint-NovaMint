@@ -10,6 +10,7 @@ const instrumentSans = Instrument_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
   display: "swap",
+  preload: true,
   weight: ["400", "500", "600", "700"],
 });
 
@@ -17,6 +18,7 @@ const fraunces = Fraunces({
   variable: "--font-heading",
   subsets: ["latin"],
   display: "swap",
+  preload: true,
   // Variable font: weights 300–900 come from the font itself (500–600 used
   // by the Bahikhata design). `axes` requires no explicit weight.
   axes: ["opsz"],

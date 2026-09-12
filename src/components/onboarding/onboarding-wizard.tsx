@@ -38,25 +38,23 @@ interface SampleCategory {
 
 function StepIndicator({ currentStep, steps }: { currentStep: number; steps: string[] }) {
   return (
-    <div className="flex items-center justify-center gap-2 mb-8">
+    <div className="mb-8 flex items-center justify-center gap-1.5 sm:gap-2">
       {steps.map((label, i) => (
-        <div key={label} className="flex items-center gap-2">
+        <div key={label} className="flex items-center gap-1.5 sm:gap-2">
           <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold font-mono tabular-nums transition-all ${
               i < currentStep
-                ? 'bg-emerald-500 text-white'
+                ? 'bg-primary text-primary-foreground'
                 : i === currentStep
-                ? 'bg-emerald-500/20 text-emerald-400 ring-2 ring-emerald-500'
-                : 'bg-white/5 text-white/30'
+                ? 'bg-primary/10 text-primary ring-2 ring-primary/40'
+                : 'bg-muted text-muted-foreground/50'
             }`}
           >
             {i < currentStep ? '✓' : i + 1}
           </div>
           {i < steps.length - 1 && (
             <div
-              className={`w-12 h-0.5 ${
-                i < currentStep ? 'bg-emerald-500' : 'bg-white/10'
-              }`}
+              className={`h-0.5 w-5 sm:w-10 ${i < currentStep ? 'bg-primary' : 'bg-border'}`}
             />
           )}
         </div>
@@ -143,7 +141,7 @@ export default function OnboardingWizard() {
         const trialResult = await startStarterTrial(newId);
         if (trialResult.success) {
           setTrialActivated(true);
-          toast.success('🎉 14-day Starter trial activated!');
+          toast.success('14-day Starter trial activated!');
         }
         localStorage.removeItem('assistmint_trial_plan');
       }
@@ -317,6 +315,8 @@ export default function OnboardingWizard() {
       };
 
       const sampleCategories = getSampleCategories(selectedBusinessType);
+      let categoriesFailed = 0;
+      let itemsFailed = 0;
 
       for (let ci = 0; ci < sampleCategories.length; ci++) {
         const cat = sampleCategories[ci];
@@ -325,13 +325,16 @@ export default function OnboardingWizard() {
           display_order: ci,
         });
 
-        if (catResult.error) continue;
+        if (catResult.error) {
+          categoriesFailed++;
+          continue;
+        }
         const categoryData = catResult.data as Record<string, unknown>;
         const categoryId = categoryData.id as string;
 
         for (let ii = 0; ii < cat.items.length; ii++) {
           const item = cat.items[ii];
-          await createMenuItem(restaurantId, {
+          const itemResult = await createMenuItem(restaurantId, {
             category_id: categoryId,
             name: item.name,
             description: item.description,
@@ -339,7 +342,15 @@ export default function OnboardingWizard() {
             is_veg: item.is_veg,
             display_order: ii,
           });
+          if (itemResult.error) itemsFailed++;
         }
+      }
+
+      // Surface partial seeding failures instead of failing silently
+      if (categoriesFailed > 0 || itemsFailed > 0) {
+        toast.warning(
+          `Sample catalog partially added — ${categoriesFailed} categories and ${itemsFailed} items failed. You can add them manually from the dashboard.`
+        );
       }
     }
 
@@ -353,20 +364,24 @@ export default function OnboardingWizard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4 paper">
       <div className="w-full max-w-lg">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="text-3xl font-bold text-emerald-400 mb-2">🌿 AssistMint</div>
-          <p className="text-white/50">Set up your AI-powered ordering assistant</p>
+        <div className="mb-8 text-center">
+          <div className="font-heading text-2xl font-bold tracking-tight text-foreground mb-1">
+            AssistMint
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Set up your AI-powered ordering assistant
+          </p>
         </div>
 
         <StepIndicator currentStep={step} steps={steps} />
 
         {/* Card */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+            <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
               {error}
             </div>
           )}
@@ -374,8 +389,8 @@ export default function OnboardingWizard() {
           {/* Step 0: Business Type Selection */}
           {step === 0 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-white">What type of business do you run?</h2>
-              <p className="text-white/40 text-sm">This customizes your entire dashboard experience.</p>
+              <h2 className="text-lg font-semibold">What type of business do you run?</h2>
+              <p className="text-sm text-muted-foreground">This customizes your entire dashboard experience.</p>
 
               <div className="grid grid-cols-2 gap-3">
                 {getAllBusinessTypes().map((bt) => (
@@ -384,20 +399,20 @@ export default function OnboardingWizard() {
                     onClick={() => setSelectedBusinessType(bt.type)}
                     className={`flex flex-col items-start rounded-xl border p-4 text-left transition-all ${
                       selectedBusinessType === bt.type
-                        ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/30'
-                        : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
+                        : 'border-border bg-background hover:border-primary/30 hover:bg-secondary'
                     }`}
                   >
-                    <span className="text-2xl mb-1.5">{bt.emoji}</span>
-                    <span className="text-sm font-medium text-white">{bt.label}</span>
-                    <span className="text-xs text-white/40 mt-0.5 line-clamp-2">{bt.description}</span>
+                    <span className="mb-1.5 text-2xl">{bt.emoji}</span>
+                    <span className="text-sm font-medium">{bt.label}</span>
+                    <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{bt.description}</span>
                   </button>
                 ))}
               </div>
 
               <button
                 onClick={() => { setError(''); setStep(1); }}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2.5 rounded-lg transition-colors"
+                className="stamp w-full rounded-lg bg-primary py-2.5 font-medium text-primary-foreground transition-all hover:opacity-90"
               >
                 Continue →
               </button>
@@ -416,66 +431,73 @@ export default function OnboardingWizard() {
               services: { nameLabel: 'Business Name', namePlaceholder: 'e.g. FixIt Services', secondLabel: 'Services', secondPlaceholder: 'AC Repair, Plumbing...' },
             };
             const labels = labelMap[selectedBusinessType] || labelMap.food_beverage;
+            const inputClass =
+              'w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/30';
             return (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-white">Business Details</h2>
-              <p className="text-white/40 text-sm">Tell us about your business</p>
+              <h2 className="text-lg font-semibold">Business Details</h2>
+              <p className="text-sm text-muted-foreground">Tell us about your business</p>
 
               <div>
-                <label className="block text-sm text-white/60 mb-1">{labels.nameLabel} *</label>
+                <label className="mb-1 block text-sm text-muted-foreground">{labels.nameLabel} *</label>
                 <input
                   type="text"
                   value={restaurant.name}
                   onChange={(e) => handleNameChange(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 outline-none"
+                  className={inputClass}
                   placeholder={labels.namePlaceholder}
                 />
               </div>
 
               <div>
-                <label className="block text-sm text-white/60 mb-1">URL Slug</label>
+                <label className="mb-1 block text-sm text-muted-foreground">URL Slug</label>
                 <div className="flex items-center gap-2">
-                  <span className="text-white/30 text-sm shrink-0">{origin}/</span>
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground sm:text-sm">{origin}/</span>
                   <input
                     type="text"
                     value={restaurant.slug}
                     onChange={(e) => setRestaurant({ ...restaurant, slug: e.target.value })}
-                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none"
+                    className={`${inputClass} font-mono`}
                     placeholder="my-business"
                   />
                 </div>
+                {restaurant.slug && (
+                  <p className="mt-1.5 break-all font-mono text-xs text-muted-foreground">
+                    Preview: {origin}/{restaurant.slug}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm text-white/60 mb-1">Phone</label>
+                  <label className="mb-1 block text-sm text-muted-foreground">Phone</label>
                   <input
                     type="tel"
                     value={restaurant.phone}
                     onChange={(e) => setRestaurant({ ...restaurant, phone: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none"
+                    className={`${inputClass} font-mono tabular-nums`}
                     placeholder="+91..."
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-white/60 mb-1">{labels.secondLabel}</label>
+                  <label className="mb-1 block text-sm text-muted-foreground">{labels.secondLabel}</label>
                   <input
                     type="text"
                     value={restaurant.cuisine}
                     onChange={(e) => setRestaurant({ ...restaurant, cuisine: e.target.value })}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none"
+                    className={inputClass}
                     placeholder={labels.secondPlaceholder}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm text-white/60 mb-1">Address</label>
+                <label className="mb-1 block text-sm text-muted-foreground">Address</label>
                 <input
                   type="text"
                   value={restaurant.address}
                   onChange={(e) => setRestaurant({ ...restaurant, address: e.target.value })}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none"
+                  className={inputClass}
                   placeholder="123 Main St, City"
                 />
               </div>
@@ -483,14 +505,14 @@ export default function OnboardingWizard() {
               <div className="flex gap-3">
                 <button
                   onClick={() => { setError(''); setStep(0); }}
-                  className="px-6 bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
+                  className="rounded-lg border border-border bg-background px-6 py-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
                   ← Back
                 </button>
                 <button
                   onClick={handleCreateRestaurant}
                   disabled={loading || !restaurant.name}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
+                  className="stamp flex-1 rounded-lg bg-primary py-2.5 font-medium text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50"
                 >
                   {loading ? 'Creating...' : 'Continue →'}
                 </button>
@@ -502,8 +524,8 @@ export default function OnboardingWizard() {
           {/* Step 2: WhatsApp Config */}
           {step === 2 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-white">Connect WhatsApp</h2>
-              <p className="text-white/40 text-sm">
+              <h2 className="text-lg font-semibold">Connect WhatsApp</h2>
+              <p className="text-sm text-muted-foreground">
                 Connect your WhatsApp Business number so customers can message you directly.
               </p>
 
@@ -534,7 +556,7 @@ export default function OnboardingWizard() {
                             if (result.error) {
                               setError(result.error);
                             } else {
-                              toast.success('WhatsApp connected! 🎉');
+                              toast.success('WhatsApp connected!');
                               setStep(3);
                             }
                           })
@@ -559,12 +581,12 @@ export default function OnboardingWizard() {
                   );
                 }}
                 disabled={loading}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="stamp flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-3 font-medium text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50"
               >
-                {loading ? 'Connecting...' : '🟢 Connect with WhatsApp'}
+                {loading ? 'Connecting...' : 'Connect with WhatsApp'}
               </button>
 
-              <div className="flex items-center justify-center gap-3 text-xs text-white/30">
+              <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
                 <span>✓ One-click setup</span>
                 <span>•</span>
                 <span>✓ Uses your existing number</span>
@@ -572,53 +594,53 @@ export default function OnboardingWizard() {
 
               {/* Manual Entry (collapsible) */}
               <details className="group">
-                <summary className="text-xs text-white/30 cursor-pointer hover:text-white/50 transition-colors">
+                <summary className="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground">
                   ▸ Advanced: Enter credentials manually
                 </summary>
                 <div className="mt-3 space-y-3">
                   <div>
-                    <label className="block text-sm text-white/60 mb-1">Phone Number ID *</label>
+                    <label className="mb-1 block text-sm text-muted-foreground">Phone Number ID *</label>
                     <input
                       type="text"
                       value={whatsapp.whatsapp_phone_id}
                       onChange={(e) => setWhatsApp({ ...whatsapp, whatsapp_phone_id: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none font-mono text-sm"
+                      className="w-full rounded-lg border border-input bg-background px-4 py-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/30"
                       placeholder="1234567890"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-white/60 mb-1">Access Token *</label>
+                    <label className="mb-1 block text-sm text-muted-foreground">Access Token *</label>
                     <input
                       type="password"
                       value={whatsapp.whatsapp_token}
                       onChange={(e) => setWhatsApp({ ...whatsapp, whatsapp_token: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none font-mono text-sm"
+                      className="w-full rounded-lg border border-input bg-background px-4 py-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/30"
                       placeholder="EAAxx..."
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-white/60 mb-1">WABA ID (optional)</label>
+                    <label className="mb-1 block text-sm text-muted-foreground">WABA ID (optional)</label>
                     <input
                       type="text"
                       value={whatsapp.whatsapp_business_id}
                       onChange={(e) => setWhatsApp({ ...whatsapp, whatsapp_business_id: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-white/20 focus:ring-2 focus:ring-emerald-500/50 outline-none font-mono text-sm"
+                      className="w-full rounded-lg border border-input bg-background px-4 py-2.5 font-mono text-sm text-foreground outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/30"
                       placeholder="1234567890"
                     />
                   </div>
                   <button
                     onClick={handleWhatsAppConfig}
                     disabled={loading}
-                    className="w-full bg-emerald-500/80 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
+                    className="stamp w-full rounded-lg bg-primary py-2.5 font-medium text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50"
                   >
                     {loading ? 'Saving...' : 'Save & Continue →'}
                   </button>
                 </div>
               </details>
 
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-300">
-                <strong>Webhook URL:</strong>
-                <code className="block mt-1 text-xs text-emerald-400/70 break-all">
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+                <strong className="text-primary">Webhook URL:</strong>
+                <code className="mt-1 block break-all font-mono text-xs text-muted-foreground">
                   {origin}/api/webhooks/whatsapp
                 </code>
               </div>
@@ -626,13 +648,13 @@ export default function OnboardingWizard() {
               <div className="flex gap-3">
                 <button
                   onClick={() => { setError(''); setStep(1); }}
-                  className="px-6 bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
+                  className="rounded-lg border border-border bg-background px-6 py-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
                   ← Back
                 </button>
                 <button
                   onClick={() => setStep(3)}
-                  className="flex-1 bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
+                  className="flex-1 rounded-lg border border-border bg-background py-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
                   Skip for now — configure later
                 </button>
@@ -646,39 +668,39 @@ export default function OnboardingWizard() {
             const terms = config.terms;
             return (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-white">{terms.setupCatalog}</h2>
-              <p className="text-white/40 text-sm">{terms.setupCatalogDesc}</p>
+              <h2 className="text-lg font-semibold">{terms.setupCatalog}</h2>
+              <p className="text-sm text-muted-foreground">{terms.setupCatalogDesc}</p>
 
               <div
                 onClick={() => setAddSampleMenu(true)}
-                className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                className={`cursor-pointer rounded-xl border p-4 transition-all ${
                   addSampleMenu
-                    ? 'border-emerald-500 bg-emerald-500/10'
-                    : 'border-white/10 bg-white/5 hover:border-white/20'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border bg-background hover:border-primary/30 hover:bg-secondary'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-4 h-4 rounded-full border-2 ${addSampleMenu ? 'border-emerald-500 bg-emerald-500' : 'border-white/20'}`} />
+                  <div className={`h-4 w-4 rounded-full border-2 ${addSampleMenu ? 'border-primary bg-primary' : 'border-border'}`} />
                   <div>
-                    <div className="text-white font-medium">Start with sample {terms.catalog.toLowerCase()}</div>
-                    <div className="text-white/40 text-sm">Sample categories & items pre-configured — edit anytime</div>
+                    <div className="font-medium">Start with sample {terms.catalog.toLowerCase()}</div>
+                    <div className="text-sm text-muted-foreground">Sample categories & items pre-configured — edit anytime</div>
                   </div>
                 </div>
               </div>
 
               <div
                 onClick={() => setAddSampleMenu(false)}
-                className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                className={`cursor-pointer rounded-xl border p-4 transition-all ${
                   !addSampleMenu
-                    ? 'border-emerald-500 bg-emerald-500/10'
-                    : 'border-white/10 bg-white/5 hover:border-white/20'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border bg-background hover:border-primary/30 hover:bg-secondary'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-4 h-4 rounded-full border-2 ${!addSampleMenu ? 'border-emerald-500 bg-emerald-500' : 'border-white/20'}`} />
+                  <div className={`h-4 w-4 rounded-full border-2 ${!addSampleMenu ? 'border-primary bg-primary' : 'border-border'}`} />
                   <div>
-                    <div className="text-white font-medium">I&apos;ll add my own {terms.catalog.toLowerCase()}</div>
-                    <div className="text-white/40 text-sm">Set up from scratch in the dashboard</div>
+                    <div className="font-medium">I&apos;ll add my own {terms.catalog.toLowerCase()}</div>
+                    <div className="text-sm text-muted-foreground">Set up from scratch in the dashboard</div>
                   </div>
                 </div>
               </div>
@@ -686,14 +708,14 @@ export default function OnboardingWizard() {
               <div className="flex gap-3">
                 <button
                   onClick={() => { setError(''); setStep(2); }}
-                  className="px-6 bg-white/5 hover:bg-white/10 text-white/60 py-2.5 rounded-lg transition-colors"
+                  className="rounded-lg border border-border bg-background px-6 py-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
                   ← Back
                 </button>
                 <button
                   onClick={handleMenuSetup}
                   disabled={loading}
-                  className="flex-1 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition-colors"
+                  className="stamp flex-1 rounded-lg bg-primary py-2.5 font-medium text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50"
                 >
                   {loading ? 'Setting up...' : 'Continue →'}
                 </button>
@@ -707,28 +729,28 @@ export default function OnboardingWizard() {
             const config = getBusinessTypeConfig(selectedBusinessType);
             const terms = config.terms;
             return (
-            <div className="text-center space-y-4 py-4">
-              <div className="text-5xl mb-4">🚀</div>
-              <h2 className="text-2xl font-bold text-white">You&apos;re all set!</h2>
-              <p className="text-white/50">
+            <div className="space-y-4 py-4 text-center">
+              <div className="text-5xl">🚀</div>
+              <h2 className="text-2xl font-bold">You&apos;re all set!</h2>
+              <p className="text-muted-foreground">
                 Your AI assistant is ready. Head to your dashboard to {terms.launchSubtext}.
               </p>
 
-              <div className="bg-white/5 rounded-xl p-4 text-left space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-emerald-400">
+              <div className="rounded-xl border border-border bg-background p-4 text-left text-sm">
+                <div className="flex items-center gap-2 text-success">
                   <span>✅</span> Business profile created ({config.label})
                 </div>
-                <div className="flex items-center gap-2 text-emerald-400">
+                <div className="flex items-center gap-2 text-success">
                   <span>✅</span> WhatsApp assistant configured
                 </div>
-                <div className="flex items-center gap-2 text-emerald-400">
+                <div className="flex items-center gap-2 text-success">
                   <span>✅</span> {addSampleMenu ? terms.sampleAddedText : `Ready for ${terms.catalog.toLowerCase()} setup`}
                 </div>
-                <div className="flex items-center gap-2 text-emerald-400">
+                <div className="flex items-center gap-2 text-success">
                   <span>✅</span> AI persona active
                 </div>
                 {trialActivated && (
-                  <div className="flex items-center gap-2 text-amber-400">
+                  <div className="flex items-center gap-2 text-warning">
                     <span>⭐</span> Starter plan trial active (14 days)
                   </div>
                 )}
@@ -736,7 +758,7 @@ export default function OnboardingWizard() {
 
               <button
                 onClick={handleLaunch}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg transition-colors text-lg"
+                className="stamp w-full rounded-lg bg-primary py-3 text-lg font-semibold text-primary-foreground transition-all hover:opacity-90"
               >
                 Go to Dashboard →
               </button>
@@ -746,7 +768,7 @@ export default function OnboardingWizard() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-white/20 text-xs mt-6">
+        <p className="mt-6 text-center font-mono text-xs text-muted-foreground tabular-nums">
           Step {step + 1} of {steps.length} • AssistMint
         </p>
       </div>

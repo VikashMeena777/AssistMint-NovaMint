@@ -5,6 +5,7 @@ import { fetchStaff, addStaff, editStaff, removeStaff } from '@/lib/actions/appo
 import type { StaffMember } from '@/lib/services/appointment-service';
 import { toast } from 'sonner';
 import { Plus, X, Pencil, Trash2, User, Phone, Star } from 'lucide-react';
+import { EmptyState } from '@/components/dashboard/empty-state';
 
 import { getCurrentRestaurant } from '@/lib/actions/restaurant-actions';
 import { getBusinessTypeConfig } from '@/lib/utils/business-types';
@@ -69,16 +70,16 @@ export default function StaffPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{terms.staffTitle}</h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <h1 className="text-xl font-semibold tracking-tight">{terms.staffTitle}</h1>
+          <p className="text-sm text-muted-foreground">
             Manage your team members and schedule
           </p>
         </div>
         <button
           onClick={() => { setEditingId(null); setShowForm(true); }}
-          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl font-medium hover:opacity-90 transition-opacity"
+          className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-all"
         >
           <Plus className="w-4 h-4" />
           Add {terms.staff}
@@ -99,23 +100,24 @@ export default function StaffPage() {
       ) : loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-40 rounded-2xl bg-card animate-pulse" />
+            <div key={i} className="h-40 rounded-2xl border border-border/50 bg-card animate-pulse" />
           ))}
         </div>
       ) : staff.length === 0 ? (
-        <div className="text-center py-16 bg-card border border-border/50 rounded-2xl">
-          <div className="text-4xl mb-3">👥</div>
-          <p className="text-lg font-medium mb-1">No staff members yet</p>
-          <p className="text-muted-foreground text-sm mb-4">
-            Add your team to assign them to appointments
-          </p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="text-sm text-primary hover:underline"
-          >
-            + Add your first staff member
-          </button>
-        </div>
+        <EmptyState
+          icon={User}
+          title="No staff members yet"
+          description="Add your team to assign them to appointments."
+          action={
+            <button
+              onClick={() => setShowForm(true)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform duration-150 ease-out hover:-translate-y-0.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add your first staff member →
+            </button>
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {staff.map((member) => (
@@ -179,7 +181,7 @@ function StaffCard({
           </button>
           <button
             onClick={onDelete}
-            className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400"
+            className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive"
             title="Remove"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -225,6 +227,15 @@ function StaffFormModal({
   });
   const [saving, setSaving] = useState(false);
 
+  // Close on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const handleSubmit = async () => {
     if (!form.name.trim()) {
       toast.error('Name is required');
@@ -265,8 +276,13 @@ function StaffFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md">
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-xl">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold">
             {isEditing ? 'Edit Staff' : 'Add Staff Member'}

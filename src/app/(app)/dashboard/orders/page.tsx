@@ -28,6 +28,8 @@ import {
 import { toast } from "sonner";
 import { getOrders, updateOrderStatus, getOrderStats, exportOrdersCsv } from "@/lib/actions/order-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
+import { StatusPill, orderStatusTone, paymentStatusTone } from "@/components/dashboard/status-pill";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 const ORDER_TABS = [
   { id: "all", label: "All Orders", icon: ShoppingCart },
@@ -38,16 +40,6 @@ const ORDER_TABS = [
   { id: "delivered", label: "Delivered", icon: Truck },
   { id: "cancelled", label: "Cancelled", icon: XCircle },
 ] as const;
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-amber-500/10 text-amber-600",
-  confirmed: "bg-blue-500/10 text-blue-600",
-  preparing: "bg-purple-500/10 text-purple-600",
-  ready: "bg-emerald-500/10 text-emerald-600",
-  out_for_delivery: "bg-cyan-500/10 text-cyan-600",
-  delivered: "bg-emerald-600/10 text-emerald-700",
-  cancelled: "bg-red-500/10 text-red-600",
-};
 
 import { useRouter } from "next/navigation";
 import { getBusinessTypeConfig } from "@/lib/utils/business-types";
@@ -132,8 +124,10 @@ export default function OrdersPage() {
     void (async () => {
       if (restaurantId) loadOrders();
     })();
+    // Auto-refresh every 30 seconds — paused while the tab is hidden
+    // so background tabs stop hitting the server
     const interval = setInterval(() => {
-      if (restaurantId) loadOrders();
+      if (restaurantId && !document.hidden) loadOrders();
     }, 30000);
     return () => clearInterval(interval);
   }, [restaurantId, loadOrders]);
@@ -220,11 +214,11 @@ export default function OrdersPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Orders</h1>
           <p className="text-sm text-muted-foreground">
             Track and manage all customer orders in real-time.
             {totalCount > 0 && (
-              <span className="ml-1 font-mono text-foreground">{totalCount} total</span>
+              <span className="ml-1 font-mono tabular-nums text-foreground">{totalCount} total</span>
             )}
           </p>
         </div>
@@ -233,8 +227,8 @@ export default function OrdersPage() {
             onClick={() => setShowFilters(!showFilters)}
             className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
               showFilters || hasActiveFilters
-                ? "border-primary/50 bg-primary/5 text-primary"
-                : "border-border/50 bg-card hover:bg-muted/50"
+                ? "border-primary/50 bg-primary/10 text-primary"
+                : "border-border/50 bg-card hover:bg-secondary"
             }`}
           >
             <Filter className="h-3.5 w-3.5" />
@@ -248,7 +242,7 @@ export default function OrdersPage() {
           <button
             onClick={handleExportCsv}
             disabled={exporting || orders.length === 0}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/50 bg-card px-3 text-sm font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/50 bg-card px-3 text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50"
           >
             {exporting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -259,7 +253,7 @@ export default function OrdersPage() {
           </button>
           <button
             onClick={loadOrders}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/50 bg-card px-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border/50 bg-card px-3 text-sm font-medium hover:bg-secondary transition-colors"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
@@ -345,7 +339,7 @@ export default function OrdersPage() {
             <tab.icon className="h-3.5 w-3.5" />
             {tab.label}
             {stats[tab.id] ? (
-              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary">
                 {stats[tab.id]}
               </span>
             ) : null}
@@ -397,27 +391,28 @@ export default function OrdersPage() {
             ))}
           </div>
         ) : orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 mb-6">
-              <ShoppingCart className="h-9 w-9 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">No orders found</h3>
-            <p className="mt-2 text-sm text-muted-foreground max-w-md">
-              {hasActiveFilters
+          <EmptyState
+            icon={ShoppingCart}
+            title="No orders found"
+            description={
+              hasActiveFilters
                 ? "No orders match your filters. Try adjusting the date range or clearing filters."
                 : activeTab !== "all"
-                ? `No ${activeTab} orders right now.`
-                : "Orders will appear here once your WhatsApp bot starts receiving them."}
-            </p>
-            {hasActiveFilters && (
-              <button
-                onClick={clearFilters}
-                className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
-              >
-                Clear Filters
-              </button>
-            )}
-          </div>
+                ? `No ${activeTab.replace("_", " ")} orders right now.`
+                : "Orders will appear here once your WhatsApp bot starts receiving them."
+            }
+            action={
+              hasActiveFilters ? (
+                <button
+                  onClick={clearFilters}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform duration-150 ease-out hover:-translate-y-0.5"
+                >
+                  Clear Filters
+                </button>
+              ) : undefined
+            }
+            className="m-4"
+          />
         ) : (
           <div className={`divide-y divide-border/50 ${refreshing ? "opacity-60 pointer-events-none" : ""}`}>
             {orders.map((order) => {
@@ -436,7 +431,7 @@ export default function OrdersPage() {
                 <div key={order.id} className="transition-colors">
                   {/* Order Summary Row */}
                   <div
-                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-muted/20 cursor-pointer gap-3"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 hover:bg-secondary/60 cursor-pointer gap-3"
                     onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
                   >
                     <div className="flex items-center gap-4 min-w-0">
@@ -478,27 +473,17 @@ export default function OrdersPage() {
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap pl-14 sm:pl-0">
-                      <p className="text-sm font-semibold">
+                      <p className="text-sm font-semibold font-mono tabular-nums">
                         ₹{((order.total || 0) / 100).toLocaleString("en-IN")}
                       </p>
                       {order.payment_status && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                            order.payment_status === "paid"
-                              ? "bg-emerald-500/10 text-emerald-600"
-                              : order.payment_status === "cod_pending"
-                              ? "bg-orange-500/10 text-orange-600"
-                              : "bg-yellow-500/10 text-yellow-600"
-                          }`}
-                        >
-                          {order.payment_status === "paid" ? "💳 Paid" : order.payment_status === "cod_pending" ? "💵 COD" : "⏳ Unpaid"}
-                        </span>
+                        <StatusPill tone={paymentStatusTone(order.payment_status)}>
+                          {order.payment_status === "paid" ? "Paid" : order.payment_status === "cod_pending" ? "COD" : "Unpaid"}
+                        </StatusPill>
                       )}
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${STATUS_COLORS[order.status] || "bg-muted text-muted-foreground"}`}
-                      >
+                      <StatusPill tone={orderStatusTone(order.status)}>
                         {order.status?.replace("_", " ")}
-                      </span>
+                      </StatusPill>
                       {next && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, next); }}
@@ -515,7 +500,8 @@ export default function OrdersPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, "cancelled"); }}
                           disabled={updatingOrder === order.id}
-                          className="inline-flex h-8 items-center rounded-lg border border-red-200 px-2.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                          className="inline-flex h-8 items-center rounded-lg border border-destructive/30 px-2.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Cancel order"
                         >
                           <XCircle className="h-3 w-3" />
                         </button>
@@ -580,14 +566,14 @@ export default function OrdersPage() {
                               </div>
                             )}
                             {(order.discount || 0) > 0 && (
-                              <div className="flex justify-between text-xs text-emerald-600">
+                              <div className="flex justify-between text-xs text-success">
                                 <span>Discount</span>
-                                <span>-₹{((order.discount || 0) / 100).toLocaleString("en-IN")}</span>
+                                <span className="tabular-nums">-₹{((order.discount || 0) / 100).toLocaleString("en-IN")}</span>
                               </div>
                             )}
                             <div className="flex justify-between text-sm font-bold pt-1 border-t border-border/30">
                               <span>Total</span>
-                              <span>₹{((order.total || 0) / 100).toLocaleString("en-IN")}</span>
+                              <span className="font-mono tabular-nums">₹{((order.total || 0) / 100).toLocaleString("en-IN")}</span>
                             </div>
                           </div>
                         </div>
@@ -643,10 +629,10 @@ export default function OrdersPage() {
                               <p>
                                 <span className="text-muted-foreground">Status:</span>{" "}
                                 <span className={`font-semibold ${
-                                  order.payment_status === "paid" ? "text-emerald-600" :
-                                  order.payment_status === "cod_pending" ? "text-orange-600" : "text-yellow-600"
+                                  order.payment_status === "paid" ? "text-success" :
+                                  order.payment_status === "cod_pending" ? "text-warning" : "text-warning"
                                 }`}>
-                                  {order.payment_status === "paid" ? "Paid ✅" : order.payment_status === "cod_pending" ? "COD — Collect on Delivery" : "Pending"}
+                                  {order.payment_status === "paid" ? "Paid" : order.payment_status === "cod_pending" ? "COD — Collect on Delivery" : "Pending"}
                                 </span>
                               </p>
                               {order.cashfree_order_id && (
@@ -670,7 +656,7 @@ export default function OrdersPage() {
                               {order.preparing_at && <p>Preparing: {new Date(order.preparing_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
                               {order.ready_at && <p>Ready: {new Date(order.ready_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
                               {order.delivered_at && <p>Delivered: {new Date(order.delivered_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
-                              {order.cancelled_at && <p className="text-red-500">Cancelled: {new Date(order.cancelled_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
+                              {order.cancelled_at && <p className="text-destructive">Cancelled: {new Date(order.cancelled_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>}
                             </div>
                           </div>
 

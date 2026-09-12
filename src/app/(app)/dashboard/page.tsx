@@ -8,6 +8,7 @@ import Link from "next/link";
 import DashboardCharts from "@/components/dashboard/dashboard-charts";
 import { DashboardStatsGrid, RecentOrdersList } from "@/components/dashboard/dashboard-motion";
 import InsightsPanel from "@/components/dashboard/insights-panel";
+import { EmptyState, EmptyStateLink } from "@/components/dashboard/empty-state";
 
 export const metadata = {
   title: "Dashboard",
@@ -52,79 +53,92 @@ export default async function DashboardPage() {
   if (restaurantId) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
-    // Today's orders count
-    const { count: orderCount } = await supabase
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("restaurant_id", restaurantId)
-      .gte("created_at", today.toISOString());
-    todayOrders = orderCount || 0;
-
-    // Today's revenue
-    const { data: deliveredOrders } = await supabase
-      .from("orders")
-      .select("total")
-      .eq("restaurant_id", restaurantId)
-      .eq("status", "delivered")
-      .gte("created_at", today.toISOString());
-    todayRevenue = (deliveredOrders || []).reduce(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (sum: number, o: any) => sum + (o.total || 0),
-      0
-    );
-
-    // Active conversations (last 24 hours)
     const yesterday = new Date(new Date().getTime() - 86400000);
-    const { count: chatCount } = await supabase
-      .from("conversations")
-      .select("*", { count: "exact", head: true })
-      .eq("restaurant_id", restaurantId)
-      .gte("updated_at", yesterday.toISOString());
-    activeChats = chatCount || 0;
 
-    // Total customers
-    const { count: custCount } = await supabase
-      .from("customers")
-      .select("*", { count: "exact", head: true })
-      .eq("restaurant_id", restaurantId);
-    totalCustomers = custCount || 0;
-
-    // Recent orders (top 5)
-    const { data: orders } = await supabase
-      .from("orders")
-      .select("*, customers(saved_name, whatsapp_name, phone)")
-      .eq("restaurant_id", restaurantId)
-      .order("created_at", { ascending: false })
-      .limit(5);
-    recentOrders = orders || [];
-
-    // Setup checks
-    const { count: menuCount } = await supabase
-      .from("menu_items")
-      .select("*", { count: "exact", head: true })
-      .eq("restaurant_id", restaurantId);
-    hasMenu = (menuCount || 0) > 0;
-    hasWhatsApp = !!(restaurant as Record<string, unknown>)?.whatsapp_phone_id;
-
-    // Fetch last 7 days of orders & chats for dashboard charts
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    const { data: last7DaysOrders } = await supabase
-      .from("orders")
-      .select("created_at, total, status")
-      .eq("restaurant_id", restaurantId)
-      .gte("created_at", sevenDaysAgo.toISOString())
-      .order("created_at", { ascending: true });
+    // All independent queries run in parallel — this page loads in one
+    // round-trip window instead of eight sequential awaits.
+    const [
+      orderCountRes,
+      deliveredOrdersRes,
+      chatCountRes,
+      custCountRes,
+      ordersRes,
+      menuCountRes,
+      last7DaysOrdersRes,
+      last7DaysChatsRes,
+    ] = await Promise.all([
+      // Today's orders count
+      supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .eq("restaurant_id", restaurantId)
+        .gte("created_at", today.toISOString()),
+      // Today's revenue (delivered only)
+      supabase
+        .from("orders")
+        .select("total")
+        .eq("restaurant_id", restaurantId)
+        .eq("status", "delivered")
+        .gte("created_at", today.toISOString()),
+      // Active conversations (last 24 hours)
+      supabase
+        .from("conversations")
+        .select("*", { count: "exact", head: true })
+        .eq("restaurant_id", restaurantId)
+        .gte("updated_at", yesterday.toISOString()),
+      // Total customers
+      supabase
+        .from("customers")
+        .select("*", { count: "exact", head: true })
+        .eq("restaurant_id", restaurantId),
+      // Recent orders (top 5) — only the columns the list renders
+      supabase
+        .from("orders")
+        .select(
+          "id, order_number, total, status, created_at, customers(saved_name, whatsapp_name, phone)"
+        )
+        .eq("restaurant_id", restaurantId)
+        .order("created_at", { ascending: false })
+        .limit(5),
+      // Setup checks
+      supabase
+        .from("menu_items")
+        .select("*", { count: "exact", head: true })
+        .eq("restaurant_id", restaurantId),
+      // Last 7 days of orders for charts
+      supabase
+        .from("orders")
+        .select("created_at, total, status")
+        .eq("restaurant_id", restaurantId)
+        .gte("created_at", sevenDaysAgo.toISOString())
+        .order("created_at", { ascending: true }),
+      // Last 7 days of chats for charts
+      supabase
+        .from("conversations")
+        .select("updated_at")
+        .eq("restaurant_id", restaurantId)
+        .gte("updated_at", sevenDaysAgo.toISOString())
+        .order("updated_at", { ascending: true }),
+    ]);
 
-    const { data: last7DaysChats } = await supabase
-      .from("conversations")
-      .select("updated_at")
-      .eq("restaurant_id", restaurantId)
-      .gte("updated_at", sevenDaysAgo.toISOString())
-      .order("updated_at", { ascending: true });
+    todayOrders = orderCountRes.count || 0;
+    todayRevenue = (deliveredOrdersRes.data || []).reduce(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (sum: number, o: any) => sum + (o.total || 0),
+      0
+    );
+    activeChats = chatCountRes.count || 0;
+    totalCustomers = custCountRes.count || 0;
+    recentOrders = ordersRes.data || [];
+    hasMenu = (menuCountRes.count || 0) > 0;
+    hasWhatsApp = !!(restaurant as Record<string, unknown>)?.whatsapp_phone_id;
+
+    const last7DaysOrders = last7DaysOrdersRes.data || [];
+    const last7DaysChats = last7DaysChatsRes.data || [];
 
     // Process last 7 days metrics
     chartData = Array.from({ length: 7 }).map((_, i) => {
@@ -238,8 +252,8 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       {/* Header */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">
-          Welcome back, {displayName} 👋
+        <h1 className="text-xl font-semibold tracking-tight">
+          Welcome back, {displayName}
         </h1>
         <p className="text-sm text-muted-foreground">
           Here&apos;s what&apos;s happening at your business today.
@@ -290,7 +304,7 @@ export default async function DashboardPage() {
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm"
               >
                 {item.done ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
                 ) : (
                   <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 shrink-0" />
                 )}
@@ -335,25 +349,20 @@ export default async function DashboardPage() {
         {recentOrders.length > 0 ? (
           <RecentOrdersList recentOrders={recentOrders} />
         ) : (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted mb-4">
-              <ShoppingCart className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <h3 className="text-sm font-semibold">
-              {isCartBusiness ? "No orders yet" : "No appointments yet"}
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground max-w-xs">
-              {isCartBusiness
+          <EmptyState
+            icon={ShoppingCart}
+            title={isCartBusiness ? "No orders yet" : "No appointments yet"}
+            description={
+              isCartBusiness
                 ? "Orders will appear here once your WhatsApp bot is live and customers start ordering."
-                : "Bookings will appear here once your WhatsApp bot is live and clients start booking."}
-            </p>
-            <Link
-              href="/dashboard/settings"
-              className="mt-4 inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
-            >
-              Complete Setup
-            </Link>
-          </div>
+                : "Bookings will appear here once your WhatsApp bot is live and clients start booking."
+            }
+            action={
+              <EmptyStateLink href="/dashboard/settings">
+                Complete Setup →
+              </EmptyStateLink>
+            }
+          />
         )}
       </div>
     </div>

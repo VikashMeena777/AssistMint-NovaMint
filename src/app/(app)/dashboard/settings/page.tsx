@@ -187,23 +187,48 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="h-8 w-48 animate-pulse rounded-lg bg-muted" />
-        <div className="h-64 animate-pulse rounded-2xl bg-muted" />
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-7 w-28 animate-pulse rounded-lg bg-muted" />
+            <div className="h-4 w-72 animate-pulse rounded-lg bg-muted" />
+          </div>
+          <div className="h-10 w-32 animate-pulse rounded-xl bg-muted" />
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+          <div className="space-y-2">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" />
+            ))}
+          </div>
+          <div className="lg:col-span-3 space-y-4">
+            <div className="rounded-2xl border border-border/50 bg-card p-6 space-y-4">
+              <div className="h-5 w-36 animate-pulse rounded bg-muted" />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="h-4 w-28 animate-pulse rounded bg-muted" />
+                  <div className="h-10 animate-pulse rounded-xl bg-muted" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!restaurant) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <Store className="h-12 w-12 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold">No restaurant found</h2>
-        <p className="text-sm text-muted-foreground mt-1 mb-4">
-          Complete onboarding to set up your restaurant.
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 py-20 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
+          <Store className="h-7 w-7" strokeWidth={1.75} />
+        </div>
+        <h2 className="mt-4 text-base font-semibold">No business found</h2>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          Complete onboarding to set up your business.
         </p>
         <Link
           href="/onboarding"
-          className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+          className="mt-5 inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform duration-150 ease-out hover:-translate-y-0.5"
         >
           Complete Setup →
         </Link>
@@ -215,7 +240,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
           <p className="text-sm text-muted-foreground">
             Configure your business, WhatsApp bot, and integrations.
           </p>
@@ -224,7 +249,7 @@ export default function SettingsPage() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 disabled:opacity-50 transition-all animate-in fade-in zoom-in-95 duration-200"
+            className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50 transition-all animate-in fade-in zoom-in-95 duration-200"
           >
             {saving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -497,8 +522,8 @@ function RestaurantSettings({
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                       isClosed
-                        ? "bg-red-500/10 text-red-500 border border-red-500/20"
-                        : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                        ? "bg-destructive/10 text-destructive border border-destructive/25"
+                        : "bg-success/10 text-success border border-success/25"
                     }`}
                   >
                     {isClosed ? "Closed" : "Open"}
@@ -563,11 +588,11 @@ function WhatsAppSettings({
 
   // Animated connecting steps
   const CONNECT_STEPS = [
-    { icon: Shield, label: 'Authenticating with Meta', color: 'text-blue-400' },
-    { icon: Zap, label: 'Exchanging access token', color: 'text-amber-400' },
-    { icon: Webhook, label: 'Subscribing to webhooks', color: 'text-purple-400' },
-    { icon: PhoneCall, label: 'Registering phone number', color: 'text-cyan-400' },
-    { icon: CheckCircle2, label: 'Connected! Bot is live', color: 'text-emerald-400' },
+    { icon: Shield, label: 'Authenticating with Meta', color: 'text-primary' },
+    { icon: Zap, label: 'Exchanging access token', color: 'text-warning' },
+    { icon: Webhook, label: 'Subscribing to webhooks', color: 'text-primary' },
+    { icon: PhoneCall, label: 'Registering phone number', color: 'text-primary' },
+    { icon: CheckCircle2, label: 'Connected! Bot is live', color: 'text-success' },
   ];
 
   // Auto-progress connecting steps for visual feedback
@@ -877,8 +902,8 @@ function WhatsAppSettings({
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <h3 className="text-base font-semibold text-emerald-600 dark:text-emerald-400">WhatsApp Connected</h3>
+                  <div className="h-2.5 w-2.5 rounded-full bg-success animate-pulse" />
+                  <h3 className="text-base font-semibold text-success">WhatsApp Connected</h3>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Your bot is live and responding to messages.
@@ -908,15 +933,15 @@ function WhatsAppSettings({
           /* ── Rich Connecting Animation Overlay ── */
           <div className="py-6 px-2">
             <div className="text-center mb-8">
-              {/* Animated WhatsApp icon with pulse ring */}
+              {/* Animated icon with pulse ring */}
               <div className="relative mx-auto mb-4 h-16 w-16">
-                <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping" />
-                <div className="absolute inset-1 rounded-full bg-emerald-500/10 animate-pulse" />
-                <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-xl shadow-emerald-500/30">
-                  <MessageSquare className="h-7 w-7 text-white" />
+                <div className="absolute inset-0 rounded-full bg-primary/15 animate-ping" />
+                <div className="absolute inset-1 rounded-full bg-primary/10 animate-pulse" />
+                <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-primary shadow-md">
+                  <MessageSquare className="h-7 w-7 text-primary-foreground" />
                 </div>
               </div>
-              <h3 className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              <h3 className="text-lg font-bold">
                 Setting Up Your Bot
               </h3>
               <p className="text-xs text-muted-foreground mt-1">
@@ -938,19 +963,19 @@ function WhatsAppSettings({
                       isActive
                         ? 'bg-primary/10 border border-primary/20 scale-[1.02]'
                         : isDone
-                        ? 'bg-emerald-500/5 border border-emerald-500/10'
+                        ? 'bg-success/5 border border-success/10'
                         : 'opacity-30 border border-transparent'
                     }`}
                   >
                     <div className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-500 ${
                       isDone
-                        ? 'bg-emerald-500/20'
+                        ? 'bg-success/20'
                         : isActive
                         ? 'bg-primary/20'
                         : 'bg-muted/30'
                     }`}>
                       {isDone ? (
-                        <Check className="h-4 w-4 text-emerald-500" />
+                        <Check className="h-4 w-4 text-success" />
                       ) : isActive ? (
                         <StepIcon className={`h-4 w-4 ${step.color} animate-pulse`} />
                       ) : (
@@ -958,7 +983,7 @@ function WhatsAppSettings({
                       )}
                     </div>
                     <span className={`text-sm font-medium transition-colors duration-500 ${
-                      isDone ? 'text-emerald-500' : isActive ? 'text-foreground' : 'text-muted-foreground'
+                      isDone ? 'text-success' : isActive ? 'text-foreground' : 'text-muted-foreground'
                     }`}>
                       {step.label}
                     </span>
@@ -974,7 +999,7 @@ function WhatsAppSettings({
             <div className="max-w-xs mx-auto mt-6">
               <div className="h-1.5 w-full rounded-full bg-muted/30 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-400 transition-all duration-1000 ease-out"
+                  className="h-full rounded-full bg-primary transition-all duration-1000 ease-out"
                   style={{ width: `${Math.min(((connectStep + 1) / CONNECT_STEPS.length) * 100, 100)}%` }}
                 />
               </div>
@@ -989,17 +1014,17 @@ function WhatsAppSettings({
           <>
             {/* Disconnected State */}
             <div className="text-center py-4">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
-                <MessageSquare className="h-6 w-6 text-emerald-500" />
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                <MessageSquare className="h-6 w-6 text-primary" />
               </div>
               <h3 className="text-base font-semibold mb-1">Connect Your WhatsApp</h3>
               <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-                One-click setup — no technical knowledge needed. Connect your restaurant&apos;s WhatsApp number.
+                One-click setup — no technical knowledge needed. Connect your business&apos;s WhatsApp number.
               </p>
               <button
                 onClick={handleConnect}
                 disabled={waitingForPopup}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-6 text-sm font-semibold text-white shadow-lg shadow-emerald-500/25 hover:bg-emerald-600 hover:scale-105 active:scale-95 disabled:opacity-70 disabled:cursor-wait transition-all"
+                className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait transition-all"
               >
                 {waitingForPopup ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1442,7 +1467,7 @@ function PaymentSettings({ restaurantId }: { restaurantId: string }) {
         <div className="flex items-center justify-between gap-4 mb-1">
           <h3 className="text-base font-semibold">Payment Integration</h3>
           <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-            isProduction ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" : "bg-blue-500/10 text-blue-600 border border-blue-500/20"
+            isProduction ? "bg-success/10 text-success border border-success/25" : "bg-primary/10 text-primary border border-primary/25"
           }`}>
             {isProduction ? "Production Mode" : "Sandbox / Test Mode"}
           </span>
@@ -1692,7 +1717,7 @@ function NotificationSettings({ restaurantId }: { restaurantId: string }) {
       </div>
 
       {/* Dashboard Real-time Info */}
-      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6">
+      <div className="rounded-2xl border border-success/30 bg-success/5 p-6">
         <h3 className="text-base font-semibold mb-1">🔊 Dashboard Sound Alerts</h3>
         <p className="text-sm text-muted-foreground">
           When you have the dashboard open, you&apos;ll automatically hear a chime notification and see a popup for every new order — no setup required.
@@ -2101,14 +2126,14 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
 
   const PLAN_COLORS: Record<PlanSlug, string> = {
     free: "border-border",
-    starter: "border-blue-500/50",
+    starter: "border-primary/50",
     growth: "border-primary/50",
     enterprise: "border-purple-500/50",
   };
 
   const PLAN_BADGE_COLORS: Record<PlanSlug, string> = {
     free: "bg-muted text-muted-foreground",
-    starter: "bg-blue-500/10 text-blue-600",
+    starter: "bg-primary/10 text-primary",
     growth: "bg-primary/10 text-primary",
     enterprise: "bg-purple-500/10 text-purple-600",
   };
@@ -2154,7 +2179,7 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
                   setPlan(refreshed);
                 }
               }}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-semibold text-white shadow-lg shadow-amber-500/25 hover:bg-amber-600 transition-all"
+              className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-warning px-5 text-sm font-semibold text-warning-foreground shadow-sm hover:opacity-90 transition-all"
             >
               <Sparkles className="h-4 w-4" />
               Start 14-Day Trial
@@ -2165,7 +2190,7 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
               onClick={() => {
                 document.getElementById("plan-comparison")?.scrollIntoView({ behavior: "smooth" });
               }}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 transition-all"
+              className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-all"
             >
               <ArrowUpRight className="h-4 w-4" />
               Upgrade Plan
@@ -2187,14 +2212,14 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
               <div key={item.key} className="space-y-1.5">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">{item.label}</span>
-                  <span className={`font-mono font-semibold ${isNearLimit ? "text-amber-500" : "text-foreground"}`}>
+                  <span className={`font-mono font-semibold ${isNearLimit ? "text-warning" : "text-foreground"}`}>
                     {item.used} / {formatLimit(item.limit)}
                   </span>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
-                      isUnlimited ? "bg-primary/30" : isNearLimit ? "bg-amber-500" : "bg-primary"
+                      isUnlimited ? "bg-primary/30" : isNearLimit ? "bg-warning" : "bg-primary"
                     }`}
                     style={{ width: isUnlimited ? "5%" : `${Math.max(percentage, 2)}%` }}
                   />
@@ -2226,7 +2251,7 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
           Annual
         </span>
         {billingCycle === "annual" && (
-          <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600">
+          <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-[10px] font-bold text-success">
             Save up to 17%
           </span>
         )}
@@ -2274,7 +2299,7 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
                     </div>
                   )}
                   {billingCycle === "annual" && savings > 0 && (
-                    <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                    <p className="text-[10px] text-success font-semibold mt-0.5">
                       Save ₹{savings.toLocaleString()}/year
                     </p>
                   )}
@@ -2316,7 +2341,7 @@ function BillingSection({ restaurantId }: { restaurantId: string }) {
                   <button
                     onClick={() => handleUpgrade(slug)}
                     disabled={upgrading === slug}
-                    className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 disabled:opacity-50 transition-all"
+                    className="stamp w-full h-10 inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50 transition-all"
                   >
                     {upgrading === slug ? (
                       <Loader2 className="h-4 w-4 animate-spin" />

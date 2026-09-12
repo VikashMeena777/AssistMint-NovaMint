@@ -7,11 +7,14 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { cache } from 'react';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
 
 // ─── Get Current Restaurant ─────────────────
 
-export async function getCurrentRestaurant() {
+// Per-request memoization: several server components/actions in one render
+// share a single Supabase round trip instead of one each.
+const getCurrentRestaurantCached = cache(async () => {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -23,6 +26,10 @@ export async function getCurrentRestaurant() {
     .single();
 
   return data as Record<string, unknown> | null;
+});
+
+export async function getCurrentRestaurant() {
+  return getCurrentRestaurantCached();
 }
 
 // ─── Create Restaurant (Onboarding) ─────────

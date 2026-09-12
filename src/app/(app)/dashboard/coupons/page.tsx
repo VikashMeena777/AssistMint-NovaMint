@@ -25,6 +25,8 @@ import {
   toggleCouponActive,
 } from "@/lib/actions/coupon-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
+import { StatusPill } from "@/components/dashboard/status-pill";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyData = Record<string, any>;
@@ -191,9 +193,9 @@ export default function CouponsPage() {
   ).length;
 
   const statCards = [
-    { label: "Active", value: activeCoupons, color: "text-emerald-500" },
+    { label: "Active", value: activeCoupons, color: "text-success" },
     { label: "Total Used", value: totalRedemptions, color: "text-primary" },
-    { label: "Expired", value: expiredCoupons, color: "text-amber-500" },
+    { label: "Expired", value: expiredCoupons, color: "text-warning" },
     { label: "Total", value: coupons.length, color: "text-foreground" },
   ];
 
@@ -202,7 +204,7 @@ export default function CouponsPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Coupons</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Coupons</h1>
           <p className="text-sm text-muted-foreground">
             Create discount codes, flat offers, and promotional deals.
           </p>
@@ -211,13 +213,13 @@ export default function CouponsPage() {
           <button
             onClick={loadData}
             disabled={loading}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-muted transition-colors"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium hover:bg-secondary transition-colors"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 transition-all"
+            className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-all"
           >
             <Plus className="h-4 w-4" />
             Create Coupon
@@ -229,7 +231,7 @@ export default function CouponsPage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {statCards.map((stat) => (
           <div key={stat.label} className="rounded-xl border border-border/50 bg-card p-4">
-            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
+            <p className={`text-2xl font-bold font-mono tabular-nums ${stat.color}`}>{stat.value}</p>
             <p className="text-xs text-muted-foreground">{stat.label}</p>
           </div>
         ))}
@@ -428,7 +430,7 @@ export default function CouponsPage() {
             <button
               onClick={handleCreate}
               disabled={saving}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 disabled:opacity-50 transition-all"
+              className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50 transition-all"
             >
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -470,23 +472,20 @@ export default function CouponsPage() {
             ))}
           </div>
         ) : coupons.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center px-4 rounded-2xl border border-border/50 bg-card">
-            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 mb-6">
-              <Tag className="h-9 w-9 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">No coupons yet</h3>
-            <p className="mt-2 text-sm text-muted-foreground max-w-md">
-              Create discount coupons to attract customers. Supports percentage
-              off, flat discounts, and more.
-            </p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="mt-6 inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-90 transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              Create Your First Coupon
-            </button>
-          </div>
+          <EmptyState
+            icon={Tag}
+            title="No coupons yet"
+            description="Create discount coupons to attract customers. Supports percentage off, flat discounts, and more."
+            action={
+              <button
+                onClick={() => setShowCreate(true)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform duration-150 ease-out hover:-translate-y-0.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create your first coupon →
+              </button>
+            }
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {coupons.map((coupon) => {
@@ -497,8 +496,8 @@ export default function CouponsPage() {
               const statusColor = !coupon.is_active
                 ? "border-border/40 opacity-60"
                 : isExpired || isMaxedOut
-                ? "border-amber-500/30 bg-amber-500/5"
-                : "border-emerald-500/30 bg-emerald-500/5";
+                ? "border-warning/30 bg-warning/5"
+                : "border-success/30 bg-success/5";
 
               return (
                 <div
@@ -515,31 +514,23 @@ export default function CouponsPage() {
                         {coupon.code}
                       </span>
                       {copiedId === coupon.id ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-500" />
+                        <Check className="h-3.5 w-3.5 text-success" />
                       ) : (
                         <Copy className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                       )}
                     </button>
                     <div className="flex items-center gap-1">
                       {isExpired && (
-                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 uppercase">
-                          Expired
-                        </span>
+                        <StatusPill tone="warning">Expired</StatusPill>
                       )}
                       {isMaxedOut && !isExpired && (
-                        <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-600 uppercase">
-                          Maxed
-                        </span>
+                        <StatusPill tone="destructive">Maxed</StatusPill>
                       )}
                       {coupon.is_active && !isExpired && !isMaxedOut && (
-                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 uppercase">
-                          Active
-                        </span>
+                        <StatusPill tone="success">Active</StatusPill>
                       )}
                       {!coupon.is_active && (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase">
-                          Inactive
-                        </span>
+                        <StatusPill tone="muted">Inactive</StatusPill>
                       )}
                     </div>
                   </div>
@@ -614,8 +605,8 @@ export default function CouponsPage() {
                       onClick={() => handleToggle(coupon.id, coupon.is_active)}
                       className={`inline-flex h-9 px-3 items-center justify-center gap-1.5 rounded-xl border text-xs font-semibold transition-all ${
                         coupon.is_active
-                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20"
-                          : "border-border text-muted-foreground hover:bg-muted"
+                          ? "border-success/25 bg-success/10 text-success hover:bg-success/20"
+                          : "border-border text-muted-foreground hover:bg-secondary"
                       }`}
                     >
                       {coupon.is_active ? (
@@ -630,7 +621,7 @@ export default function CouponsPage() {
                     </button>
                     <button
                       onClick={() => handleDelete(coupon.id, coupon.code)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-500/10 text-red-500 hover:bg-red-500/10 transition-all"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-destructive/25 text-destructive hover:bg-destructive/10 transition-all"
                       title="Delete coupon"
                     >
                       <Trash2 className="h-4 w-4" />
