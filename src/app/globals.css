@@ -43,9 +43,8 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
-  --color-mint: var(--mint);
-  --color-mint-foreground: var(--mint-foreground);
-  --color-ink: var(--ink);
+  --color-seal: var(--seal);
+  --color-seal-foreground: var(--seal-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -55,93 +54,96 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* ─── AssistMint Brand ───────────────────────
-   Electric mint #22E1C2 on ink #07060C (from the logo).
-   Dark-first premium; light theme keeps full parity. */
+/* ─── AssistMint "Bahikhata" — the shopkeeper's ledger, upgraded ──
+   Ivory paper, ink navy, a cobalt revenue stamp, a marigold seal.
+   Light-first editorial; dark theme is the "midnight ledger".
+   Rules: solid fills + hairline borders, NO glow / glass / aurora /
+   gradient text. Marigold (--seal) is a seal, not paint: ≤5% of surface.
+   WhatsApp green #25D366 lives ONLY inside chat chrome. */
 
-/* ─── Light Theme ─────────────────────────── */
+/* ─── Light (default) ─────────────────────── */
 :root {
-  --background: #f7fafa;
-  --foreground: #0a1412;
-  --card: #ffffff;
-  --card-foreground: #0a1412;
-  --popover: #ffffff;
-  --popover-foreground: #0a1412;
-  --primary: #0d9e7f;
-  --primary-foreground: #ffffff;
-  --secondary: #eef2f2;
-  --secondary-foreground: #14201d;
-  --muted: #edf1f1;
-  --muted-foreground: #5c6f6a;
-  --accent: #e2faf4;
-  --accent-foreground: #0a2e26;
-  --destructive: #dc2626;
-  --success: #16a34a;
-  --success-foreground: #ffffff;
-  --warning: #d97706;
-  --warning-foreground: #ffffff;
-  --mint: #0da886;
-  --mint-foreground: #ffffff;
-  --ink: #07060c;
-  --border: #dfe7e5;
-  --input: #dfe7e5;
-  --ring: #0d9e7f;
-  --chart-1: #0d9e7f;
-  --chart-2: #0891b2;
-  --chart-3: #d97706;
-  --chart-4: #7c3aed;
-  --chart-5: #e11d48;
-  --radius: 0.75rem;
-  --sidebar: #f2f6f5;
-  --sidebar-foreground: #0a1412;
-  --sidebar-primary: #0d9e7f;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e2faf4;
-  --sidebar-accent-foreground: #0a2e26;
-  --sidebar-border: #dfe7e5;
-  --sidebar-ring: #0d9e7f;
+  --background: #FBF8F1;            /* ivory paper */
+  --foreground: #1C2434;            /* ink navy */
+  --card: #FFFFFF;
+  --card-foreground: #1C2434;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C2434;
+  --primary: #2244BB;               /* stamp cobalt */
+  --primary-foreground: #FFFFFF;
+  --secondary: #F0EBDF;
+  --secondary-foreground: #2A3446;
+  --muted: #F3EFE5;
+  --muted-foreground: #5D6678;
+  --accent: #F5E9CC;                /* marigold wash (hover surfaces) */
+  --accent-foreground: #1C2434;
+  --seal: #D98E1F;                  /* marigold seal — badges, verified ticks */
+  --seal-foreground: #241505;
+  --border: #E5DECC;
+  --input: #E5DECC;
+  --ring: #2244BB;
+  --destructive: #C42B2B;
+  --destructive-foreground: #FFFFFF;
+  --success: #1F7A3D;               /* forest, not WhatsApp green */
+  --success-foreground: #FFFFFF;
+  --warning: #B45309;
+  --warning-foreground: #FFFFFF;
+  --chart-1: #2244BB;
+  --chart-2: #D98E1F;
+  --chart-3: #0F766E;
+  --chart-4: #7C3AED;
+  --chart-5: #BE185D;
+  --radius: 0.625rem;               /* slightly sharper — editorial */
+  --sidebar: #F5F1E6;
+  --sidebar-foreground: #1C2434;
+  --sidebar-primary: #2244BB;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #EFE7D2;
+  --sidebar-accent-foreground: #1C2434;
+  --sidebar-border: #E5DECC;
+  --sidebar-ring: #2244BB;
 }
 
-/* ─── Dark Theme (default brand canvas) ───── */
+/* ─── Dark ("midnight ledger") ────────────── */
 .dark {
-  --background: #07060c;
-  --foreground: #e9f5f1;
-  --card: #0e1420;
-  --card-foreground: #e9f5f1;
-  --popover: #0e1420;
-  --popover-foreground: #e9f5f1;
-  --primary: #22e1c2;
-  --primary-foreground: #04110d;
-  --secondary: #131a26;
-  --secondary-foreground: #e9f5f1;
-  --muted: #131a26;
-  --muted-foreground: #8fa3a0;
-  --accent: #10202a;
-  --accent-foreground: #e9f5f1;
-  --destructive: #f87171;
-  --success: #4ade80;
-  --success-foreground: #04110d;
-  --warning: #fbbf24;
-  --warning-foreground: #04110d;
-  --mint: #22e1c2;
-  --mint-foreground: #04110d;
-  --ink: #07060c;
-  --border: rgba(255, 255, 255, 0.07);
-  --input: rgba(255, 255, 255, 0.09);
-  --ring: #22e1c2;
-  --chart-1: #22e1c2;
-  --chart-2: #22d3ee;
-  --chart-3: #fbbf24;
-  --chart-4: #a78bfa;
-  --chart-5: #fb7185;
-  --sidebar: #0a0f18;
-  --sidebar-foreground: #e9f5f1;
-  --sidebar-primary: #22e1c2;
-  --sidebar-primary-foreground: #04110d;
-  --sidebar-accent: #10202a;
-  --sidebar-accent-foreground: #e9f5f1;
-  --sidebar-border: rgba(255, 255, 255, 0.07);
-  --sidebar-ring: #22e1c2;
+  --background: #10141F;            /* ink navy, never black */
+  --foreground: #EDE9DC;            /* ivory text */
+  --card: #171C2A;
+  --card-foreground: #EDE9DC;
+  --popover: #171C2A;
+  --popover-foreground: #EDE9DC;
+  --primary: #7D96FF;               /* moonlit cobalt */
+  --primary-foreground: #0F1322;
+  --secondary: #1E2536;
+  --secondary-foreground: #E6E2D4;
+  --muted: #1C2333;
+  --muted-foreground: #9AA3B5;
+  --accent: #33290F;
+  --accent-foreground: #F5DFA6;
+  --seal: #E8A93C;
+  --seal-foreground: #241505;
+  --border: rgba(237, 233, 220, 0.10);
+  --input: rgba(237, 233, 220, 0.12);
+  --ring: #7D96FF;
+  --destructive: #F0716C;
+  --destructive-foreground: #2A0705;
+  --success: #58C27A;
+  --success-foreground: #06130A;
+  --warning: #E9A23B;
+  --warning-foreground: #1A1206;
+  --chart-1: #7D96FF;
+  --chart-2: #E8A93C;
+  --chart-3: #4FBFAD;
+  --chart-4: #A78BFA;
+  --chart-5: #F472B6;
+  --sidebar: #0C0F18;
+  --sidebar-foreground: #EDE9DC;
+  --sidebar-primary: #7D96FF;
+  --sidebar-primary-foreground: #0F1322;
+  --sidebar-accent: #232A3C;
+  --sidebar-accent-foreground: #EDE9DC;
+  --sidebar-border: rgba(237, 233, 220, 0.10);
+  --sidebar-ring: #7D96FF;
 }
 
 @layer base {
@@ -157,154 +159,91 @@
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading), var(--font-sans);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.015em;
+  }
+  /* Numbers, amounts, timestamps read like print */
+  .tabular-nums, .font-mono {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-/* ─── Custom Keyframe Animations ──────────── */
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-14px); }
+/* ─── Reduced motion — the site-wide net ──── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-@keyframes float-slow {
-  0%, 100% { transform: translateY(0px) translateX(0px); }
-  25% { transform: translateY(-20px) translateX(10px); }
-  75% { transform: translateY(-8px) translateX(-8px); }
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
-}
-
-@keyframes pulse-glow {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
-}
-
+/* ─── Keyframes (kept: functional only) ───── */
 @keyframes marquee {
   0% { transform: translateX(0%); }
   100% { transform: translateX(-50%); }
 }
+.animate-marquee { animation: marquee 48s linear infinite; }
+.animate-marquee:hover { animation-play-state: paused; }
 
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float-slow { animation: float-slow 7s ease-in-out infinite; }
+
+/* functional one-shot entrance for inline editor panels */
 @keyframes slide-up-fade {
-  from { opacity: 0; transform: translateY(24px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
+.animate-slide-up { animation: slide-up-fade 0.35s ease-out forwards; }
 
-@keyframes gradient-shift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
+/* ─── Ledger utilities (print, not glow) ──── */
+
+/* Hairline top+bottom rules like a ruled ledger page */
+.rule-y {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
-/* ─── Animation Utilities ────────────────── */
-.animate-float { animation: float 6s ease-in-out infinite; }
-.animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
-.animate-shimmer { animation: shimmer 3s ease-in-out infinite; background-size: 200% auto; }
-.animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
-.animate-marquee { animation: marquee 30s linear infinite; }
-.animate-slide-up { animation: slide-up-fade 0.6s ease-out forwards; }
-.animate-gradient { animation: gradient-shift 6s ease infinite; background-size: 200% 200%; }
-
-/* ─── Gradient Text — mint→teal brand gradient ── */
-.text-gradient-accent {
-  background: linear-gradient(135deg, #22e1c2, #22d3ee);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+/* The revenue stamp: cobalt solid with a debossed ring — for primary CTAs
+   and seals. Never a gradient, never a glow. */
+.stamp {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
-/* ─── Glow Effects ────────────────────────────
-   CONTAINED by design: inset shadows render strictly
-   inside the element — brand glows can never bleed
-   onto surrounding content (ChirplyMint R29–R33). */
-.glow-sm {
-  box-shadow: inset 0 0 18px rgba(34, 225, 194, 0.08);
+/* Paper texture: a barely-there dotted grain (pure background, no images) */
+.paper {
+  background-image: radial-gradient(circle, rgba(28, 36, 52, 0.028) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.dark .paper {
+  background-image: radial-gradient(circle, rgba(237, 233, 220, 0.03) 1px, transparent 1px);
 }
 
-.glow-md {
-  box-shadow: inset 0 0 26px rgba(34, 225, 194, 0.1);
+/* WhatsApp chat chrome (the ONLY place WhatsApp green may appear) */
+.wa-green { color: #128C7E; }
+.wa-bubble-out {
+  background: #dcf8c6;
+  color: #111b21;
 }
-
-.glow-card {
-  transition: box-shadow 0.35s ease, transform 0.35s ease, border-color 0.35s ease;
+.dark .wa-bubble-out {
+  background: #075e54;
+  color: #e9edef;
 }
-
-.glow-card:hover {
-  box-shadow: inset 0 0 32px rgba(13, 158, 127, 0.08);
-  transform: translateY(-2px);
-}
-
-.dark .glow-card:hover {
-  box-shadow: inset 0 0 40px rgba(34, 225, 194, 0.1);
-  border-color: rgba(34, 225, 194, 0.35);
-}
-
-/* Strong contained hover halo (pricing cards, feature cards) */
-.glow-card-strong:hover {
-  box-shadow: inset 0 0 48px rgba(34, 225, 194, 0.14);
-  border-color: rgba(34, 225, 194, 0.45);
-}
+.wa-tick-read { color: #53bdeb; }
 
 /* ─── Scrollbar ──────────────────────────── */
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+::-webkit-scrollbar-thumb { background: rgba(93, 102, 120, 0.28); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(93, 102, 120, 0.45); }
 
-/* ─── Selection ──────────────────────────── */
+/* ─── Selection — cobalt ink ─────────────── */
 ::selection {
-  background: rgba(34, 225, 194, 0.22);
+  background: rgba(34, 68, 187, 0.16);
   color: inherit;
 }
-
-/* ─── Glassmorphism ──────────────────────── */
-.glass {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(223, 231, 229, 0.7);
-}
-
-.dark .glass {
-  background: rgba(14, 20, 32, 0.55);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.glass-interactive {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.glass-interactive:hover {
-  background: rgba(255, 255, 255, 0.75);
-  border-color: rgba(13, 158, 127, 0.35);
-  transform: translateY(-2px);
-}
-
-.dark .glass-interactive:hover {
-  background: rgba(14, 20, 32, 0.75);
-  border-color: rgba(34, 225, 194, 0.25);
-  transform: translateY(-2px);
-}
-
-/* ─── Ambient hero background helpers ───────
-   Used by the marketing hero: layered ink canvas
-   + drifting mint auroras. Pure transform/opacity
-   animation — no mouse tracking, no outer shadows. */
-.ink-canvas {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(34, 225, 194, 0.06), transparent),
-    radial-gradient(ellipse 60% 40% at 85% 20%, rgba(34, 211, 238, 0.04), transparent),
-    #07060c;
-}
-
-.ink-grid {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, black, transparent);
+.dark ::selection {
+  background: rgba(125, 150, 255, 0.24);
 }

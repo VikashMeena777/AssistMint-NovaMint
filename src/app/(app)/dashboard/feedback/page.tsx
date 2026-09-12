@@ -52,7 +52,7 @@ function FeedbackSkeleton() {
       </div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="glass rounded-2xl p-5 border border-border/40 space-y-3">
+          <div key={i} className="bg-card shadow-sm rounded-2xl p-5 border border-border/40 space-y-3">
             <div className="h-5 w-5 animate-pulse rounded-lg bg-primary/20" />
             <div className="h-8 w-20 animate-pulse rounded-lg bg-muted/60" />
             <div className="h-4 w-32 animate-pulse rounded-md bg-muted/40" />
@@ -60,11 +60,11 @@ function FeedbackSkeleton() {
         ))}
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="glass rounded-2xl p-6 border border-border/40 space-y-4">
+        <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40 space-y-4">
           <div className="h-5 w-40 animate-pulse rounded-lg bg-muted/60" />
           <div className="h-48 animate-pulse rounded-xl bg-muted/20" />
         </div>
-        <div className="glass rounded-2xl p-6 border border-border/40 space-y-4">
+        <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40 space-y-4">
           <div className="h-5 w-32 animate-pulse rounded-lg bg-muted/60" />
           {[...Array(4)].map((_, j) => (
             <div key={j} className="h-14 animate-pulse rounded-xl bg-muted/25" />
@@ -186,7 +186,7 @@ export default function FeedbackPage() {
             className="grid grid-cols-2 gap-4 lg:grid-cols-4"
           >
             {/* Average Rating */}
-            <div className="glass glass-interactive rounded-2xl p-5 border border-border/40">
+            <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40">
               <div className="flex items-center justify-between mb-3">
                 <Star className="h-5 w-5 text-amber-500" />
               </div>
@@ -200,7 +200,7 @@ export default function FeedbackPage() {
             </div>
 
             {/* Positive Rate */}
-            <div className="glass glass-interactive rounded-2xl p-5 border border-border/40">
+            <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40">
               <div className="flex items-center justify-between mb-3">
                 <ThumbsUp className="h-5 w-5 text-emerald-500" />
               </div>
@@ -214,7 +214,7 @@ export default function FeedbackPage() {
             </div>
 
             {/* Response Rate */}
-            <div className="glass glass-interactive rounded-2xl p-5 border border-border/40">
+            <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40">
               <div className="flex items-center justify-between mb-3">
                 <MessageSquare className="h-5 w-5 text-blue-500" />
               </div>
@@ -229,7 +229,7 @@ export default function FeedbackPage() {
             </div>
 
             {/* Total Delivered */}
-            <div className="glass glass-interactive rounded-2xl p-5 border border-border/40">
+            <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40">
               <div className="flex items-center justify-between mb-3">
                 <TrendingUp className="h-5 w-5 text-primary" />
               </div>
@@ -247,7 +247,7 @@ export default function FeedbackPage() {
             className="grid grid-cols-1 gap-6 lg:grid-cols-2"
           >
             {/* Rating Distribution Chart */}
-            <div className="glass rounded-2xl p-6 border border-border/40">
+            <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40">
               <div className="flex items-center gap-2 mb-5">
                 <BarChart3 className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold">Rating Distribution</h3>
@@ -303,7 +303,7 @@ export default function FeedbackPage() {
             </div>
 
             {/* Big Rating Card */}
-            <div className="glass rounded-2xl p-6 border border-border/40 flex flex-col items-center justify-center text-center">
+            <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40 flex flex-col items-center justify-center text-center">
               {(stats.totalRatings || 0) > 0 ? (
                 <>
                   <div className="text-7xl font-extrabold font-mono tracking-tight text-foreground">
@@ -350,7 +350,7 @@ export default function FeedbackPage() {
           </motion.div>
 
           {/* Recent Reviews */}
-          <motion.div variants={itemVariants} className="glass rounded-2xl p-6 border border-border/40">
+          <motion.div variants={itemVariants} className="bg-card shadow-sm rounded-2xl p-6 border border-border/40">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-primary" />

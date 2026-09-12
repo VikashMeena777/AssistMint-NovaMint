@@ -93,7 +93,7 @@ function SignupForm() {
         </div>
       )}
       <div className="text-center">
-        <h2 className="text-xl font-semibold">Create your account</h2>
+        <h2 className="font-heading text-xl font-semibold tracking-tight">Create your account</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Get your restaurant on WhatsApp in minutes
         </p>
@@ -193,7 +193,7 @@ function SignupForm() {
         <button
           type="submit"
           disabled={loading}
-          className="flex h-11 w-full items-center justify-center rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-primary/30 hover:opacity-95 active:scale-[0.98] active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
+          className="stamp flex h-11 w-full items-center justify-center rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-transform duration-150 ease-out hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Account"}
         </button>

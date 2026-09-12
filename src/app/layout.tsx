@@ -1,22 +1,25 @@
 import type { Metadata } from "next";
-import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Instrument_Sans, Fraunces, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
 import { PostHogProvider } from "@/lib/analytics/posthog-provider";
 import FacebookSDK from "@/components/facebook-sdk";
 import "./globals.css";
 
-const inter = Inter({
+const instrumentSans = Instrument_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
   display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
-const spaceGrotesk = Space_Grotesk({
+const fraunces = Fraunces({
   variable: "--font-heading",
   subsets: ["latin"],
   display: "swap",
-  weight: ["400", "500", "600", "700"],
+  // Variable font: weights 300–900 come from the font itself (500–600 used
+  // by the Bahikhata design). `axes` requires no explicit weight.
+  axes: ["opsz"],
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -27,31 +30,31 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "AssistMint — AI WhatsApp Assistant for Local Business",
+    default: "AssistMint — The AI front desk for your business on WhatsApp",
     template: "%s | AssistMint",
   },
   description:
-    "Put your business on WhatsApp with an AI assistant that takes orders, books appointments, collects payments and runs loyalty — 24/7, zero commission.",
+    "AssistMint replies to every customer on WhatsApp in seconds — 24×7 — on your official business number. Orders, bookings, payments. Live in 10 minutes.",
   keywords: [
     "whatsapp business automation",
-    "whatsapp chatbot",
-    "ai ordering",
+    "whatsapp ai assistant",
+    "whatsapp chatbot india",
+    "ai ordering whatsapp",
     "appointment booking whatsapp",
-    "restaurant saas india",
     "local business automation",
   ],
   authors: [{ name: "AssistMint" }],
   openGraph: {
-    title: "AssistMint — AI WhatsApp Assistant for Local Business",
-    description: "Orders, bookings, payments and loyalty on WhatsApp — on autopilot.",
+    title: "AssistMint — The AI front desk on WhatsApp",
+    description: "Every customer message answered in seconds, 24×7. Live in 10 minutes.",
     type: "website",
     locale: "en_IN",
     siteName: "AssistMint",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AssistMint — AI WhatsApp Assistant",
-    description: "Orders, bookings, payments and loyalty on WhatsApp — on autopilot.",
+    title: "AssistMint — The AI front desk on WhatsApp",
+    description: "Every customer message answered in seconds, 24×7. Live in 10 minutes.",
   },
   robots: { index: true, follow: true },
 };
@@ -65,12 +68,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full`}
+      className={`${instrumentSans.variable} ${fraunces.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >

@@ -35,11 +35,11 @@ export default function ForgotPasswordPage() {
     return (
       <div className="w-full space-y-6 text-center">
         <div className="flex justify-center">
-          <div className="glow-card flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 shadow-inner shadow-primary/10">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
             <CheckCircle2 className="h-8 w-8 text-primary" />
           </div>
         </div>
-        <h2 className="text-xl font-semibold">Check your email</h2>
+        <h2 className="font-heading text-xl font-semibold tracking-tight">Check your email</h2>
         <p className="text-sm text-muted-foreground max-w-sm mx-auto">
           We sent a password reset link to <strong>{email}</strong>. Click the
           link in the email to reset your password.
@@ -71,7 +71,7 @@ export default function ForgotPasswordPage() {
   return (
     <div className="w-full space-y-6">
       <div className="text-center">
-        <h2 className="text-xl font-semibold">Reset your password</h2>
+        <h2 className="font-heading text-xl font-semibold tracking-tight">Reset your password</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Enter the email associated with your account and we&apos;ll send a
           reset link.
@@ -103,7 +103,7 @@ export default function ForgotPasswordPage() {
         <button
           type="submit"
           disabled={loading}
-          className="flex h-11 w-full items-center justify-center rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg shadow-primary/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-primary/30 hover:opacity-95 active:scale-[0.98] active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
+          className="stamp flex h-11 w-full items-center justify-center rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-transform duration-150 ease-out hover:-translate-y-0.5 active:scale-[0.98] active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" />

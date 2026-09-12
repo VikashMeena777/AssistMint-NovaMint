@@ -64,7 +64,7 @@ function AnalyticsSkeleton() {
       {/* Row 1 Stats Skeleton */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="glass rounded-2xl p-5 border border-border/40 space-y-3">
+          <div key={i} className="bg-card shadow-sm rounded-2xl p-5 border border-border/40 space-y-3">
             <div className="h-5 w-5 animate-pulse rounded-lg bg-primary/20" />
             <div className="h-8 w-20 animate-pulse rounded-lg bg-muted/60" />
             <div className="h-4 w-32 animate-pulse rounded-md bg-muted/40" />
@@ -76,7 +76,7 @@ function AnalyticsSkeleton() {
       {/* Row 2 Stats Skeleton */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="glass rounded-2xl p-5 border border-border/40 space-y-3">
+          <div key={i} className="bg-card shadow-sm rounded-2xl p-5 border border-border/40 space-y-3">
             <div className="h-5 w-5 animate-pulse rounded-lg bg-muted/50" />
             <div className="h-8 w-16 animate-pulse rounded-lg bg-muted/60" />
             <div className="h-4 w-28 animate-pulse rounded-md bg-muted/45" />
@@ -87,11 +87,11 @@ function AnalyticsSkeleton() {
 
       {/* Charts Skeleton */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="glass rounded-2xl p-6 border border-border/40 space-y-4">
+        <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40 space-y-4">
           <div className="h-5 w-40 animate-pulse rounded-lg bg-muted/60" />
           <div className="h-48 animate-pulse rounded-xl bg-muted/20 border border-dashed border-border/30" />
         </div>
-        <div className="glass rounded-2xl p-6 border border-border/40 space-y-4">
+        <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40 space-y-4">
           <div className="h-5 w-32 animate-pulse rounded-lg bg-muted/60" />
           <div className="space-y-3">
             {[...Array(3)].map((_, j) => (
@@ -102,7 +102,7 @@ function AnalyticsSkeleton() {
       </div>
 
       {/* Peak Hours Skeleton */}
-      <div className="glass rounded-2xl p-6 border border-border/40 space-y-4">
+      <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40 space-y-4">
         <div className="h-5 w-48 animate-pulse rounded-lg bg-muted/60" />
         <div className="h-40 animate-pulse rounded-xl bg-muted/20 border border-dashed border-border/30" />
       </div>
@@ -238,7 +238,7 @@ export default function AnalyticsPage() {
             Insights into orders, revenue, customers, and AI performance.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-border/40 glass px-3 py-1.5 text-sm">
+        <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-card shadow-sm px-3 py-1.5 text-sm">
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <span>Last 7 days</span>
         </div>
@@ -249,7 +249,7 @@ export default function AnalyticsPage() {
         variants={itemVariants}
         className="grid grid-cols-2 gap-4 lg:grid-cols-4"
       >
-        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
+        <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <ShoppingCart className="h-5 w-5 text-primary" />
           </div>
@@ -259,7 +259,7 @@ export default function AnalyticsPage() {
             <span className="font-mono">{stats.weekOrders || 0}</span> this week
           </p>
         </div>
-        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
+        <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <CreditCard className="h-5 w-5 text-primary" />
           </div>
@@ -269,7 +269,7 @@ export default function AnalyticsPage() {
             <span className="font-mono">{stats.activeOrders || 0}</span> active orders
           </p>
         </div>
-        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
+        <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <Users className="h-5 w-5 text-primary" />
           </div>
@@ -279,7 +279,7 @@ export default function AnalyticsPage() {
             <span className="font-mono">{stats.newCustomers || 0}</span> new this week
           </p>
         </div>
-        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
+        <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <TrendingUp className="h-5 w-5 text-primary" />
           </div>
@@ -296,7 +296,7 @@ export default function AnalyticsPage() {
         variants={itemVariants}
         className="grid grid-cols-2 gap-4 lg:grid-cols-4"
       >
-        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
+        <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <IndianRupee className="h-5 w-5 text-emerald-500" />
           </div>
@@ -308,7 +308,7 @@ export default function AnalyticsPage() {
             <span className="font-mono">{insights.totalDelivered || 0}</span> delivered (30d)
           </p>
         </div>
-        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
+        <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <Repeat2 className="h-5 w-5 text-blue-500" />
           </div>
@@ -318,7 +318,7 @@ export default function AnalyticsPage() {
             <span className="font-mono">{insights.repeatCustomers || 0}</span> of <span className="font-mono">{insights.totalCustomers || 0}</span> customers
           </p>
         </div>
-        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
+        <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <Star className="h-5 w-5 text-amber-500" />
           </div>
@@ -326,7 +326,7 @@ export default function AnalyticsPage() {
           <p className="text-sm text-muted-foreground">Avg Rating</p>
           <p className="text-xs text-muted-foreground mt-1">From customer feedback</p>
         </div>
-        <div className="glass glass-interactive rounded-2xl p-5 border border-border/40 transition-all duration-300">
+        <div className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 border border-border/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
             <Clock className="h-5 w-5 text-violet-500" />
           </div>
@@ -346,7 +346,7 @@ export default function AnalyticsPage() {
         className="grid grid-cols-1 gap-6 lg:grid-cols-2"
       >
         {/* Revenue Trend (simple bar chart) */}
-        <div className="glass rounded-2xl p-6 border border-border/40">
+        <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40">
           <h3 className="text-sm font-semibold mb-4">Revenue Trend (7 Days)</h3>
           {trend.length > 0 && trend.some((d) => d.revenue > 0) ? (
             <div className="flex items-end gap-2 h-48">
@@ -380,7 +380,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Top Menu Items */}
-        <div className="glass rounded-2xl p-6 border border-border/40">
+        <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40">
           <h3 className="text-sm font-semibold mb-4">Top Menu Items</h3>
           {topItems.length > 0 ? (
             <div className="space-y-3">
@@ -420,7 +420,7 @@ export default function AnalyticsPage() {
       {/* Peak Hours Chart */}
       <motion.div
         variants={itemVariants}
-        className="glass rounded-2xl p-6 border border-border/40"
+        className="bg-card shadow-sm rounded-2xl p-6 border border-border/40"
       >
         <div className="flex items-center gap-2 mb-4">
           <Clock className="h-4 w-4 text-violet-500" />
@@ -518,7 +518,7 @@ export default function AnalyticsPage() {
         variants={itemVariants}
         className="grid grid-cols-1 gap-6 lg:grid-cols-2"
       >
-        <div className="glass rounded-2xl p-6 border border-border/40">
+        <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40">
           <div className="flex items-center gap-2 mb-4">
             <CreditCard className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Revenue by Payment Method (30 Days)</h3>
@@ -584,7 +584,7 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div className="glass rounded-2xl p-6 border border-border/40">
+        <div className="bg-card shadow-sm rounded-2xl p-6 border border-border/40">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold">Order Summary (30 Days)</h3>
@@ -613,7 +613,7 @@ export default function AnalyticsPage() {
       {/* Activity Feed */}
       <motion.div
         variants={itemVariants}
-        className="glass rounded-2xl p-6 border border-border/40"
+        className="bg-card shadow-sm rounded-2xl p-6 border border-border/40"
       >
         <h3 className="text-sm font-semibold mb-4">Recent Activity</h3>
         {activity.length > 0 ? (

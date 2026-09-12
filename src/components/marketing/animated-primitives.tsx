@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, useInView } from "motion/react";
+import { motion } from "motion/react";
+import { spring } from "@/components/motion/tokens";
 
 // ─── Animated Counter ───────────────────────
+// rAF-driven count-up that plays once when scrolled into view.
 
 interface AnimatedCounterProps {
   value: number;
@@ -19,21 +21,39 @@ export function AnimatedCounter({
   duration = 2,
 }: AnimatedCounterProps) {
   const [count, setCount] = useState(0);
+  const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-50px" });
 
   useEffect(() => {
-    if (!inView) return;
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "-50px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
     let startTime: number | null = null;
+    let raf = 0;
     const step = (timestamp: number) => {
       if (!startTime) startTime = timestamp;
       const progress = Math.min((timestamp - startTime) / (duration * 1000), 1);
       const eased = 1 - Math.pow(1 - progress, 4);
       setCount(Math.floor(eased * value));
-      if (progress < 1) requestAnimationFrame(step);
+      if (progress < 1) raf = requestAnimationFrame(step);
     };
-    requestAnimationFrame(step);
-  }, [inView, value, duration]);
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [visible, value, duration]);
 
   return (
     <span ref={ref}>
@@ -45,6 +65,7 @@ export function AnimatedCounter({
 }
 
 // ─── Section Reveal ─────────────────────────
+// Entrance = opacity + y 14→0 on a calm spring (damping ≥ 25, from tokens).
 
 export function SectionReveal({
   children,
@@ -57,10 +78,10 @@ export function SectionReveal({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 40 }}
+      initial={{ opacity: 0, y: 14 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ ...spring.entrance, delay }}
       className={className}
     >
       {children}
@@ -69,11 +90,12 @@ export function SectionReveal({
 }
 
 // ─── Stagger Container + Item ───────────────
+// Parent orchestrates; children rise 14px and fade in on entrance springs.
 
 export function StaggerContainer({
   children,
   className = "",
-  staggerDelay = 0.1,
+  staggerDelay = 0.06,
 }: {
   children: React.ReactNode;
   className?: string;
@@ -105,11 +127,11 @@ export function StaggerItem({
   return (
     <motion.div
       variants={{
-        hidden: { opacity: 0, y: 24 },
+        hidden: { opacity: 0, y: 14 },
         visible: {
           opacity: 1,
           y: 0,
-          transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
+          transition: spring.entrance,
         },
       }}
       className={className}
@@ -119,30 +141,26 @@ export function StaggerItem({
   );
 }
 
-// ─── Marquee ────────────────────────────────
-// Children are duplicated; pass a single flex row whose `pr` equals its
-// internal `gap` so the -50% translate loop lands exactly on the seam.
+// ─── Marquee (P9) ───────────────────────────
+// Duplicated track translated -50% — the seam lands exactly because each
+// half carries `pr` equal to its internal gap. The animation itself lives
+// in globals.css as `.animate-marquee` (48s linear, pauses on hover, and
+// the reduced-motion net freezes it into a static row).
 
 export function Marquee({
   children,
   className = "",
-  speed = 30,
 }: {
   children: React.ReactNode;
   className?: string;
-  speed?: number;
 }) {
   return (
     <div className={`overflow-hidden ${className}`}>
-      <div
-        className="flex gap-12 whitespace-nowrap"
-        style={{
-          animation: `marquee ${speed}s linear infinite`,
-          width: "max-content",
-        }}
-      >
-        {children}
-        {children}
+      <div className="animate-marquee flex w-max whitespace-nowrap">
+        <div className="flex items-center gap-8 pr-8">{children}</div>
+        <div className="flex items-center gap-8 pr-8" aria-hidden="true">
+          {children}
+        </div>
       </div>
     </div>
   );

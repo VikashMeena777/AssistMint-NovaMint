@@ -35,7 +35,7 @@ export default function InsightsPanel() {
 
   if (error && insights.length === 0) {
     return (
-      <div className="glass rounded-2xl p-6">
+      <div className="bg-card shadow-sm rounded-2xl p-6">
         <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-center">
           <p className="text-sm text-muted-foreground">{error}</p>
           <button
@@ -51,7 +51,7 @@ export default function InsightsPanel() {
 
   if (loading) {
     return (
-      <div className="glass rounded-2xl p-6">
+      <div className="bg-card shadow-sm rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="h-5 w-5 text-amber-500" />
           <h2 className="text-lg font-semibold">AI Insights</h2>
@@ -72,7 +72,7 @@ export default function InsightsPanel() {
   if (insights.length === 0) return null;
 
   return (
-    <div className="glass rounded-2xl p-6">
+    <div className="bg-card shadow-sm rounded-2xl p-6">
       <div className="flex items-center gap-2 mb-4">
         <Sparkles className="h-5 w-5 text-amber-500" />
         <h2 className="text-lg font-semibold">AI Insights</h2>

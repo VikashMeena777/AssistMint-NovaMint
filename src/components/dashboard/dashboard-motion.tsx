@@ -45,7 +45,7 @@ export function DashboardStatsGrid({
       animate="show"
       className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
     >
-      <motion.div variants={statsItemVariants} className="glass-interactive rounded-2xl p-5 transition-all">
+      <motion.div variants={statsItemVariants} className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 transition-all">
         <div className="flex items-center justify-between">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
             <ShoppingCart className="h-5 w-5 text-primary" />
@@ -56,7 +56,7 @@ export function DashboardStatsGrid({
         <p className="mt-0.5 text-sm text-muted-foreground">Today&apos;s Orders</p>
       </motion.div>
 
-      <motion.div variants={statsItemVariants} className="glass-interactive rounded-2xl p-5 transition-all">
+      <motion.div variants={statsItemVariants} className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 transition-all">
         <div className="flex items-center justify-between">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
             <CreditCard className="h-5 w-5 text-emerald-500" />
@@ -67,7 +67,7 @@ export function DashboardStatsGrid({
         <p className="mt-0.5 text-sm text-muted-foreground">Revenue</p>
       </motion.div>
 
-      <motion.div variants={statsItemVariants} className="glass-interactive rounded-2xl p-5 transition-all">
+      <motion.div variants={statsItemVariants} className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 transition-all">
         <div className="flex items-center justify-between">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
             <MessageSquare className="h-5 w-5 text-blue-500" />
@@ -78,7 +78,7 @@ export function DashboardStatsGrid({
         <p className="mt-0.5 text-sm text-muted-foreground">Active Chats</p>
       </motion.div>
 
-      <motion.div variants={statsItemVariants} className="glass-interactive rounded-2xl p-5 transition-all">
+      <motion.div variants={statsItemVariants} className="bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 transition-all">
         <div className="flex items-center justify-between">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10">
             <Users className="h-5 w-5 text-amber-500" />

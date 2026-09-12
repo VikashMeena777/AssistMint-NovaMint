@@ -269,7 +269,7 @@ export default function OrdersPage() {
 
       {/* Advanced Filters Panel */}
       {showFilters && (
-        <div className="glass rounded-2xl border border-border/50 p-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
+        <div className="bg-card shadow-sm rounded-2xl border border-border/50 p-4 space-y-4 animate-in slide-in-from-top-2 duration-200">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold flex items-center gap-2">
               <Filter className="h-4 w-4 text-primary" />

@@ -727,7 +727,7 @@ export default function MenuPage() {
                 key={item.id}
                 variants={itemVariants}
                 layout
-                className={`glass glass-interactive rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden transition-all duration-300 ${
+                className={`bg-card shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md rounded-2xl p-5 flex flex-col justify-between relative overflow-hidden transition-all duration-300 ${
                   !item.is_available ? "opacity-60 bg-muted/20 border-dashed" : ""
                 }`}
               >

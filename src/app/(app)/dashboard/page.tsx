@@ -263,7 +263,7 @@ export default async function DashboardPage() {
       {/* Quick Actions + Setup Checklist */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Quick Actions */}
-        <div className="glass rounded-2xl p-6">
+        <div className="bg-card shadow-sm rounded-2xl p-6">
           <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
             {quickActions.map((action) => (
@@ -281,7 +281,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Setup Checklist */}
-        <div className="glass rounded-2xl p-6">
+        <div className="bg-card shadow-sm rounded-2xl p-6">
           <h2 className="text-lg font-semibold mb-4">Setup Checklist</h2>
           <div className="space-y-3">
             {setupSteps.map((item) => (
@@ -319,7 +319,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Recent Activity Section */}
-      <div className="glass rounded-2xl p-6">
+      <div className="bg-card shadow-sm rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">
             {isCartBusiness ? "Recent Orders" : bType === 'education' ? "Recent Inquiries & Demos" : bType === 'services' ? "Recent Bookings" : "Recent Appointments"}

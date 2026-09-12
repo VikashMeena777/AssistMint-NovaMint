@@ -60,7 +60,7 @@ export default function DashboardCharts({ data }: DashboardChartsProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Sales Trend Chart */}
-      <div className="glass rounded-2xl p-6 relative overflow-hidden transition-all duration-300">
+      <div className="bg-card shadow-sm rounded-2xl p-6 relative overflow-hidden transition-all duration-300">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="text-base font-bold text-foreground flex items-center gap-2">
@@ -127,7 +127,7 @@ export default function DashboardCharts({ data }: DashboardChartsProps) {
       </div>
 
       {/* Conversion Chart: Chats vs Orders */}
-      <div className="glass rounded-2xl p-6 relative overflow-hidden transition-all duration-300">
+      <div className="bg-card shadow-sm rounded-2xl p-6 relative overflow-hidden transition-all duration-300">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="text-base font-bold text-foreground flex items-center gap-2">
