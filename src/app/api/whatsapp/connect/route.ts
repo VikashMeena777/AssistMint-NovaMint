@@ -116,24 +116,39 @@ export async function POST(req: NextRequest) {
       console.error('[WhatsApp Connect] WABA subscription error:', err);
     }
 
-    // 5. Register phone number for Cloud API
-    try {
-      const regResp = await fetch(`${GRAPH_API}/${phone_number_id}/register`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ messaging_product: 'whatsapp', pin: '000000' }),
-      });
-      const regData = await regResp.json();
+    // 5. Register phone number for Cloud API — ONLY on first connect of this
+    //    number. Re-registering an already-registered number can re-trigger
+    //    Meta's display-name review (error 131037 blocks sending until
+    //    approved), so a reconnect of the SAME phone_number_id must skip this.
+    const { data: existingPhone } = await supabaseAdmin
+      .from('restaurants')
+      .select('whatsapp_phone_id')
+      .eq('id', restaurant.id)
+      .single();
+    const sameNumberReconnect =
+      (existingPhone as Record<string, string> | null)?.whatsapp_phone_id === phone_number_id;
 
-      if (regData.error && regData.error.code !== 133005) {
-        // 133005 = PIN mismatch (already registered) — not a real error
-        console.error('[WhatsApp Connect] Phone registration failed:', regData.error);
+    if (!sameNumberReconnect) {
+      try {
+        const regResp = await fetch(`${GRAPH_API}/${phone_number_id}/register`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ messaging_product: 'whatsapp', pin: '000000' }),
+        });
+        const regData = await regResp.json();
+
+        if (regData.error && regData.error.code !== 133005) {
+          // 133005 = PIN mismatch (already registered) — not a real error
+          console.error('[WhatsApp Connect] Phone registration failed:', regData.error);
+        }
+      } catch (err) {
+        console.error('[WhatsApp Connect] Phone registration error:', err);
       }
-    } catch (err) {
-      console.error('[WhatsApp Connect] Phone registration error:', err);
+    } else {
+      console.log('[WhatsApp Connect] Same number reconnect — skipping re-register (protects display-name approval)');
     }
 
     // 6. Save credentials to restaurant record
