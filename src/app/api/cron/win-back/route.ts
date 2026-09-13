@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendReplyButtons } from '@/lib/whatsapp/client';
 import { spendCredits, addCredits } from '@/lib/services/credit-service';
+import { MESSAGE_COSTS_PAISE } from '@/lib/utils/credit-packs';
 
 export const maxDuration = 45;
 export const dynamic = 'force-dynamic';
@@ -92,7 +93,7 @@ export async function GET(req: Request) {
         // Business-initiated send: 1 credit per message. Skip the
         // customer when the wallet can't cover it (once it's empty,
         // every remaining customer would skip too).
-        const spend = await spendCredits(rest.id, 1, 'campaign', 'winback');
+        const spend = await spendCredits(rest.id, MESSAGE_COSTS_PAISE.marketing, 'campaign', 'winback');
         if (!spend.ok) {
           if (spend.insufficient) {
             console.log(`[Win-Back Cron] Skipping ${rest.id}: insufficient credits (balance: ${spend.balance})`);
@@ -120,7 +121,7 @@ export async function GET(req: Request) {
         } catch (err) {
           console.error('[Win-Back Cron] Send failed:', err instanceof Error ? err.message : err);
           // The message never went out — give the credit back
-          await addCredits(rest.id, 1, 'refund', 'winback');
+          await addCredits(rest.id, MESSAGE_COSTS_PAISE.marketing, 'refund', 'winback');
         }
 
         // Rate limit: 10 messages/second

@@ -13,7 +13,7 @@ import { buyCredits, verifyCreditsPayment, getCreditsOverview } from "@/lib/acti
 // Types come from the service/packs modules — NEVER from the 'use server'
 // credit-actions file (type re-exports there crash the compiled chunk).
 import type { CreditTransaction } from "@/lib/services/credit-service";
-import { CREDIT_PACKS, formatPaise } from "@/lib/utils/credit-packs";
+import { CREDIT_PACKS, MESSAGE_COSTS_PAISE, formatPaise } from "@/lib/utils/credit-packs";
 import type { CreditPackId } from "@/lib/utils/credit-packs";
 
 const REASON_LABELS: Record<string, string> = {
@@ -137,8 +137,10 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
         <div>
           <h3 className="text-base font-semibold">Message credits</h3>
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-            Business-initiated sends (broadcasts, win-backs, review asks) use 1 credit per message.
-            Customer replies in the 24-hour window are always free.
+            Your message balance works like a prepaid talktime — every promotion costs
+            {" "}{formatPaise(MESSAGE_COSTS_PAISE.marketing)} and every reminder costs{" "}
+            {formatPaise(MESSAGE_COSTS_PAISE.utility)} (Meta&apos;s rates). Customer replies in the
+            24-hour window are always free.
           </p>
         </div>
         <Coins className="h-5 w-5 shrink-0 text-primary" />
@@ -150,10 +152,10 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
           <div className="h-9 w-32 animate-pulse rounded-lg bg-muted" />
         ) : (
           <p className="text-3xl font-bold font-mono tabular-nums leading-none">
-            {(balance ?? 0).toLocaleString("en-IN")}
+            {formatPaise(balance ?? 0)}
           </p>
         )}
-        <span className="pb-0.5 text-xs font-medium text-muted-foreground">credits available</span>
+        <span className="pb-0.5 text-xs font-medium text-muted-foreground">message balance</span>
       </div>
 
       {/* Packs */}
@@ -170,11 +172,12 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
             <div>
               <p className="text-sm font-semibold">{pack.name}</p>
               <p className="mt-1 text-2xl font-bold font-mono tabular-nums">
-                {pack.credits.toLocaleString("en-IN")}
+                {formatPaise(pack.balancePaise)}
               </p>
-              <p className="text-xs text-muted-foreground">credits</p>
+              <p className="text-xs text-muted-foreground">message balance</p>
               <p className="mt-2 text-xs text-muted-foreground tabular-nums">
-                {formatPaise(pack.ratePaisePer100)} / 100 credits
+                ≈ {Math.floor(pack.balancePaise / MESSAGE_COSTS_PAISE.marketing)} promotions or{" "}
+                {Math.floor(pack.balancePaise / MESSAGE_COSTS_PAISE.utility)} reminders
               </p>
             </div>
             <button
@@ -247,7 +250,7 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
                       }`}
                     >
                       {positive ? "+" : ""}
-                      {tx.delta.toLocaleString("en-IN")}
+                      {tx.delta > 0 ? "+" : ""}{formatPaise(tx.delta)}
                     </p>
                     <p className="text-[10px] text-muted-foreground tabular-nums">
                       bal {tx.balance_after.toLocaleString("en-IN")}

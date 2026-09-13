@@ -6,6 +6,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { sendTextMessage, sendImageMessage } from '@/lib/whatsapp/client';
 import { spendCredits, addCredits } from '@/lib/services/credit-service';
+import { MESSAGE_COSTS_PAISE } from '@/lib/utils/credit-packs';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -165,7 +166,8 @@ export async function sendBroadcast(
 
   // Business-initiated sends cost 1 credit per recipient — spend upfront.
   // (Customer replies in the 24h window never touch credits.)
-  const spend = await spendCredits(restaurantId, customers.length, 'broadcast', broadcastId);
+  // Broadcasts are MARKETING templates — Meta's expensive kind (78p/msg)
+  const spend = await spendCredits(restaurantId, customers.length * MESSAGE_COSTS_PAISE.marketing, 'broadcast', broadcastId);
   if (!spend.ok) {
     // Release the claim so the owner can retry after topping up
     await supabaseAdmin
@@ -174,11 +176,12 @@ export async function sendBroadcast(
       .eq('id', broadcastId);
 
     if (spend.insufficient) {
-      const have = spend.balance !== null ? ` (you have ${spend.balance.toLocaleString('en-IN')})` : '';
+      const needed = customers.length * MESSAGE_COSTS_PAISE.marketing;
+      const have = spend.balance !== null ? ` (you have ₹${(spend.balance / 100).toLocaleString('en-IN')})` : '';
       return {
         sent: 0,
         failed: 0,
-        error: `Not enough credits — you need ${customers.length.toLocaleString('en-IN')} credits for ${customers.length.toLocaleString('en-IN')} recipients${have}. Buy more in Settings → Payments.`,
+        error: `Not enough message balance — this broadcast needs ₹${(needed / 100).toLocaleString('en-IN')} for ${customers.length.toLocaleString('en-IN')} customers${have}. Add balance in Settings → Payments.`,
       };
     }
     console.error('[Broadcast] Credit spend failed:', restaurantId);
@@ -218,7 +221,7 @@ export async function sendBroadcast(
 
   // Refund 1 credit per failed send — the recipient was never reached
   if (failedCount > 0) {
-    await addCredits(restaurantId, failedCount, 'refund', broadcastId);
+    await addCredits(restaurantId, failedCount * MESSAGE_COSTS_PAISE.marketing, 'refund', broadcastId);
   }
 
   // Update broadcast status

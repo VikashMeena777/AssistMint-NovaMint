@@ -9,7 +9,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { getCreditPack } from '@/lib/utils/credit-packs';
+import { getCreditPack, formatPaise } from '@/lib/utils/credit-packs';
 import {
   getBalance,
   getCreditHistory,
@@ -80,6 +80,7 @@ export async function buyCredits(
 
   const cfOrderId = `CR_${restaurantId.substring(0, 8)}_${Date.now().toString(36)}`;
   const amountRupees = pack.pricePaise / 100;
+      // formatPaise for display
   const cleanName = restaurant.name.replace(/[^\p{L}\p{N}\s.-]/gu, '').trim() || 'AssistMint Business';
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamint.in';
 
@@ -100,7 +101,7 @@ export async function buyCredits(
         link_id: cfOrderId,
         link_amount: amountRupees,
         link_currency: 'INR',
-        link_purpose: `AssistMint message credits — ${pack.name} (${pack.credits.toLocaleString('en-IN')})`,
+        link_purpose: `AssistMint message balance — ${pack.name} (${formatPaise(pack.balancePaise)})`,
         link_notify: { send_sms: false, send_email: false },
         customer_details: {
           customer_name: cleanName,
@@ -167,7 +168,7 @@ export async function buyCredits(
       metadata: {
         type: 'credits',
         pack_id: pack.id,
-        credits: pack.credits,
+        balance_paise: pack.balancePaise,
       },
     });
 

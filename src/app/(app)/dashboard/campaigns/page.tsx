@@ -9,6 +9,7 @@ import {
   getAudienceCount,
 } from '@/lib/actions/broadcast-actions';
 import { getCreditsBalance } from '@/lib/actions/credit-actions';
+import { formatPaise, MESSAGE_COSTS_PAISE } from '@/lib/utils/credit-packs';
 import type { Broadcast } from '@/lib/services/broadcast-service';
 import { toast } from 'sonner';
 import {
@@ -73,7 +74,7 @@ export default function CampaignsPage() {
     })();
   }, []);
 
-  // Broadcasts spend 1 credit per recipient — show a live balance in the header
+  // Broadcasts spend 78p (marketing rate) per recipient — live balance in the header
   useEffect(() => {
     if (!restaurantId) return;
     const t = setTimeout(() => void refreshCredits(), 0);
@@ -141,14 +142,14 @@ export default function CampaignsPage() {
           {/* Credit balance chip — broadcasts spend 1 credit per recipient */}
           <Link
             href="/dashboard/settings?tab=payments"
-            title="Each broadcast uses 1 credit per recipient — buy more in Settings → Payments"
+            title="Each broadcast costs 78p per customer (marketing rate) — buy more in Settings → Payments"
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm transition-colors hover:bg-secondary"
           >
             <Coins className="h-4 w-4 text-primary" />
             <span className="font-semibold font-mono tabular-nums">
-              {creditBalance === null ? '…' : creditBalance.toLocaleString('en-IN')}
+              {creditBalance === null ? '…' : formatPaise(creditBalance)}
             </span>
-            <span className="text-muted-foreground">credits</span>
+            <span className="text-muted-foreground">balance</span>
             <span className="font-medium text-primary">Buy</span>
           </Link>
           <button

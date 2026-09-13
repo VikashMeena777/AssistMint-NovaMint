@@ -11,10 +11,10 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { logActivity } from '@/lib/utils/activity-logger';
-import { CREDIT_PACKS, getCreditPack } from '@/lib/utils/credit-packs';
+import { CREDIT_PACKS, getCreditPack, formatPaise } from '@/lib/utils/credit-packs';
 
 export { CREDIT_PACKS, getCreditPack };
-export type { CreditPack, CreditPackId } from '@/lib/utils/credit-packs';
+export type { MessageBalancePack, CreditPackId } from '@/lib/utils/credit-packs';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -152,7 +152,7 @@ export async function getCreditHistory(restaurantId: string, limit = 50): Promis
 
 export async function fulfilCreditPurchase(
   cfOrderId: string
-): Promise<{ ok: boolean; alreadyFulfilled: boolean; credits?: number; restaurantId?: string }> {
+): Promise<{ ok: boolean; alreadyFulfilled: boolean; balancePaise?: number; restaurantId?: string }> {
   console.log(`[CreditService] Fulfilling credits purchase: ${cfOrderId}`);
 
   // Atomic state transition 'pending' → 'completed' (prevents webhook/return double-fulfilment)
@@ -186,14 +186,14 @@ export async function fulfilCreditPurchase(
   const payment = claimed[0] as {
     id: string;
     restaurant_id: string;
-    metadata: { credits?: number; pack_id?: string } | null;
+    metadata: { balance_paise?: number; pack_id?: string } | null;
   };
   const restaurantId = payment.restaurant_id;
-  const credits = payment.metadata?.credits || 0;
+  const balancePaise = payment.metadata?.balance_paise || 0;
   const packId = payment.metadata?.pack_id || null;
 
-  if (credits <= 0) {
-    console.error(`[CreditService] Credits payment ${cfOrderId} has no credits in metadata`);
+  if (balancePaise <= 0) {
+    console.error(`[CreditService] Credits payment ${cfOrderId} has no balance in metadata`);
     // Revert so a fixed record can still be fulfilled
     await supabaseAdmin
       .from('payments')
@@ -202,7 +202,7 @@ export async function fulfilCreditPurchase(
     return { ok: false, alreadyFulfilled: false };
   }
 
-  const balance = await addCredits(restaurantId, credits, 'purchase', cfOrderId);
+  const balance = await addCredits(restaurantId, balancePaise, 'purchase', cfOrderId);
   if (balance === null) {
     console.error(`[CreditService] addCredits failed for ${cfOrderId} — reverting to pending`);
     await supabaseAdmin
@@ -216,9 +216,9 @@ export async function fulfilCreditPurchase(
     restaurantId,
     actorType: 'system',
     action: 'credits.purchased',
-    details: { credits, pack_id: packId, cf_order_id: cfOrderId, balance_after: balance },
+    details: { balance_paise: balancePaise, pack_id: packId, cf_order_id: cfOrderId, balance_after: balance },
   });
 
-  console.log(`[CreditService] Added ${credits} credits to ${restaurantId} (balance: ${balance})`);
-  return { ok: true, alreadyFulfilled: false, credits, restaurantId };
+  console.log(`[CreditService] Added ${formatPaise(balancePaise)} balance to ${restaurantId} (balance: ${formatPaise(balance)})`);
+  return { ok: true, alreadyFulfilled: false, balancePaise, restaurantId };
 }

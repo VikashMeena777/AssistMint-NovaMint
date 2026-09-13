@@ -437,12 +437,12 @@ export async function sendPayCtaMessage(
     body: { text: bodyText.substring(0, 1024) },
     action: {
       name: 'cta_url',
-      parameters: [
-        {
-          display_text: buttonText.substring(0, 20),
-          url,
-        },
-      ],
+      // parameters is a flat OBJECT here (display_text + url) — an array
+      // fails with `Unexpected key "0" on param "interactive.action.parameters"`.
+      parameters: {
+        display_text: buttonText.substring(0, 20),
+        url,
+      },
     },
   };
 
