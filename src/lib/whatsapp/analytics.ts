@@ -147,6 +147,8 @@ export interface TemplateAnalytics {
 /** Health snapshot of a business phone number (Graph field names). */
 export interface PhoneNumberHealth {
   id: string;
+  /** E.164 number Meta answers on, e.g. 917850999094 — the source for wa.me links. */
+  display_phone_number?: string | null;
   verified_name: string | null;
   /** GREEN | YELLOW | RED | NA | UNKNOWN. */
   quality_rating: string | null;
@@ -427,6 +429,7 @@ export async function fetchPhoneNumberHealth(
   const { phoneNumberId, accessToken } = options;
   const data = await graphRequest<{
     id?: string;
+    display_phone_number?: string;
     verified_name?: string;
     quality_rating?: string;
     messaging_limit_tier?: string;
@@ -437,12 +440,13 @@ export async function fetchPhoneNumberHealth(
     accessToken,
     query: {
       fields:
-        'verified_name,quality_rating,messaging_limit_tier,name_status,code_verification_status',
+        'display_phone_number,verified_name,quality_rating,messaging_limit_tier,name_status,code_verification_status',
     },
   });
 
   return {
     id: data.id ?? phoneNumberId,
+    display_phone_number: data.display_phone_number ?? null,
     verified_name: data.verified_name ?? null,
     quality_rating: data.quality_rating ?? null,
     messaging_limit_tier: data.messaging_limit_tier ?? null,

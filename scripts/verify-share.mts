@@ -1,0 +1,13 @@
+import { createClient } from "@supabase/supabase-js";
+import * as dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+const { data } = await sb.from("restaurants").select("id, phone, whatsapp_phone_id, whatsapp_access_token").not("whatsapp_phone_id","is",null).limit(1).single();
+const r = data as Record<string,string>;
+const { fetchPhoneNumberHealth } = await import("../src/lib/whatsapp/analytics");
+const health = await fetchPhoneNumberHealth({ phoneNumberId: r.whatsapp_phone_id, accessToken: r.whatsapp_access_token });
+const rec = health as unknown as Record<string, unknown>;
+const connected = String(rec.display_phone_number || "").replace(/\D/g, "");
+console.log("site phone field:", r.phone);
+console.log("connected number from Meta:", rec.display_phone_number);
+console.log("links will use:", connected.length >= 11 ? connected + " (CONNECTED — correct!)" : "fallback to site phone (STILL BROKEN)");
