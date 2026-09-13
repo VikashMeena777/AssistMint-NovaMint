@@ -26,6 +26,7 @@ import {
   getRevenueByPaymentMethod,
 } from "@/lib/actions/analytics-actions";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
+import { WhatsAppAnalyticsSection } from "@/components/dashboard/whatsapp-analytics";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyData = Record<string, any>;
@@ -645,6 +646,13 @@ export default function AnalyticsPage() {
           </p>
         )}
       </motion.div>
+
+      {/* WhatsApp delivery & cost (Meta WABA analytics) */}
+      {restaurantId && (
+        <motion.div variants={itemVariants}>
+          <WhatsAppAnalyticsSection restaurantId={restaurantId} />
+        </motion.div>
+      )}
         </motion.div>
       )}
     </AnimatePresence>

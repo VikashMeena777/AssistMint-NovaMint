@@ -13,6 +13,14 @@ import { getRestaurantByPhoneId, type Restaurant } from '@/lib/services/restaura
 import { createBotPaymentLink } from '@/lib/services/bot-payment';
 import { notifyOwnerNewOrder } from '@/lib/services/owner-notifications';
 import { sendTextMessage, sendReplyButtons, sendListMessage, sendImageMessage, sendDocumentMessage, sendCarouselMessage, type ListSection, type CarouselCard } from '@/lib/whatsapp/client';
+// ── New WhatsApp platform features (parallel-built send helpers) ──
+import { markAsReadWithTyping, maintainTypingIndicator } from '@/lib/whatsapp/indicators';
+import { bold, formatMenuList } from '@/lib/whatsapp/markdown';
+import { sendLocationRequestMessage } from '@/lib/whatsapp/media';
+import { sendCatalogMessage } from '@/lib/whatsapp/catalog';
+import { sendOrderDetailsMessage, buildUpiIntentLink } from '@/lib/whatsapp/payments';
+import { sendFlowMessage } from '@/lib/whatsapp/flows';
+import { createFlowToken } from '@/lib/flows/token';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
 import { checkAiLimit, logAiUsage } from '@/lib/utils/enforce-limits';
 
@@ -70,6 +78,16 @@ export async function handleIncomingMessage(params: {
   if (!conversation.is_bot_active) {
     console.log(`[Orchestrator] Bot inactive for conversation ${conversation.id}, skipping`);
     return; // Human agent is handling
+  }
+
+  // 4.1 Mark the message as read (blue ticks) and light the typing indicator
+  // while we process. Non-blocking — never delay or break the reply path.
+  if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    markAsReadWithTyping({
+      phoneNumberId: restaurant.whatsapp_phone_id,
+      accessToken: restaurant.whatsapp_token,
+      messageId,
+    }).catch(() => {});
   }
 
   // 4.5 Business hours auto-responder — inform if closed (but still respond normally)
@@ -160,7 +178,7 @@ export async function handleIncomingMessage(params: {
 
   // 6. Handle interactive button/list replies by ID
   if (interactiveReply) {
-    await handleInteractiveReply(restaurant, customer, conversation, interactiveReply);
+    await handleInteractiveReply(restaurant, customer, conversation, interactiveReply, messageId);
     return;
   }
 
@@ -270,6 +288,37 @@ export async function handleIncomingMessage(params: {
   if (lowerText === 'book' || lowerText === 'appointment' || lowerText === 'book appointment' || lowerText === 'schedule') {
     const bt = restaurant.business_type || 'food_beverage';
     if (['salon_spa', 'healthcare', 'education', 'services'].includes(bt)) {
+      // ── Native WhatsApp Flow booking (if configured) ──
+      // business_config.flow_appointment_id is set from the dashboard. The
+      // flow_token (HMAC-signed, src/lib/flows/token.ts) binds the flow
+      // response webhook back to this restaurant + customer. Fail-safe: on
+      // any error we fall back to the list-based booking below.
+      const flowId = (restaurant.business_config?.flow_appointment_id as string | undefined) || undefined;
+      if (flowId && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+        try {
+          const flowToken = createFlowToken({
+            rid: restaurant.id,
+            phone: customer.phone,
+            flow: 'appointment',
+            cid: customer.id,
+            ...(customer.name ? { name: customer.name } : {}),
+          });
+          await sendFlowMessage({
+            phoneNumberId: restaurant.whatsapp_phone_id,
+            accessToken: restaurant.whatsapp_token,
+            to: customer.phone,
+            flowId,
+            flowCta: 'Book appointment',
+            bodyText: `📅 Book your appointment at *${restaurant.name}* in a few taps!\nPick your service, date and time below.`,
+            mode: 'published',
+            flowToken,
+          });
+          await saveMessage(conversation.id, restaurant.id, 'bot', 'Sent appointment booking flow', undefined, { phone: customer.phone });
+          return;
+        } catch (e) {
+          console.error('[Orchestrator] Flow message failed, falling back to list booking:', e);
+        }
+      }
       await startAppointmentBooking(restaurant, customer, conversation);
     } else {
       await sendBotReply(restaurant, customer, conversation, '📋 Send *menu* to browse our menu and place an order!');
@@ -394,7 +443,7 @@ export async function handleIncomingMessage(params: {
   if (handled) return;
 
   // 7. AI-powered response
-  await generateAndSendAIResponse(restaurant, customer, conversation, text || '');
+  await generateAndSendAIResponse(restaurant, customer, conversation, text || '', messageId);
 }
 
 // ─── Location Message Handler ───────────────
@@ -482,7 +531,8 @@ async function handleInteractiveReply(
   restaurant: Restaurant,
   customer: { id: string; phone: string; name?: string; loyalty_tier: string; total_orders: number },
   conversation: { id: string; context: Record<string, unknown> },
-  reply: { type: string; id: string; title: string }
+  reply: { type: string; id: string; title: string },
+  messageId?: string
 ): Promise<void> {
   const btnId = reply.id;
 
@@ -496,7 +546,7 @@ async function handleInteractiveReply(
       break;
 
     case 'btn_help':
-      await generateAndSendAIResponse(restaurant, customer, conversation, 'I need help with ordering');
+      await generateAndSendAIResponse(restaurant, customer, conversation, 'I need help with ordering', messageId);
       break;
 
     case 'btn_place_order': {
@@ -672,7 +722,7 @@ async function handleInteractiveReply(
           await sendBotReply(restaurant, customer, conversation, lang.msg);
         }
       } else {
-        await generateAndSendAIResponse(restaurant, customer, conversation, reply.title);
+        await generateAndSendAIResponse(restaurant, customer, conversation, reply.title, messageId);
       }
       break;
   }
@@ -916,7 +966,7 @@ async function sendItemDetails(
   const star = item.is_bestseller ? ' ⭐ Bestseller' : '';
   const desc = item.description ? `\n${item.description}` : '';
 
-  const bodyText = `*${item.name}*${star}\n${veg} \u00b7 \u20b9${priceRupees}${desc}\n\u23f1 ~${item.prep_time_minutes || 15} mins`;
+  const bodyText = `${bold(item.name)}${star}\n${veg} \u00b7 \u20b9${priceRupees}${desc}\n\u23f1 ~${item.prep_time_minutes || 15} mins`;
 
   // Send image first if available
   if (item.image_url && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
@@ -1305,12 +1355,38 @@ async function sendMenuOverview(
       }
     }
 
-    // Fallback: text list for filter
-    const textList = allItems.slice(0, 15).map(i =>
-      `${i.is_veg ? '🟢' : '🔴'} *${i.name}*${i.is_bestseller ? ' ⭐' : ''} — ₹${(i.price / 100).toFixed(0)}`
-    ).join('\n');
+    // Fallback: text list for filter (markdown-formatted via helpers)
+    const textList = formatMenuList(
+      allItems.slice(0, 15).map((i) => ({
+        name: `${i.is_veg ? '🟢' : '🔴'} ${i.name}${i.is_bestseller ? ' ⭐' : ''}`,
+        price: (i.price / 100).toFixed(0),
+      }))
+    );
     await sendBotReply(restaurant, customer, conversation, `${filterLabel} Menu 🍽️\n\n${textList}\n\nTell me what you'd like to add!`);
     return;
+  }
+
+  // ── Native Meta catalog message ──
+  // When the business has connected a Meta catalog (business_config.meta_catalog_id,
+  // set by the dashboard catalog sync), send the native "View catalog" message
+  // instead of the category picker for the default (unfiltered) menu view.
+  // Filtered views (veg/nonveg/bestsellers) keep the carousel behavior above.
+  // Fail-safe: any catalog send error falls through to the regular menu below.
+  const metaCatalogId = (restaurant.business_config?.meta_catalog_id as string | undefined) || undefined;
+  if (!dietaryFilter && metaCatalogId && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    try {
+      await sendCatalogMessage({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        bodyText: 'Tap below to browse our full menu 🍽',
+        footerText: restaurant.name,
+      });
+      await saveMessage(conversation.id, restaurant.id, 'bot', 'Sent catalog message (View catalog)', undefined, { phone: customer.phone });
+      return;
+    } catch (e) {
+      console.error('[Orchestrator] Catalog message failed, falling back to category list:', e);
+    }
   }
 
   // Default: Show category picker as interactive list
@@ -1535,10 +1611,10 @@ async function sendCartSummary(
     return;
   }
 
-  // Build rich itemized cart
+  // Build rich itemized cart (markdown-formatted via helpers)
   const itemLines = cart.items.map((i, idx) => {
     const total = ((i.unit_price * i.quantity) / 100).toFixed(0);
-    return `${idx + 1}. ${i.item_name} × ${i.quantity} — ₹${total}`;
+    return `${idx + 1}. ${bold(i.item_name)} × ${i.quantity} — ₹${total}`;
   }).join('\n');
 
   const subtotalR = (cart.subtotal / 100).toFixed(0);
@@ -1549,7 +1625,7 @@ async function sendCartSummary(
   let cartText = `🛒 *Your Cart*\n${itemLines}\n— — — — — —\nSubtotal: ₹${subtotalR}`;
   if (parseInt(taxR) > 0) cartText += `\nTax: ₹${taxR}`;
   if (parseInt(deliveryR) > 0) cartText += `\n🚚 Delivery: ₹${deliveryR}`;
-  cartText += `\n*Total: ₹${totalR}*`;
+  cartText += `\n${bold(`Total: ₹${totalR}`)}`;
 
   if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     // Build list sections for editing cart
@@ -1636,6 +1712,25 @@ async function askForDeliveryAddress(
     // 'delivery address' in the last bot message — this prompt MUST contain it
     const bodyText = '📍 *Where should we deliver?*\nType your delivery address or share your location.';
     if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+      // ── Native location request (delivery businesses) ──
+      // When delivery is enabled, first send an interactive location-request
+      // message (a native "share your live location" button — WhatsApp
+      // mobile clients). The shared location arrives as a normal location
+      // message handled by handleLocationMessage; typed addresses still match
+      // the 'delivery address' capture below. Fail-safe: on error we simply
+      // continue with the regular text prompt.
+      if (restaurant.delivery_enabled) {
+        try {
+          await sendLocationRequestMessage({
+            phoneNumberId: restaurant.whatsapp_phone_id,
+            accessToken: restaurant.whatsapp_token,
+            to: customer.phone,
+            bodyText: '📍 *Where should we deliver?*\nTap below to share your live location, or type your delivery address.',
+          });
+        } catch (e) {
+          console.error('[Orchestrator] Location request message failed, continuing with text prompt:', e);
+        }
+      }
       await sendReplyButtons({
         phoneNumberId: restaurant.whatsapp_phone_id,
         accessToken: restaurant.whatsapp_token,
@@ -1926,6 +2021,86 @@ async function handleOnlinePayOrder(
 
   await sendBotReply(restaurant, customer, conversation, reply);
 
+  // ── Native in-chat UPI invoice (India payments) ──
+  // When the business has a UPI VPA configured (business_config.upi_vpa, set
+  // in the dashboard), ALSO send a native order_details message the customer
+  // can pay without leaving WhatsApp. The Cashfree link above still works;
+  // when payment succeeds, the Cashfree webhook updates this invoice in place
+  // (see src/lib/services/in-chat-payment.ts). Fail-safe: any error here never
+  // affects the payment-link flow above.
+  const upiVpa = (restaurant.business_config?.upi_vpa as string | undefined) || undefined;
+  if (paymentLink && upiVpa && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    try {
+      const upiIntentLink = buildUpiIntentLink({
+        vpa: upiVpa,
+        payeeName: restaurant.name,
+        amountInPaise: cart.total,
+        note: `Order ${refId}`,
+        transactionRef: refId,
+      });
+      await sendOrderDetailsMessage({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        referenceId: refId,
+        items: cart.items.map((i) => ({
+          name: i.item_name,
+          // unit price + addons so the derived subtotal matches cart.subtotal
+          // (sendOrderDetailsMessage validates total = subtotal + tax +
+          // shipping − discount against the cart's own breakdown)
+          amountInPaise: i.unit_price + (i.addons_total || 0),
+          quantity: i.quantity,
+        })),
+        // total must equal subtotal + tax + shipping − discount (validated
+        // by the send helper), so mirror the cart's breakdown exactly
+        totalAmountInPaise: cart.total,
+        taxInPaise: cart.tax,
+        shippingInPaise: cart.delivery_fee,
+        discountInPaise: cart.discount,
+        currency: 'INR',
+        paymentConfig: { upiIntentLink },
+        bodyText: `Complete your payment for order *${refId}* from *${restaurant.name}* 💳`,
+      });
+
+      // Flag the payments row so the Cashfree / payment webhooks know to send
+      // the native order_status update for this invoice when payment completes
+      try {
+        const { createClient: createAdminUpi } = await import('@supabase/supabase-js');
+        const sbUpi = createAdminUpi(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          { auth: { persistSession: false } }
+        );
+        const { data: paymentRow } = await sbUpi
+          .from('payments')
+          .select('id, metadata')
+          .eq('metadata->>cart_id', cart.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (paymentRow) {
+          const pr = paymentRow as { id: string; metadata: Record<string, unknown> | null };
+          await sbUpi
+            .from('payments')
+            .update({
+              metadata: {
+                ...(pr.metadata || {}),
+                in_chat_invoice: true,
+                in_chat_reference_id: refId,
+              },
+            })
+            .eq('id', pr.id);
+        }
+      } catch (e) {
+        console.error('[Orchestrator] Failed to flag in-chat invoice on payments row:', e);
+      }
+
+      await saveMessage(conversation.id, restaurant.id, 'bot', 'Sent in-chat UPI order details', undefined, { phone: customer.phone });
+    } catch (e) {
+      console.error('[Orchestrator] In-chat UPI order details send failed:', e);
+    }
+  }
+
   // Receipt will be sent when order is marked 'delivered'
 
   logActivity({
@@ -1943,7 +2118,8 @@ async function generateAndSendAIResponse(
   restaurant: Restaurant,
   customer: { id: string; phone: string; name?: string; loyalty_tier: string; total_orders: number },
   conversation: { id: string; context: Record<string, unknown> },
-  userMessage: string
+  userMessage: string,
+  messageId?: string
 ): Promise<void> {
   // ── Plan limit check: AI responses ──
   const aiCheck = await checkAiLimit(restaurant.id);
@@ -1967,16 +2143,34 @@ async function generateAndSendAIResponse(
   // Build system prompt
   const systemPrompt = buildSystemPrompt(restaurant, customer, menuContext, cartContext);
 
+  // ── Typing indicator while the LLM generates ──
+  // Fires immediately and re-fires every 20s until stopped (the indicator
+  // auto-dismisses after ~25s). Fail-safe: indicator failures are swallowed
+  // by the helper and never affect the reply.
+  const typingHandle =
+    messageId && restaurant.whatsapp_token && restaurant.whatsapp_phone_id
+      ? maintainTypingIndicator({
+          phoneNumberId: restaurant.whatsapp_phone_id,
+          accessToken: restaurant.whatsapp_token,
+          messageId,
+        })
+      : null;
+
   // Generate AI response
-  const aiResponse = await generateAIResponse({
-    systemPrompt,
-    messages: [
-      ...history,
-      { role: 'user', content: userMessage },
-    ],
-    maxOutputTokens: 256,
-    temperature: 0.7,
-  });
+  let aiResponse: Awaited<ReturnType<typeof generateAIResponse>>;
+  try {
+    aiResponse = await generateAIResponse({
+      systemPrompt,
+      messages: [
+        ...history,
+        { role: 'user', content: userMessage },
+      ],
+      maxOutputTokens: 256,
+      temperature: 0.7,
+    });
+  } finally {
+    typingHandle?.stop();
+  }
 
   // Parse AI response for actions
   const { reply, actions } = parseAIResponse(aiResponse.text);
@@ -2057,6 +2251,7 @@ If customers ask where the restaurant is located, share this address.` : ''}
 - Professional yet warm. Like a 5-star restaurant host.
 - MAXIMUM 2 lines per response. Never exceed 3 lines. No paragraphs. No walls of text.
 - Use bold (*text*) for item names and totals only. Use 1 emoji per message max.
+- Format replies with WhatsApp markdown: *bold* for item names/prices, _italic_ for emphasis, line breaks between items. Keep replies short.
 - Speak naturally. Never say "I am an AI" or "as an AI assistant".
 - Never use double line breaks. Use single \\n only.
 - Do NOT list multiple items unprompted. Suggest one thing at a time.

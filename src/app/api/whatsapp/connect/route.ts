@@ -152,6 +152,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save credentials' }, { status: 500 });
     }
 
+    // 6.5 Auto-fill the WhatsApp business profile from the restaurant record
+    // (onboarding polish — the number looks professional from day one).
+    // Fire-and-forget: never blocks or fails the connect.
+    void (async () => {
+      try {
+        const { data: profile } = await supabaseAdmin
+          .from('restaurants')
+          .select('name, address, description, business_type, slug, cuisine_type')
+          .eq('id', restaurant.id)
+          .single();
+        if (!profile) return;
+        const p = profile as Record<string, string | null>;
+
+        const VERTICALS: Record<string, string> = {
+          food_beverage: 'Restaurant',
+          salon_spa: 'Beauty',
+          healthcare: 'Health',
+          education: 'Education',
+          retail: 'Retail',
+          services: 'Services',
+        };
+
+        const { updateBusinessProfile } = await import('@/lib/whatsapp/business-profile');
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamintnetworks.in';
+        await updateBusinessProfile({
+          phoneNumberId: phone_number_id,
+          accessToken,
+          about: `AI assistant — replies in seconds, 24×7. Powered by AssistMint`,
+          description: p.description || undefined,
+          address: p.address || undefined,
+          vertical: VERTICALS[p.business_type || 'food_beverage'],
+          websites: p.slug ? [`${appUrl}/${p.slug}`] : undefined,
+        });
+        console.log('[WhatsApp Connect] Business profile auto-filled');
+      } catch (err) {
+        console.warn('[WhatsApp Connect] Business profile auto-fill skipped:', err);
+      }
+    })();
+
     // 7. Log activity (fire-and-forget)
     void (async () => {
       try {

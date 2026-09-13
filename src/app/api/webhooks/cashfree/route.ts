@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { webhookLimiter, checkRateLimit } from '@/lib/utils/rate-limiter';
 import { processSuccessfulPayment } from '@/lib/services/bot-payment';
+import { sendInChatOrderStatusUpdate } from '@/lib/services/in-chat-payment';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -140,7 +141,16 @@ async function handlePaymentSuccess(data: PaymentData) {
 
   console.log(`[Cashfree] Payment SUCCESS: cf_order=${cfOrderId}`);
 
-  await processSuccessfulPayment(cfOrderId, paymentMethod, paymentId);
+  const result = await processSuccessfulPayment(cfOrderId, paymentMethod, paymentId);
+
+  // If a native in-chat UPI invoice (order_details message) was sent for this
+  // payment, update the invoice in place with an order_status message —
+  // fire and forget; the helper no-ops when no invoice was used
+  if (result.orderId) {
+    sendInChatOrderStatusUpdate(cfOrderId, result.orderId).catch((e) =>
+      console.error('[Cashfree Webhook] In-chat order status update failed:', e)
+    );
+  }
 }
 
 async function handlePaymentFailed(data: PaymentData) {

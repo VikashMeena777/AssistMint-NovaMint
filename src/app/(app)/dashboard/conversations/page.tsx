@@ -9,8 +9,12 @@ import {
   Loader2,
   Phone,
   RefreshCw,
+  Tag,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { getCurrentRestaurant } from "@/lib/actions/restaurant-actions";
+import { updateConversationTags } from "@/lib/actions/conversation-actions";
 import { createClient } from "@/lib/supabase/client";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,6 +29,7 @@ interface ConversationSession {
   latest_time: string;
   requires_human: boolean;
   message_count: number;
+  tags: string[];
 }
 
 export default function ConversationsPage() {
@@ -36,6 +41,9 @@ export default function ConversationsPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [tagInput, setTagInput] = useState("");
+  const [tagsSaving, setTagsSaving] = useState(false);
 
   // Customer directory changes rarely — fetch once, not on every poll
   const customerMapRef = useRef<Map<string, { name: string; id: string }>>(new Map());
@@ -96,7 +104,7 @@ export default function ConversationsPage() {
       // Get all messages grouped by customer_phone
       const { data: allMessages } = await supabase
         .from("conversations")
-        .select("customer_phone, customer_id, role, content, requires_human, created_at")
+        .select("customer_phone, customer_id, role, content, requires_human, created_at, tags")
         .eq("restaurant_id", restaurantId)
         .order("created_at", { ascending: false })
         .limit(500);
@@ -135,10 +143,15 @@ export default function ConversationsPage() {
             latest_time: msg.created_at,
             requires_human: msg.requires_human || false,
             message_count: 0,
+            tags: Array.isArray(msg.tags) ? (msg.tags as string[]) : [],
           });
         }
         const session = sessionMap.get(phone)!;
         session.message_count++;
+        // Tags live on every row of the session; the first non-empty set wins
+        if (session.tags.length === 0 && Array.isArray(msg.tags) && msg.tags.length > 0) {
+          session.tags = msg.tags as string[];
+        }
       });
 
       setSessions(Array.from(sessionMap.values()));
@@ -201,11 +214,49 @@ export default function ConversationsPage() {
     return () => clearInterval(interval);
   }, [selectedSession, refreshMessages]);
 
+  // ── Tags ── save to the server, then mirror into local state
+  const saveTags = async (phone: string, tags: string[]) => {
+    if (!restaurantId) return;
+    setTagsSaving(true);
+    const result = await updateConversationTags(restaurantId, phone, tags);
+    setTagsSaving(false);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Tags updated");
+    setSessions((prev) =>
+      prev.map((s) => (s.customer_phone === phone ? { ...s, tags } : s))
+    );
+    setSelectedSession((prev) =>
+      prev && prev.customer_phone === phone ? { ...prev, tags } : prev
+    );
+  };
+
+  const addTag = () => {
+    if (!selectedSession) return;
+    const tag = tagInput.trim();
+    if (!tag) return;
+    if (selectedSession.tags.some((t) => t.toLowerCase() === tag.toLowerCase())) {
+      setTagInput("");
+      return;
+    }
+    setTagInput("");
+    saveTags(selectedSession.customer_phone, [...selectedSession.tags, tag]);
+  };
+
+  // Every tag in use across sessions (for the filter dropdown)
+  const allTags = Array.from(new Set(sessions.flatMap((s) => s.tags || []))).sort((a, b) =>
+    a.toLowerCase().localeCompare(b.toLowerCase())
+  );
+
   const filtered = sessions.filter((s) => {
-    if (!search) return true;
-    const name = s.customer_name.toLowerCase();
-    const phone = s.customer_phone.toLowerCase();
-    return name.includes(search.toLowerCase()) || phone.includes(search.toLowerCase());
+    const matchesSearch =
+      !search ||
+      s.customer_name.toLowerCase().includes(search.toLowerCase()) ||
+      s.customer_phone.toLowerCase().includes(search.toLowerCase());
+    const matchesTag = !tagFilter || (s.tags || []).includes(tagFilter);
+    return matchesSearch && matchesTag;
   });
 
   return (
@@ -241,6 +292,24 @@ export default function ConversationsPage() {
                 className="flex h-9 w-full rounded-lg border border-input bg-muted/50 pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
+            {allTags.length > 0 ? (
+              <div className="relative mt-2">
+                <Tag className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <select
+                  value={tagFilter}
+                  onChange={(e) => setTagFilter(e.target.value)}
+                  aria-label="Filter by tag"
+                  className="flex h-9 w-full appearance-none rounded-lg border border-input bg-muted/50 pl-9 pr-8 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  <option value="">All tags</option>
+                  {allTags.map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -297,6 +366,23 @@ export default function ConversationsPage() {
                         {s.latest_message.substring(0, 40)}
                         {s.latest_message.length > 40 ? "..." : ""}
                       </p>
+                      {s.tags.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {s.tags.slice(0, 2).map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded-full border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {s.tags.length > 2 ? (
+                            <span className="text-[10px] text-muted-foreground">
+                              +{s.tags.length - 2}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                         {s.requires_human ? (
                           <>
@@ -359,6 +445,53 @@ export default function ConversationsPage() {
                       Manual Mode
                     </span>
                   )}
+                </div>
+              </div>
+
+              {/* Tags — stored per conversation session */}
+              <div className="border-b border-border px-4 py-2.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {selectedSession.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+                    >
+                      {tag}
+                      <button
+                        onClick={() =>
+                          saveTags(
+                            selectedSession.customer_phone,
+                            selectedSession.tags.filter((t) => t !== tag)
+                          )
+                        }
+                        aria-label={`Remove tag ${tag}`}
+                        className="text-primary/60 hover:text-destructive transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addTag();
+                      }
+                    }}
+                    placeholder={
+                      selectedSession.tags.length
+                        ? "Add tag…"
+                        : "Add a tag (VIP, catering, follow-up…)…"
+                    }
+                    maxLength={24}
+                    className="h-7 min-w-[140px] flex-1 rounded-lg border border-dashed border-border bg-transparent px-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  />
+                  {tagsSaving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : null}
                 </div>
               </div>
 

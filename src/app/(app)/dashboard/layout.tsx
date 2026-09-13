@@ -29,6 +29,8 @@ import {
   PartyPopper,
   Pin,
   PinOff,
+  QrCode,
+  Rocket,
   Scissors,
   Search,
   Send,
@@ -516,7 +518,19 @@ export default function DashboardLayout({
   }, [pathname]);
 
   // ── Derived rail state ──
-  const groups = useMemo(() => getRailGroups(businessType), [businessType]);
+  const groups = useMemo(() => {
+    const gs = getRailGroups(businessType);
+    // WhatsApp growth tools apply to every business type
+    const grow = gs.find((g) => g.id === "grow");
+    if (grow && !grow.items.some((i) => i.href === "/dashboard/qr")) {
+      grow.items = [
+        ...grow.items,
+        { href: "/dashboard/qr", label: "QR Codes", icon: QrCode },
+        { href: "/dashboard/growth", label: "Growth Playbook", icon: Rocket },
+      ];
+    }
+    return gs;
+  }, [businessType]);
   const config = useMemo(() => getBusinessTypeConfig(businessType), [businessType]);
   const tabs = useMemo(() => getMobileTabs(businessType), [businessType]);
 

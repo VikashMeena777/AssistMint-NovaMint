@@ -12,6 +12,15 @@ export function sanitizeWhatsAppNumber(phone: string): string {
   return clean;
 }
 
+/**
+ * Build an absolute Graph API URL from a path (e.g. `${phoneNumberId}/messages`),
+ * keeping the Graph API version centralized in this module.
+ * Shared by every module under `src/lib/whatsapp/` so a version bump happens in one place.
+ */
+export function graphUrl(path: string): string {
+  return `${WHATSAPP_API_URL}/${path.replace(/^\/+/, '')}`;
+}
+
 // ─── Exponential Backoff Retry ──────────────
 
 interface RetryOptions {

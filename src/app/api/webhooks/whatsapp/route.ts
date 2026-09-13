@@ -6,6 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleIncomingMessage } from '@/lib/ai/orchestrator';
 import { handleOwnerReply } from '@/lib/services/owner-notifications';
+import { getRestaurantByPhoneId } from '@/lib/services/restaurant-service';
+import { handleOrderWebhook } from '@/lib/whatsapp/order-webhook';
+import { handlePaymentWebhook } from '@/lib/whatsapp/payment-webhook';
+import { handleFlowResponseWebhook } from '@/lib/flows/webhook-bridge';
 import { webhookLimiter, checkRateLimit } from '@/lib/utils/rate-limiter';
 import crypto from 'crypto';
 
@@ -134,7 +138,9 @@ export async function POST(req: NextRequest) {
     for (const entry of entries) {
       const changes = entry.changes || [];
       for (const change of changes) {
-        if (change.field !== 'messages') continue;
+        // 'messages' = normal messaging; 'orders' = catalog cart orders;
+        // 'payments' = India in-chat UPI payment status
+        if (change.field !== 'messages' && change.field !== 'orders' && change.field !== 'payments') continue;
 
         const value = change.value;
         const metadata = value.metadata;
@@ -195,6 +201,57 @@ export async function POST(req: NextRequest) {
             errors: status.errors,
           });
         }
+
+        // ── Catalog orders (value.orders — the 'orders' webhook field) ──
+        // Customer submitted their in-chat WhatsApp cart from the catalog.
+        // (Cart submissions can ALSO arrive as message.type === 'order' in
+        // the messages loop — handled below in the processing section.)
+        const catalogOrders = (value.orders as Array<Record<string, unknown>>) || [];
+        if (catalogOrders.length > 0 && phoneNumberId) {
+          const orderContacts = (value.contacts as Array<Record<string, unknown>>) || [];
+          const orderCustomerPhone = (orderContacts[0] as { wa_id?: string } | undefined)?.wa_id;
+          const orderCustomerName = (
+            (orderContacts[0] as { profile?: { name?: string } } | undefined)?.profile?.name
+          );
+          for (const order of catalogOrders) {
+            try {
+              const restaurant = await getRestaurantByPhoneId(phoneNumberId);
+              if (restaurant) {
+                await handleOrderWebhook({
+                  restaurant,
+                  order,
+                  customerPhone: orderCustomerPhone,
+                  customerName: orderCustomerName,
+                });
+              }
+            } catch (err) {
+              console.error('[WhatsApp Webhook] Catalog order handling failed:', err);
+            }
+          }
+        }
+
+        // ── Payment status updates (value.payments — India in-chat UPI) ──
+        // Status webhooks for native order_details invoices the customer paid
+        // inside WhatsApp (UPI intent / WhatsApp Pay).
+        const paymentUpdates = (value.payments as Array<Record<string, unknown>>) || [];
+        if (paymentUpdates.length > 0 && phoneNumberId) {
+          for (const payment of paymentUpdates) {
+            try {
+              const restaurant = await getRestaurantByPhoneId(phoneNumberId);
+              if (restaurant) {
+                await handlePaymentWebhook({
+                  restaurant,
+                  paymentStatus: String(payment.status || payment.payment_status || ''),
+                  referenceId: String(
+                    payment.reference_id || payment.referenceId || payment.order_id || ''
+                  ),
+                });
+              }
+            } catch (err) {
+              console.error('[WhatsApp Webhook] Payment status handling failed:', err);
+            }
+          }
+        }
       }
     }
 
@@ -220,6 +277,30 @@ export async function POST(req: NextRequest) {
               id: listReply.id,
               title: listReply.title,
             };
+          } else if ((interactive as Record<string, unknown>)?.type === 'flow_response') {
+            // ── WhatsApp Flow response ──
+            // Extract the flow_token (HMAC-signed by us at send time) +
+            // response_json screen data and forward to the flows handler.
+            // (Flow responses arrive as interactive messages — there is no
+            // separate value.flow_response shape on the webhook.)
+            const flowResp = (interactive as Record<string, unknown>).flow_response as
+              | Record<string, unknown>
+              | undefined;
+            if (flowResp) {
+              try {
+                await handleFlowResponseWebhook({
+                  phoneNumberId,
+                  from: message.from as string,
+                  messageId: message.id as string,
+                  flowToken: (flowResp.flow_token as string) || '',
+                  responseJson:
+                    (flowResp.response_json as string | Record<string, unknown>) || '{}',
+                });
+              } catch (err) {
+                console.error('[WhatsApp Webhook] Flow response handling failed:', err);
+              }
+            }
+            continue;
           }
         }
 
@@ -271,6 +352,40 @@ export async function POST(req: NextRequest) {
             console.log(`[WhatsApp Webhook] Reaction ${reaction.emoji} on ${reaction.message_id} from ${message.from}`);
             continue; // Reactions are logged but not forwarded to orchestrator
           }
+        }
+
+        // ── Catalog cart order (customer submitted their WhatsApp cart) ──
+        // Arrives as message.type === 'order' with order.products[]; converted
+        // to a real order by handleOrderWebhook
+        if (message.type === 'order') {
+          const orderPayload = message.order as Record<string, unknown> | undefined;
+          if (orderPayload) {
+            try {
+              const restaurant = await getRestaurantByPhoneId(phoneNumberId);
+              if (restaurant) {
+                await handleOrderWebhook({
+                  restaurant,
+                  order: { ...orderPayload, id: orderPayload.id || message.id },
+                  customerPhone: message.from as string,
+                  customerName: whatsappName,
+                });
+              }
+            } catch (err) {
+              console.error('[WhatsApp Webhook] Catalog order (message) handling failed:', err);
+            }
+          }
+          continue;
+        }
+
+        // ── location_request_message ack ──
+        // Ack when the customer taps the share-location button on a native
+        // location request (interactive type location_request_message). The
+        // shared location itself arrives separately as a normal location
+        // message (already handled) — nothing to do here, just don't route
+        // the ack into the orchestrator.
+        if (message.type === 'location_request_message') {
+          console.log(`[WhatsApp Webhook] Location request ack from ${message.from}`);
+          continue;
         }
 
         // Check if this is a restaurant owner replying to manage orders

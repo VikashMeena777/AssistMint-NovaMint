@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Camera,
   MapPin,
+  HeartPulse,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -34,6 +35,9 @@ import {
 } from "@/lib/actions/restaurant-actions";
 import { getCurrentPlan, getPlanUsage, createPlanCheckout, verifyPlanPayment } from "@/lib/actions/billing-actions";
 import { PLANS, PLAN_ORDER, formatLimit, getAnnualSavings, type PlanSlug, type BillingCycle } from "@/lib/utils/plan-limits";
+import { WhatsAppHealthSection } from "@/components/dashboard/whatsapp-health-section";
+import { WhatsAppShareCard } from "@/components/dashboard/whatsapp-share-card";
+import { CatalogSyncCard } from "@/components/dashboard/catalog-sync-card";
 
 const SETTINGS_TABS = [
   { id: "billing", label: "Billing", icon: Crown },
@@ -44,6 +48,7 @@ const SETTINGS_TABS = [
   { id: "payments", label: "Payments", icon: CreditCard },
   { id: "language", label: "Languages", icon: Globe },
   { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "wa-health", label: "WhatsApp Health", icon: HeartPulse },
 ] as const;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -322,6 +327,12 @@ export default function SettingsPage() {
           {activeTab === "notifications" && restaurant?.id && <NotificationSettings restaurantId={restaurant.id} />}
           {activeTab === "billing" && restaurant?.id && (
             <BillingSection restaurantId={restaurant.id} />
+          )}
+          {activeTab === "wa-health" && restaurant?.id && (
+            <WhatsAppHealthSection
+              restaurantId={restaurant.id}
+              onGoConnect={() => setActiveTab("whatsapp")}
+            />
           )}
         </div>
       </div>
@@ -1374,6 +1385,21 @@ function WhatsAppSettings({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Share your WhatsApp — wa.me deep links */}
+      <WhatsAppShareCard restaurantId={restaurantId} />
+
+      {/* Catalog sync — only when connected */}
+      {isConnected && (
+        <CatalogSyncCard
+          restaurantId={restaurantId}
+          initialLastSyncedAt={
+            typeof data.business_config?.last_catalog_sync_at === "string"
+              ? data.business_config.last_catalog_sync_at
+              : null
+          }
+        />
       )}
     </div>
   );
