@@ -115,8 +115,9 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
             Works like prepaid talktime. Meta&apos;s rates, shown honestly:
             promotions {" "}{formatPaise(MESSAGE_COSTS_PAISE.marketing)}/msg · reminders &amp; updates{" "}
-            {formatPaise(MESSAGE_COSTS_PAISE.utility)}/msg · customer replies in the 24-hour window{" "}
-            <span className="font-medium text-success">FREE</span>.
+            {formatPaise(MESSAGE_COSTS_PAISE.utility)}/msg. Customer replies are free until{" "}
+            <span className="font-medium">1 Oct 2026</span>, then{" "}
+            {formatPaise(MESSAGE_COSTS_PAISE.service)}/msg (Meta&apos;s change).
           </p>
         </div>
         <Coins className="h-5 w-5 shrink-0 text-primary" />

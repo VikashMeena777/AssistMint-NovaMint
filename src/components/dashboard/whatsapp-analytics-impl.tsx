@@ -182,7 +182,7 @@ export default function WhatsAppChartsImpl({ messaging, costByDay }: WhatsAppCha
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/50 bg-card/50 p-6 text-center">
           <IndianRupee className="h-8 w-8 text-muted-foreground" strokeWidth={1.75} />
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-            No WhatsApp charges in this period — replies inside the 24-hour window are free, and Meta
+            No WhatsApp charges in this period. Note: from 1 Oct 2026 Meta also charges per service (AI reply) message —
             hides cost for accounts on a shared credit line.
           </p>
         </div>

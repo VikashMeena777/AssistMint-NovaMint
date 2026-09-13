@@ -27,6 +27,7 @@ export type CreditReason =
   | 'campaign'
   | 'broadcast'
   | 'business_message'
+  | 'service'
   | 'refund'
   | 'bonus';
 

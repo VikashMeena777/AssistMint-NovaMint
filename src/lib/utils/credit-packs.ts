@@ -9,9 +9,10 @@
 // to whole paise), so the wallet can never go negative
 // against Meta's bill and every pack is profitable:
 //   worst case (all balance spent on marketing):
-//     pay ₹140 for ₹100 balance → Meta cost ≈ ₹94.93 → 32% margin
+//     pay ₹140 for ₹100 balance → Meta cost ≈ ₹94.93 → ~32% margin
 //   best case (all utility):
-//     Meta cost ≈ ₹11.50 → 92% margin
+//     Meta cost ≈ ₹95.80 → ~31.6% margin
+//   (margins are near-flat by design: deductions track Meta's real rates)
 // Customer-initiated replies inside the 24h window are
 // FREE (no deduction) — that's the bot's chat replies.
 // ============================================

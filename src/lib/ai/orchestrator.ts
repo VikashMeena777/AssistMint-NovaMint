@@ -9,6 +9,13 @@ import { getFullMenu, buildMenuContext, getMenuItemById, searchMenuItems } from 
 import { getOrCreateCart, addToCart, removeFromCart, clearCart, formatCartForWhatsApp, convertCartToOrder, updateCartItemQuantity, type CartItem } from '@/lib/services/cart-engine';
 import { getOrCreateCustomer, updateCustomerOrderStats, getSavedAddresses, addSavedAddress, getCustomerOrders, saveOrderRating, setCustomerLanguage } from '@/lib/services/customer-service';
 import { getOrCreateConversation, getRecentMessages, saveMessage, setBotActive } from '@/lib/services/conversation-manager';
+import { spendCredits } from '@/lib/services/credit-service';
+import { MESSAGE_COSTS_PAISE } from '@/lib/utils/credit-packs';
+
+// Meta India: service (AI-reply) messages become chargeable at this instant
+// (1 Oct 2026, 00:00 IST). Before it, replies are free; after it, each bot
+// reply deducts the utility rate from the owner's message balance.
+const SERVICE_CHARGE_START_MS = new Date('2026-10-01T00:00:00+05:30').getTime();
 import { getRestaurantByPhoneId, type Restaurant } from '@/lib/services/restaurant-service';
 import { createBotPaymentLink } from '@/lib/services/bot-payment';
 import { notifyOwnerNewOrder } from '@/lib/services/owner-notifications';
@@ -2547,6 +2554,21 @@ async function sendBotReply(
       to: customer.phone,
       text,
     });
+
+    // Service messages become CHARGEABLE on 1 Oct 2026 (Meta India change:
+    // utility rate applies to third-party AI agents). Deduct from the owner's
+    // message balance per AI reply — auto-activates on the date, no deploy
+    // needed. A zero balance NEVER blocks the reply (never strand a customer
+    // mid-conversation); the wallet floors at 0 and low-balance state is
+    // visible in Settings → WhatsApp Health.
+    if (Date.now() >= SERVICE_CHARGE_START_MS) {
+      spendCredits(
+        restaurant.id,
+        MESSAGE_COSTS_PAISE.service,
+        'service',
+        `reply:${Date.now()}`,
+      ).catch(() => { /* balance absence must not break the customer's reply */ });
+    }
   }
   await saveMessage(conversation.id, restaurant.id, 'bot', text, undefined, { phone: customer.phone });
 }
