@@ -1046,8 +1046,16 @@ function WhatsAppSettings({
               </button>
               <div className="mt-3 flex items-center justify-center gap-4 text-xs text-muted-foreground">
                 <span>✓ Uses your existing number</span>
+                <span>✓ Keep your chats</span>
                 <span>✓ 2 min setup</span>
               </div>
+              <p className="mx-auto mt-4 max-w-sm rounded-xl border bg-secondary/40 px-3.5 py-2.5 text-center text-xs leading-relaxed text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  Already using the WhatsApp Business app?
+                </span>{" "}
+                Keep your number and your one-to-one chats — connecting adds the AI front
+                desk alongside the app.
+              </p>
             </div>
 
             {/* Manual Entry Fallback */}

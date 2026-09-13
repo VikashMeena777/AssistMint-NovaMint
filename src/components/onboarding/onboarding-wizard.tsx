@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createRestaurant, updateWhatsAppConfig, startStarterTrial } from '@/lib/actions/restaurant-actions';
 import { createCategory, createMenuItem } from '@/lib/actions/menu-actions';
@@ -72,6 +72,33 @@ export default function OnboardingWizard() {
   const [error, setError] = useState('');
   const [restaurantId, setRestaurantId] = useState('');
   const [origin, setOrigin] = useState('');
+
+  // ── Embedded Signup session info ──
+  // The WhatsApp Business Account + Phone Number IDs arrive via postMessage
+  // DURING the FB.login popup (WA_EMBEDDED_SIGNUP events), not in the login
+  // callback — capture them here so the connect call includes both.
+  const sessionInfoRef = useRef<{ waba_id?: string; phone_number_id?: string }>({});
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return;
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data.type === 'WA_EMBEDDED_SIGNUP') {
+          if (data.data?.phone_number_id) {
+            sessionInfoRef.current = {
+              waba_id: data.data.waba_id,
+              phone_number_id: data.data.phone_number_id,
+            };
+          }
+        }
+      } catch {
+        // Not a JSON message, ignore
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   // Read origin after mount so SSR and client render identical values
   useEffect(() => {
@@ -529,6 +556,18 @@ export default function OnboardingWizard() {
                 Connect your WhatsApp Business number so customers can message you directly.
               </p>
 
+              {/* Coexistence — for merchants already on the WhatsApp Business app */}
+              <div className="rounded-xl border bg-secondary/40 p-3.5">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  <span className="font-semibold text-foreground">
+                    Already using the WhatsApp Business app?
+                  </span>{" "}
+                  Keep your number and your chats — connecting here adds the AI front desk
+                  alongside the app. Your one-to-one conversations keep working in the app;
+                  new customer messages get instant AI replies 24×7.
+                </p>
+              </div>
+
               {/* Embedded Signup Button */}
               <button
                 onClick={() => {
@@ -548,7 +587,13 @@ export default function OnboardingWizard() {
                         fetch('/api/whatsapp/connect', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ code: response.authResponse.code }),
+                          body: JSON.stringify({
+                            code: response.authResponse.code,
+                            // session_info arrives via postMessage during signup
+                            // (WABA + phone ids) — captured by the listener below
+                            waba_id: sessionInfoRef.current.waba_id,
+                            phone_number_id: sessionInfoRef.current.phone_number_id,
+                          }),
                         })
                           .then((r) => r.json())
                           .then((result) => {
@@ -590,6 +635,8 @@ export default function OnboardingWizard() {
                 <span>✓ One-click setup</span>
                 <span>•</span>
                 <span>✓ Uses your existing number</span>
+                <span>•</span>
+                <span>✓ Keep your chats</span>
               </div>
 
               {/* Manual Entry (collapsible) */}
