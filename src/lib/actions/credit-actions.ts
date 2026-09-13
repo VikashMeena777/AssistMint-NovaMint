@@ -10,7 +10,6 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getCreditPack } from '@/lib/utils/credit-packs';
-import type { CreditPack } from '@/lib/utils/credit-packs';
 import {
   getBalance,
   getCreditHistory,
@@ -18,10 +17,11 @@ import {
   type CreditTransaction,
 } from '@/lib/services/credit-service';
 
-// 'use server' files may only export async functions — the pack config
-// lives in '@/lib/utils/credit-packs' (client-safe) and the service
-// re-exports it from '@/lib/services/credit-service'.
-export type { CreditPack, CreditTransaction };
+// 'use server' files may only export async functions. Do NOT re-export types
+// from this file — the server-action compiler emits a runtime reference for
+// type re-exports here and the chunk crashes with "CreditPack is not defined"
+// (live incident 2026-09-13). Import types from
+// '@/lib/services/credit-service' or '@/lib/utils/credit-packs' directly.
 
 const CASHFREE_API_URL = process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production'
   ? 'https://api.cashfree.com/pg'

@@ -10,7 +10,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Coins, ExternalLink, Loader2, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { buyCredits, verifyCreditsPayment, getCreditsOverview } from "@/lib/actions/credit-actions";
-import type { CreditTransaction } from "@/lib/actions/credit-actions";
+// Types come from the service/packs modules — NEVER from the 'use server'
+// credit-actions file (type re-exports there crash the compiled chunk).
+import type { CreditTransaction } from "@/lib/services/credit-service";
 import { CREDIT_PACKS, formatPaise } from "@/lib/utils/credit-packs";
 import type { CreditPackId } from "@/lib/utils/credit-packs";
 
