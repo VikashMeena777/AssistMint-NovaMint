@@ -349,10 +349,26 @@ export async function fetchTemplateAnalytics(
 ): Promise<TemplateAnalytics> {
   const { wabaId, accessToken, start, end, granularity = 'DAY', templateIds } = options;
 
-  let field = `template_analytics.start(${normalizeTimeBound(start)}).end(${normalizeTimeBound(end)}).granularity(${granularity}).dimensions(${graphList(['TEMPLATE_NAME', 'TEMPLATE_LANGUAGE'])})`;
-  if (templateIds && templateIds.length > 0) {
-    field += `.template_ids(${graphList(templateIds)})`;
+  // Meta REQUIRES template_ids on template_analytics — when the caller doesn't
+  // provide them, auto-fetch the WABA's template list first.
+  let ids = templateIds;
+  if (!ids || ids.length === 0) {
+    const templates = await graphRequest<{ data?: Array<{ id?: string }> }>({
+      path: `${wabaId}/message_templates`,
+      accessToken,
+      query: { fields: 'name,status', limit: '50' },
+    });
+    ids = (templates.data ?? [])
+      .map((t) => t.id)
+      .filter((id): id is string => typeof id === 'string');
+    if (ids.length === 0) {
+      // No templates exist on this WABA — nothing to analyze
+      return { templates: [], data: [] };
+    }
   }
+
+  let field = `template_analytics.start(${normalizeTimeBound(start)}).end(${normalizeTimeBound(end)}).granularity(${granularity}).dimensions(${graphList(['TEMPLATE_NAME', 'TEMPLATE_LANGUAGE'])})`;
+  field += `.template_ids(${graphList(ids)})`;
 
   const response = await graphRequest<{ template_analytics?: { data?: unknown[] } }>({
     path: wabaId,
