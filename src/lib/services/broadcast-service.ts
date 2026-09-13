@@ -5,6 +5,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { sendTextMessage, sendImageMessage } from '@/lib/whatsapp/client';
+import { spendCredits, addCredits } from '@/lib/services/credit-service';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -162,6 +163,28 @@ export async function sendBroadcast(
     .update({ total_recipients: customers.length })
     .eq('id', broadcastId);
 
+  // Business-initiated sends cost 1 credit per recipient — spend upfront.
+  // (Customer replies in the 24h window never touch credits.)
+  const spend = await spendCredits(restaurantId, customers.length, 'broadcast', broadcastId);
+  if (!spend.ok) {
+    // Release the claim so the owner can retry after topping up
+    await supabaseAdmin
+      .from('broadcasts')
+      .update({ status: 'failed', updated_at: new Date().toISOString() })
+      .eq('id', broadcastId);
+
+    if (spend.insufficient) {
+      const have = spend.balance !== null ? ` (you have ${spend.balance.toLocaleString('en-IN')})` : '';
+      return {
+        sent: 0,
+        failed: 0,
+        error: `Not enough credits — you need ${customers.length.toLocaleString('en-IN')} credits for ${customers.length.toLocaleString('en-IN')} recipients${have}. Buy more in Settings → Payments.`,
+      };
+    }
+    console.error('[Broadcast] Credit spend failed:', restaurantId);
+    return { sent: 0, failed: 0, error: 'Could not verify message credits. Please try again.' };
+  }
+
   let sentCount = 0;
   let failedCount = 0;
 
@@ -191,6 +214,11 @@ export async function sendBroadcast(
     }
     // Rate limit: ~10 messages/second
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  // Refund 1 credit per failed send — the recipient was never reached
+  if (failedCount > 0) {
+    await addCredits(restaurantId, failedCount, 'refund', broadcastId);
   }
 
   // Update broadcast status

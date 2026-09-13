@@ -250,6 +250,7 @@ export async function POST(req: NextRequest) {
           wabaId: waba_id,
           accessToken,
           name: catalogName,
+          phoneNumberId: phone_number_id,
         });
         if (ensured.error) {
           console.warn('[WhatsApp Connect] Catalog auto-creation issue:', ensured.error);

@@ -39,6 +39,7 @@ import { WhatsAppHealthSection } from "@/components/dashboard/whatsapp-health-se
 import { WhatsAppShareCard } from "@/components/dashboard/whatsapp-share-card";
 import { CatalogSyncCard } from "@/components/dashboard/catalog-sync-card";
 import { UpiSetupCard } from "@/components/dashboard/upi-setup-card";
+import { CreditsCard } from "@/components/dashboard/credits-card";
 
 const SETTINGS_TABS = [
   { id: "billing", label: "Billing", icon: Crown },
@@ -323,6 +324,8 @@ export default function SettingsPage() {
           )}
           {activeTab === "payments" && restaurant?.id && (
             <>
+              {/* Prepaid message credits — spent on business-initiated sends */}
+              <CreditsCard restaurantId={restaurant.id} />
               {/* Dead-simple in-chat UPI setup — the one-input path to taking payments */}
               <UpiSetupCard
                 restaurantId={restaurant.id}

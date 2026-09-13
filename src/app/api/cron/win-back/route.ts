@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendReplyButtons } from '@/lib/whatsapp/client';
+import { spendCredits, addCredits } from '@/lib/services/credit-service';
 
 export const maxDuration = 45;
 export const dynamic = 'force-dynamic';
@@ -88,6 +89,19 @@ export async function GET(req: Request) {
         const phone = cust.phone as string;
         if (!phone) continue;
 
+        // Business-initiated send: 1 credit per message. Skip the
+        // customer when the wallet can't cover it (once it's empty,
+        // every remaining customer would skip too).
+        const spend = await spendCredits(rest.id, 1, 'campaign', 'winback');
+        if (!spend.ok) {
+          if (spend.insufficient) {
+            console.log(`[Win-Back Cron] Skipping ${rest.id}: insufficient credits (balance: ${spend.balance})`);
+          } else {
+            console.error(`[Win-Back Cron] Credit spend failed for ${rest.id}`);
+          }
+          break;
+        }
+
         const name = (cust.saved_name as string) || (cust.whatsapp_name as string) || '';
         const personalMsg = name
           ? messages.body.replace('{name}', name)
@@ -105,23 +119,29 @@ export async function GET(req: Request) {
           totalSent++;
         } catch (err) {
           console.error('[Win-Back Cron] Send failed:', err instanceof Error ? err.message : err);
+          // The message never went out — give the credit back
+          await addCredits(rest.id, 1, 'refund', 'winback');
         }
 
         // Rate limit: 10 messages/second
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
-      // Log as a broadcast
-      await supabaseAdmin.from('broadcasts').insert({
-        restaurant_id: rest.id,
-        title: `Win-Back Campaign (Auto)`,
-        message: messages.body.replace('{name}', 'Customer'),
-        target_audience: 'inactive',
-        total_recipients: inactiveCustomers.length,
-        sent_count: restaurantSent,
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-      });
+      // Log as a broadcast — only when something actually went out, so an
+      // all-skipped run (e.g. empty wallet) doesn't count as this month's
+      // win-back and block the next attempt
+      if (restaurantSent > 0) {
+        await supabaseAdmin.from('broadcasts').insert({
+          restaurant_id: rest.id,
+          title: `Win-Back Campaign (Auto)`,
+          message: messages.body.replace('{name}', 'Customer'),
+          target_audience: 'inactive',
+          total_recipients: inactiveCustomers.length,
+          sent_count: restaurantSent,
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+        });
+      }
     }
 
     return NextResponse.json({

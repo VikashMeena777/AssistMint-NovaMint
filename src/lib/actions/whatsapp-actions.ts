@@ -1088,6 +1088,7 @@ export async function syncCatalogToMeta(
         wabaId: owned.wabaId,
         accessToken: owned.accessToken,
         name: owned.restaurantName || 'Our Business',
+        phoneNumberId: owned.phoneNumberId,
       });
     } catch (err) {
       ensured = null;
@@ -1317,4 +1318,50 @@ export async function provisionFlows(
   } catch (err) {
     return { data: null, error: `Provisioning failed: ${errorMessage(err)}` };
   }
+}
+
+// ═══════════════════════════════════════════
+// WHATSAPP PAYMENTS (India) onboarding status
+// ═══════════════════════════════════════════
+
+export interface PaymentsOnboardingStatusData {
+  /**
+   * Whether this WABA is onboarded to WhatsApp Payments India — the Meta
+   * onboarding (whatsappindia-bizpayments-support@meta.com) that unlocks
+   * native in-chat `order_details` invoices. Honest by design: there is no
+   * read-only API to ask Meta whether payments are enabled (the only true
+   * probe is sending an order_details message, which is destructive), so
+   * this mirrors business_config.payments_onboarded (absent key = false),
+   * set manually once Meta confirms onboarding.
+   */
+  onboarded: boolean;
+  /** business_config.upi_vpa — the merchant's UPI ID, when configured. */
+  upiVpa: string | null;
+  /**
+   * What the customer experiences today on Pay Online:
+   * 'native_invoice' — the in-chat UPI invoice (needs onboarding + a UPI ID);
+   * 'cta_button' — the always-available tappable payment button fallback.
+   */
+  customerPath: 'native_invoice' | 'cta_button';
+}
+
+/** Read the restaurant's WhatsApp Payments India onboarding state (ownership-checked). */
+export async function getPaymentsOnboardingStatus(
+  restaurantId: string
+): Promise<{ data: PaymentsOnboardingStatusData | null; error: string | null; notConnected?: boolean }> {
+  const owned = await requireConnected(restaurantId);
+  if (!owned.ok) return { data: null, error: owned.error, notConnected: owned.notConnected };
+
+  const onboarded = owned.businessConfig.payments_onboarded === true;
+  const upiVpaRaw = owned.businessConfig.upi_vpa;
+  const upiVpa = typeof upiVpaRaw === 'string' && upiVpaRaw.trim() ? upiVpaRaw.trim() : null;
+
+  return {
+    data: {
+      onboarded,
+      upiVpa,
+      customerPath: onboarded && upiVpa ? 'native_invoice' : 'cta_button',
+    },
+    error: null,
+  };
 }

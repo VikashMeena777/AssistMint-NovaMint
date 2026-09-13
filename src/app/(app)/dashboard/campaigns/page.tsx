@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   fetchBroadcasts,
   createNewBroadcast,
   triggerBroadcast,
   getAudienceCount,
 } from '@/lib/actions/broadcast-actions';
+import { getCreditsBalance } from '@/lib/actions/credit-actions';
 import type { Broadcast } from '@/lib/services/broadcast-service';
 import { toast } from 'sonner';
 import {
@@ -19,6 +21,7 @@ import {
   Clock,
   AlertCircle,
   Loader2,
+  Coins,
 } from 'lucide-react';
 import { getCurrentRestaurant } from '@/lib/actions/restaurant-actions';
 import { getBusinessTypeConfig } from '@/lib/utils/business-types';
@@ -45,17 +48,37 @@ export default function CampaignsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [businessType, setBusinessType] = useState<string>('food_beverage');
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [restaurantId, setRestaurantId] = useState<string | null>(null);
+
+  const refreshCredits = useCallback(async () => {
+    if (!restaurantId) return;
+    try {
+      const balance = await getCreditsBalance(restaurantId);
+      setCreditBalance(balance);
+    } catch (err) {
+      console.error('Failed to load credit balance:', err);
+    }
+  }, [restaurantId]);
 
   useEffect(() => {
     (async () => {
       try {
         const r = await getCurrentRestaurant();
         if (r?.business_type) setBusinessType(r.business_type as string);
+        if (r?.id) setRestaurantId(r.id as string);
       } catch (err) {
         console.error('Failed to load business type:', err);
       }
     })();
   }, []);
+
+  // Broadcasts spend 1 credit per recipient — show a live balance in the header
+  useEffect(() => {
+    if (!restaurantId) return;
+    const t = setTimeout(() => void refreshCredits(), 0);
+    return () => clearTimeout(t);
+  }, [restaurantId, refreshCredits]);
 
   const config = getBusinessTypeConfig(businessType);
   const terms = config.terms;
@@ -91,6 +114,7 @@ export default function CampaignsPage() {
     toast.loading('Sending broadcast...', { id: 'broadcast-send' });
     const result = await triggerBroadcast(id);
     toast.dismiss('broadcast-send');
+    void refreshCredits();
 
     if (result.error) {
       toast.error(result.error);
@@ -113,13 +137,28 @@ export default function CampaignsPage() {
             Send WhatsApp broadcasts & promotional messages to your {terms.customers.toLowerCase()}
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          New Campaign
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Credit balance chip — broadcasts spend 1 credit per recipient */}
+          <Link
+            href="/dashboard/settings?tab=payments"
+            title="Each broadcast uses 1 credit per recipient — buy more in Settings → Payments"
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm transition-colors hover:bg-secondary"
+          >
+            <Coins className="h-4 w-4 text-primary" />
+            <span className="font-semibold font-mono tabular-nums">
+              {creditBalance === null ? '…' : creditBalance.toLocaleString('en-IN')}
+            </span>
+            <span className="text-muted-foreground">credits</span>
+            <span className="font-medium text-primary">Buy</span>
+          </Link>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="stamp inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            New Campaign
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

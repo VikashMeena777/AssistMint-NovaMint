@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendReplyButtons } from '@/lib/whatsapp/client';
+import { spendCredits, addCredits } from '@/lib/services/credit-service';
 
 export const maxDuration = 45;
 export const dynamic = 'force-dynamic';
@@ -92,6 +93,20 @@ export async function GET(req: Request) {
         { id: `rate_1_${orderId}`, title: '⭐ Poor' },
       ];
 
+      // Business-initiated send: 1 credit per message. Skip this customer
+      // when the restaurant's wallet can't cover it — other orders in this
+      // run may belong to restaurants that still have credits.
+      const spend = await spendCredits(o.restaurant_id as string, 1, 'business_message', orderId);
+      if (!spend.ok) {
+        if (spend.insufficient) {
+          console.log(`[Review Request Cron] Skipping order ${orderId}: insufficient credits (balance: ${spend.balance})`);
+        } else {
+          console.error(`[Review Request Cron] Credit spend failed for order ${orderId}`);
+        }
+        await markRequested();
+        continue;
+      }
+
       try {
         await sendReplyButtons({
           phoneNumberId: rest.whatsapp_phone_id,
@@ -103,6 +118,8 @@ export async function GET(req: Request) {
         sent++;
       } catch (err) {
         console.error('[Review Request Cron] Send failed for order', orderId, err instanceof Error ? err.message : err);
+        // The message never went out — give the credit back
+        await addCredits(o.restaurant_id as string, 1, 'refund', orderId);
       }
 
       // Mark requested regardless of send success — a hard-failed send

@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // One-off diagnostic/probe scripts (run standalone via tsx/node,
+    // excluded from the build in tsconfig too).
+    "scripts/**",
   ]),
 ]);
 

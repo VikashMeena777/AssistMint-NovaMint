@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { processSuccessfulPayment } from '@/lib/services/bot-payment';
+import { fulfilCreditPurchase } from '@/lib/services/credit-service';
 
 // CRITICAL: Never cache this route — each visit must re-check payment status
 export const dynamic = 'force-dynamic';
@@ -29,12 +30,14 @@ export async function GET(req: NextRequest) {
     return renderPage('error', 'Missing order ID', '');
   }
 
-  // Fetch restaurant_id from payments table using cashfree_order_id to load correct keys
+  // Fetch restaurant_id (and metadata) from payments table using cashfree_order_id to load correct keys
   const { data: payment } = await supabaseAdmin
     .from('payments')
-    .select('restaurant_id')
+    .select('restaurant_id, metadata')
     .eq('cashfree_order_id', orderId)
     .single();
+
+  const paymentMeta = (payment as { metadata: { type?: string } | null } | null)?.metadata;
 
   let clientId = process.env.CASHFREE_CLIENT_ID;
   let clientSecret = process.env.CASHFREE_CLIENT_SECRET;
@@ -94,6 +97,17 @@ export async function GET(req: NextRequest) {
 
   // Update DB if paid
   if (paymentStatus === 'paid') {
+    // Credits purchases skip the order/cart fulfilment path —
+    // processSuccessfulPayment's atomic claim would consume the
+    // payment before credits are ever added. Fulfil credits instead.
+    if (paymentMeta?.type === 'credits') {
+      const result = await fulfilCreditPurchase(orderId);
+      if (!result.ok) {
+        return renderPage('error', amountPaid, orderId);
+      }
+      return renderPage('success', amountPaid, orderId, 'credits');
+    }
+
     const { orderId: dbOrderId } = await processSuccessfulPayment(orderId, 'Online');
     return renderPage('success', amountPaid, dbOrderId || orderId);
   } else if (paymentStatus === 'pending' || paymentStatus === 'active') {
@@ -103,28 +117,43 @@ export async function GET(req: NextRequest) {
   }
 }
 
-function renderPage(status: 'success' | 'pending' | 'failed' | 'error', amount: string, orderId: string) {
+function renderPage(
+  status: 'success' | 'pending' | 'failed' | 'error',
+  amount: string,
+  orderId: string,
+  kind: 'order' | 'credits' = 'order'
+) {
   const config = {
     success: {
       emoji: '✅',
       title: 'Payment Successful!',
-      message: `Your payment of ${amount} has been received. Your order is confirmed and being prepared.`,
+      message: kind === 'credits'
+        ? `Your payment of ${amount} has been received. Your message credits have been added to your AssistMint balance.`
+        : `Your payment of ${amount} has been received. Your order is confirmed and being prepared.`,
       color: '#10b981',
       bgColor: '#ecfdf5',
+      buttonText: kind === 'credits' ? '↩ Back to AssistMint' : '↩ Back to WhatsApp',
+      buttonHref: kind === 'credits'
+        ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamint.in'}/dashboard/settings?tab=payments`
+        : 'https://api.whatsapp.com/',
     },
     pending: {
       emoji: '⏳',
       title: 'Payment Processing',
-      message: 'Your payment is being processed. You will receive a WhatsApp confirmation once complete.',
+      message: `Your payment is being processed. You will receive a WhatsApp confirmation once complete.`,
       color: '#f59e0b',
       bgColor: '#fffbeb',
+      buttonText: '↩ Back to WhatsApp',
+      buttonHref: 'https://api.whatsapp.com/',
     },
     failed: {
       emoji: '❌',
       title: 'Payment Failed',
-      message: 'Your payment could not be completed. Please try again or choose Cash on Delivery.',
+      message: `Your payment could not be completed. Please try again or choose Cash on Delivery.`,
       color: '#ef4444',
       bgColor: '#fef2f2',
+      buttonText: '↩ Back to WhatsApp',
+      buttonHref: 'https://api.whatsapp.com/',
     },
     error: {
       emoji: '⚠️',
@@ -132,6 +161,8 @@ function renderPage(status: 'success' | 'pending' | 'failed' | 'error', amount: 
       message: amount || 'We could not verify your payment. Please contact support.',
       color: '#6b7280',
       bgColor: '#f9fafb',
+      buttonText: '↩ Back to WhatsApp',
+      buttonHref: 'https://api.whatsapp.com/',
     },
   };
 

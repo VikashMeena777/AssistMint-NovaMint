@@ -7,7 +7,7 @@
 // handleOnlinePayOrder). Plain owner language only — no jargon.
 
 import { useState } from "react";
-import { CheckCircle2, Loader2, Save, Smartphone } from "lucide-react";
+import { CheckCircle2, Info, Loader2, Save, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { saveUpiVpa } from "@/lib/actions/restaurant-actions";
 import { StatusPill } from "@/components/dashboard/status-pill";
@@ -79,6 +79,13 @@ export function UpiSetupCard({ restaurantId, initialUpiVpa }: UpiSetupCardProps)
         <p className="text-xs leading-relaxed text-muted-foreground">
           Not sure? Open any UPI app (GPay, PhonePe, Paytm) → tap your profile → copy your UPI ID.
         </p>
+        <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-muted/30 px-3 py-2.5">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            In-chat UPI invoices need WhatsApp Payments onboarding (Meta approves this per business).
+            Until then customers get a secure payment button instead — same UPI apps, works today.
+          </p>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

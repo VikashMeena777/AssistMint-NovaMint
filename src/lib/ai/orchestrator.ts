@@ -18,7 +18,7 @@ import { markAsReadWithTyping, maintainTypingIndicator } from '@/lib/whatsapp/in
 import { bold, formatMenuList } from '@/lib/whatsapp/markdown';
 import { sendLocationRequestMessage } from '@/lib/whatsapp/media';
 import { sendCatalogMessage } from '@/lib/whatsapp/catalog';
-import { sendOrderDetailsMessage, buildUpiIntentLink } from '@/lib/whatsapp/payments';
+import { sendOrderDetailsMessage, sendPayCtaMessage, buildUpiIntentLink } from '@/lib/whatsapp/payments';
 import { sendFlowMessage } from '@/lib/whatsapp/flows';
 import { createFlowToken } from '@/lib/flows/token';
 import { logActivity, ACTIONS } from '@/lib/utils/activity-logger';
@@ -241,18 +241,8 @@ export async function handleIncomingMessage(params: {
       await sendBotReply(restaurant, customer, conversation, msg);
       return;
     }
-    // Respect delivery/pickup toggles
-    if (restaurant.delivery_enabled && restaurant.pickup_enabled) {
-      // Both enabled → ask customer to choose
-      await askForDeliveryAddress(restaurant, customer, conversation);
-    } else if (restaurant.delivery_enabled && !restaurant.pickup_enabled) {
-      // Delivery only → ask for address directly
-      await askForDeliveryAddress(restaurant, customer, conversation);
-    } else {
-      // Pickup only (default) → skip address, go straight to payment
-      await sendBotReply(restaurant, customer, conversation, '🏪 *Your order will be ready for pickup!* ✅');
-      await sendPaymentChoice(restaurant, customer, conversation);
-    }
+    // Respect delivery/pickup toggles — shared checkout entry
+    await handleCheckoutRequest(restaurant, customer, conversation);
     return;
   }
   // ── New Commands ──
@@ -454,6 +444,21 @@ async function handleLocationMessage(
   conversation: { id: string },
   location: { latitude: number; longitude: number; name?: string; address?: string }
 ): Promise<void> {
+  // Delivery disabled (pickup-only or orders off) — a shared location must
+  // never become a delivery address
+  if (!restaurant.delivery_enabled) {
+    if (restaurant.pickup_enabled) {
+      await sendBotReply(restaurant, customer, conversation, '🏪 We\'re pickup-only — see you soon!');
+      const cart = await getOrCreateCart(restaurant.id, customer.id);
+      if (cart.items.length > 0) {
+        await sendPaymentChoice(restaurant, customer, conversation);
+      }
+    } else {
+      await sendBotReply(restaurant, customer, conversation, "We're currently not accepting orders — please check back soon 🙏");
+    }
+    return;
+  }
+
   // Build address string from location data
   let addressStr = '';
   if (location.address) {
@@ -560,7 +565,8 @@ async function handleInteractiveReply(
         await sendBotReply(restaurant, customer, conversation, '🛒 Your cart is empty! Browse the *menu* to add items first.');
         break;
       }
-      await askForDeliveryAddress(restaurant, customer, conversation);
+      // Shared checkout entry — respects delivery/pickup toggles
+      await handleCheckoutRequest(restaurant, customer, conversation);
       break;
     }
 
@@ -577,10 +583,40 @@ async function handleInteractiveReply(
       await handleOnlinePayOrder(restaurant, customer, conversation);
       break;
 
+    case 'btn_choose_delivery': {
+      // Guard: prevent stale checkout
+      if (await hasRecentOrder(restaurant.id, customer.id)) {
+        await sendBotReply(restaurant, customer, conversation, '✅ You already placed an order just now! Send *orders* to check status.');
+        break;
+      }
+      // Customer chose Delivery from the delivery/pickup choice — collect address
+      await askForDeliveryAddress(restaurant, customer, conversation);
+      break;
+    }
+
+    case 'btn_choose_pickup': {
+      // Guard: prevent stale checkout
+      if (await hasRecentOrder(restaurant.id, customer.id)) {
+        await sendBotReply(restaurant, customer, conversation, '✅ You already placed an order just now! Send *orders* to check status.');
+        break;
+      }
+      // Customer chose Pickup from the delivery/pickup choice — skip address
+      await sendBotReply(restaurant, customer, conversation, '🏪 *Your order will be ready for pickup!* ✅');
+      await sendPaymentChoice(restaurant, customer, conversation);
+      break;
+    }
+
     case 'btn_skip_address': {
       // Guard: prevent stale checkout
       if (await hasRecentOrder(restaurant.id, customer.id)) {
         await sendBotReply(restaurant, customer, conversation, '✅ You already placed an order just now! Send *orders* to check status.');
+        break;
+      }
+      // "Pickup Instead" is only valid while pickup is enabled — if the
+      // setting changed after this button was sent, re-route through the
+      // shared checkout logic
+      if (!restaurant.pickup_enabled) {
+        await handleCheckoutRequest(restaurant, customer, conversation);
         break;
       }
       await sendPaymentChoice(restaurant, customer, conversation);
@@ -750,7 +786,8 @@ async function tryMatchTextToAction(
   const addMorePhrases = ['add more', 'more items', 'show more', 'browse more'];
 
   if (checkoutPhrases.some(p => lower.includes(p))) {
-    await askForDeliveryAddress(restaurant, customer, conversation);
+    // Shared checkout entry — respects delivery/pickup toggles
+    await handleCheckoutRequest(restaurant, customer, conversation);
     return true;
   }
   if (cartPhrases.some(p => lower.includes(p))) {
@@ -1658,6 +1695,51 @@ async function sendCartSummary(
   }
 }
 
+// ─── Shared Checkout Entry ──────────────────
+// Single source of truth for the Order Types toggles (delivery/pickup).
+// EVERY checkout entry point — the *checkout* text command, btn_place_order,
+// btn_choose_delivery/btn_choose_pickup, the AI [PLACE_ORDER] action, and
+// free-text checkout phrases — routes through here so the Settings toggles
+// are always respected:
+//   delivery + pickup → ask which one the customer wants
+//   delivery only     → collect the delivery address
+//   pickup only       → skip the address, go straight to payment
+//   neither           → not accepting orders right now
+
+async function handleCheckoutRequest(
+  restaurant: Restaurant,
+  customer: { id: string; phone: string },
+  conversation: { id: string }
+): Promise<void> {
+  if (restaurant.delivery_enabled && restaurant.pickup_enabled) {
+    // Both enabled → let the customer choose
+    const bodyText = '🛍️ How would you like to get your order?';
+    if (restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+      await sendReplyButtons({
+        phoneNumberId: restaurant.whatsapp_phone_id,
+        accessToken: restaurant.whatsapp_token,
+        to: customer.phone,
+        bodyText,
+        buttons: [
+          { id: 'btn_choose_delivery', title: '🛍 Delivery' },
+          { id: 'btn_choose_pickup', title: '🏪 Pickup' },
+        ],
+      });
+    }
+    await saveMessage(conversation.id, restaurant.id, 'bot', bodyText, undefined, { phone: customer.phone });
+  } else if (restaurant.delivery_enabled) {
+    // Delivery only → ask for the address directly
+    await askForDeliveryAddress(restaurant, customer, conversation);
+  } else if (restaurant.pickup_enabled) {
+    // Pickup only (default) → skip the address, go straight to payment
+    await sendBotReply(restaurant, customer, conversation, '🏪 *Your order will be ready for pickup!* ✅');
+    await sendPaymentChoice(restaurant, customer, conversation);
+  } else {
+    // Neither order type enabled → not accepting orders
+    await sendBotReply(restaurant, customer, conversation, "We're currently not accepting orders — please check back soon 🙏");
+  }
+}
+
 // ─── Delivery Address Collection ────────────
 
 async function askForDeliveryAddress(
@@ -1672,6 +1754,18 @@ async function askForDeliveryAddress(
       ? `🕐 *We are not available right now.*\nOur operating hours for today are *${todayHours}*.\nYou can still browse the menu and add items to your cart!`
       : `🕐 *Sorry, we are not available right now.*\nYou can still browse the menu and add items to your cart!`;
     await sendBotReply(restaurant, customer, conversation, msg);
+    return;
+  }
+
+  // Defense in depth: never collect a delivery address when delivery is
+  // disabled in Settings — route to the right checkout path instead
+  if (!restaurant.delivery_enabled) {
+    if (restaurant.pickup_enabled) {
+      await sendBotReply(restaurant, customer, conversation, '🏪 *Your order will be ready for pickup!* ✅');
+      await sendPaymentChoice(restaurant, customer, conversation);
+    } else {
+      await sendBotReply(restaurant, customer, conversation, "We're currently not accepting orders — please check back soon 🙏");
+    }
     return;
   }
 
@@ -2028,8 +2122,17 @@ async function handleOnlinePayOrder(
   // when payment succeeds, the Cashfree webhook updates this invoice in place
   // (see src/lib/services/in-chat-payment.ts). Fail-safe: any error here never
   // affects the payment-link flow above.
+  //
+  // Fallback chain: order_details requires the WABA to be onboarded to
+  // WhatsApp Payments India (a Meta onboarding). On a non-onboarded WABA Meta
+  // rejects the message type outright (HTTP 400, code 131009 "Unsupported
+  // Interactive Message type"), so on ANY send error we retry as a cta_url
+  // button (sendPayCtaMessage — works on any WABA, opens the same Cashfree
+  // page with UPI intent on mobile). If that also fails, the plain
+  // payment-link text message sent above remains. Never throws.
   const upiVpa = (restaurant.business_config?.upi_vpa as string | undefined) || undefined;
   if (paymentLink && upiVpa && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
+    let invoiceSent = false;
     try {
       const upiIntentLink = buildUpiIntentLink({
         vpa: upiVpa,
@@ -2061,6 +2164,7 @@ async function handleOnlinePayOrder(
         paymentConfig: { upiIntentLink },
         bodyText: `Complete your payment for order *${refId}* from *${restaurant.name}* 💳`,
       });
+      invoiceSent = true;
 
       // Flag the payments row so the Cashfree / payment webhooks know to send
       // the native order_status update for this invoice when payment completes
@@ -2096,8 +2200,33 @@ async function handleOnlinePayOrder(
       }
 
       await saveMessage(conversation.id, restaurant.id, 'bot', 'Sent in-chat UPI order details', undefined, { phone: customer.phone });
+      console.log('[Orchestrator] In-chat payment path: native order_details invoice');
     } catch (e) {
       console.error('[Orchestrator] In-chat UPI order details send failed:', e);
+      // The invoice never went out (usually WABA not onboarded to WhatsApp
+      // Payments India — Meta rejects the order_details type with error
+      // 131009). Retry as an onboarding-free CTA button pointing at the same
+      // Cashfree payment link. invoiceSent guards against re-sending when a
+      // later step (payments-row flagging is already inner-caught; saveMessage)
+      // failed after a successful send.
+      if (!invoiceSent) {
+        try {
+          await sendPayCtaMessage({
+            phoneNumberId: restaurant.whatsapp_phone_id,
+            accessToken: restaurant.whatsapp_token,
+            to: customer.phone,
+            bodyText: 'Tap below to pay securely via UPI/card',
+            buttonText: `💳 Pay Now · ₹${totalRupees}`,
+            url: paymentLink,
+          });
+          await saveMessage(conversation.id, restaurant.id, 'bot', 'Sent pay button (in-chat invoice unavailable)', undefined, { phone: customer.phone });
+          console.log('[Orchestrator] In-chat payment path: CTA button fallback (order_details rejected)');
+        } catch (ctaError) {
+          // The plain payment-link text message sent above still stands —
+          // the customer keeps a working payment path. Never rethrow.
+          console.error('[Orchestrator] CTA pay button fallback failed:', ctaError);
+        }
+      }
     }
   }
 
@@ -2186,8 +2315,13 @@ async function generateAndSendAIResponse(
   const hasPlaceOrder = actions.some((a) => a.type === 'place_order');
 
   if (hasPlaceOrder) {
-    // Order was placed via AI action — show payment choice
-    await sendPaymentChoice(restaurant, customer, conversation);
+    // Checkout via AI action — duplicate-order guard, then the shared
+    // checkout entry so the delivery/pickup toggles are respected
+    if (await hasRecentOrder(restaurant.id, customer.id)) {
+      await sendBotReply(restaurant, customer, conversation, '✅ You already placed an order just now! Send *orders* to check status.');
+    } else {
+      await handleCheckoutRequest(restaurant, customer, conversation);
+    }
     await saveMessage(conversation.id, restaurant.id, 'bot', reply, undefined, { phone: customer.phone });
   } else if (hasCartAction && restaurant.whatsapp_token && restaurant.whatsapp_phone_id) {
     // Item added — show cart buttons

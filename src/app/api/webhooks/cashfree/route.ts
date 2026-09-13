@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { webhookLimiter, checkRateLimit } from '@/lib/utils/rate-limiter';
 import { processSuccessfulPayment } from '@/lib/services/bot-payment';
+import { fulfilCreditPurchase } from '@/lib/services/credit-service';
 import { sendInChatOrderStatusUpdate } from '@/lib/services/in-chat-payment';
 
 const supabaseAdmin = createClient(
@@ -140,6 +141,29 @@ async function handlePaymentSuccess(data: PaymentData) {
     : 'Card';
 
   console.log(`[Cashfree] Payment SUCCESS: cf_order=${cfOrderId}`);
+
+  // Credits purchases MUST skip the order/cart fulfilment path —
+  // processSuccessfulPayment's atomic pending→completed claim would
+  // consume the payment before credits are ever added. Gate first.
+  const { data: creditsPayment, error: lookupError } = await supabaseAdmin
+    .from('payments')
+    .select('id, metadata')
+    .eq('cashfree_order_id', cfOrderId)
+    .single();
+
+  if (lookupError) {
+    // Cannot determine the payment type — do NOT run the order flow
+    // blindly; the return route / dashboard poll will fulfil instead.
+    console.error('[Cashfree Webhook] Failed to look up payment:', lookupError.message);
+    return;
+  }
+
+  const meta = (creditsPayment as { metadata: { type?: string } | null } | null)?.metadata;
+  if (meta?.type === 'credits') {
+    const result = await fulfilCreditPurchase(cfOrderId);
+    console.log(`[Cashfree Webhook] Credits purchase ${cfOrderId}: ok=${result.ok}, already=${result.alreadyFulfilled}`);
+    return;
+  }
 
   const result = await processSuccessfulPayment(cfOrderId, paymentMethod, paymentId);
 

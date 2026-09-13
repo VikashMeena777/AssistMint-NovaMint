@@ -10,6 +10,13 @@
 // Amounts use the Payments API `{ value, offset }` object: offset is always
 // 100 for INR and `value` is the amount in paise (₹210.00 → 21000).
 //
+// NOTE: `order_details` / `order_status` require the WABA to be onboarded to
+// WhatsApp Payments India (a Meta onboarding — email
+// whatsappindia-bizpayments-support@meta.com, see research doc §2.3). On a
+// non-onboarded WABA Meta rejects the message type outright (HTTP 400, code
+// 131009 "Unsupported Interactive Message type"). sendPayCtaMessage below is
+// the onboarding-free fallback: a tappable button that opens the payment page.
+//
 // Docs: https://developers.facebook.com/documentation/business-messaging/whatsapp/payments/payments-in/overview
 
 import { sanitizeWhatsAppNumber } from './client';
@@ -378,6 +385,64 @@ export async function sendOrderStatusMessage(
             }
           : {}),
       },
+    },
+  };
+
+  const data = await graphRequest<MessageSendEnvelope>({
+    path: `${phoneNumberId}/messages`,
+    accessToken,
+    method: 'POST',
+    body: {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: sanitizeWhatsAppNumber(to),
+      type: 'interactive',
+      interactive,
+    },
+  });
+  return { message_id: extractMessageId(data) };
+}
+
+// ─── cta_url message (payments onboarding fallback) ──────────────
+
+export interface SendPayCtaMessageOptions extends MessageTarget {
+  /** Body text shown above the button (max 1024 chars). */
+  bodyText: string;
+  /**
+   * Button label. Truncated to 20 chars — the tightest documented CTA
+   * button-text limit, so any label survives Meta's validation.
+   */
+  buttonText: string;
+  /** URL opened when the button is tapped (e.g. the Cashfree payment page, which itself offers UPI intent on mobile). */
+  url: string;
+}
+
+/**
+ * Send an interactive `cta_url` message — a plain text message with a single
+ * tappable call-to-action button that opens `url` (the payment gateway page,
+ * which offers UPI/card on mobile). Unlike {@link sendOrderDetailsMessage}
+ * this works on ANY WABA — no WhatsApp Payments India onboarding required —
+ * making it the graceful fallback when the native `order_details` invoice is
+ * rejected (HTTP 400, code 131009: "Unsupported Interactive Message type").
+ *
+ * Docs: https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages
+ */
+export async function sendPayCtaMessage(
+  options: SendPayCtaMessageOptions
+): Promise<{ message_id: string }> {
+  const { phoneNumberId, accessToken, to, bodyText, buttonText, url } = options;
+
+  const interactive: Record<string, unknown> = {
+    type: 'cta_url',
+    body: { text: bodyText.substring(0, 1024) },
+    action: {
+      name: 'cta_url',
+      parameters: [
+        {
+          display_text: buttonText.substring(0, 20),
+          url,
+        },
+      ],
     },
   };
 

@@ -143,19 +143,30 @@ function graphErrorMessage(err: unknown): string {
 }
 
 /**
- * Resolve the Meta Business that owns a WABA. Tries the WABA node's `owner`
- * field first, then falls back to scanning the token user's businesses via
- * the documented `/{business_id}/owned_whatsapp_business_accounts` edge.
+ * Resolve the Meta Business that owns a WABA. Tries, in order:
+ *
+ * 1. The WABA node's `owner` field (fastest, but not exposed for every
+ *    token type — embedded-signup tokens often get no `owner` back).
+ * 2. The Health Status API on the business phone number
+ *    (`GET /{phone_number_id}?fields=health_status`) — its `entities` list
+ *    includes a `BUSINESS` entity whose `id` IS the owning business id.
+ *    This is the reliable path for client-scoped embedded-signup tokens,
+ *    which CANNOT see `me/businesses`. When `phoneNumberId` is not passed,
+ *    the WABA's first phone number is looked up automatically.
+ * 3. Scanning the token user's businesses via the documented
+ *    `/{business_id}/owned_whatsapp_business_accounts` edge (works for
+ *    business-admin tokens only).
+ *
  * Returns the verbatim Graph error alongside a null id so callers can relay
  * the exact permission gate (e.g. `(#100) Missing Permission`).
  */
-async function resolveOwningBusiness(
-  options: WabaCredential
+export async function resolveOwningBusiness(
+  options: WabaCredential & { phoneNumberId?: string }
 ): Promise<{ businessId: string | null; error?: string }> {
-  const { wabaId, accessToken } = options;
+  const { wabaId, accessToken, phoneNumberId } = options;
 
   // Fast path — the WABA node's `owner` field (not exposed for every token
-  // type, so any failure falls through to the documented scan below).
+  // type, so any failure falls through to the fallbacks below).
   try {
     const data = await graphRequest<{ owner?: { id?: string } | string }>({
       path: wabaId,
@@ -166,7 +177,35 @@ async function resolveOwningBusiness(
     const id = typeof owner === 'string' ? owner : owner?.id;
     if (id) return { businessId: id };
   } catch {
-    // fall through to the businesses scan
+    // fall through to the health-status fallback
+  }
+
+  // Embedded-signup fallback — exchange tokens are client-scoped and do NOT
+  // list businesses via me/businesses, but the phone number's health_status
+  // exposes the owning Meta Business as a `BUSINESS` entity (verified live).
+  try {
+    let pnid = phoneNumberId;
+    if (!pnid) {
+      const phones = await graphRequest<GraphPaged<{ id: string }>>({
+        path: `${wabaId}/phone_numbers`,
+        accessToken,
+        query: { fields: 'id' },
+      });
+      pnid = phones.data?.[0]?.id;
+    }
+    if (pnid) {
+      const health = await graphRequest<{
+        health_status?: { entities?: Array<{ entity_type?: string; id?: string }> };
+      }>({
+        path: pnid,
+        accessToken,
+        query: { fields: 'health_status' },
+      });
+      const business = health.health_status?.entities?.find((e) => e.entity_type === 'BUSINESS');
+      if (business?.id) return { businessId: business.id };
+    }
+  } catch {
+    // fall through to the documented businesses scan
   }
 
   // Documented path — businesses the token can access, narrowed to the one
@@ -198,10 +237,13 @@ async function resolveOwningBusiness(
  * Make sure the WABA has a connected catalog, creating one when needed:
  *
  * 1. `GET /{wabaId}?fields=catalogs` — already connected? Done.
- * 2. Resolve the owning business, reuse a same-named catalog when one
- *    already exists (keeps re-runs idempotent), otherwise create one with
- *    `POST /{business_id}/owned_product_catalogs` (Marketing API; requires
- *    the `catalog_management` permission).
+ * 2. Resolve the owning business (`owner` field → the phone number's
+ *    health_status `BUSINESS` entity → `me/businesses` scan — embedded-signup
+ *    tokens are client-scoped and cannot list businesses, so the
+ *    health_status path is the one that works for them), reuse a same-named
+ *    catalog when one already exists (keeps re-runs idempotent), otherwise
+ *    create one with `POST /{business_id}/owned_product_catalogs`
+ *    (Marketing API; requires the `catalog_management` permission).
  * 3. Connect it with `POST /{wabaId}/product_catalogs` (`catalog_id`).
  *
  * When Meta rejects the API path (unapproved permission, Commerce Terms not
@@ -216,9 +258,16 @@ export async function ensureCatalog(
   options: WabaCredential & {
     /** Catalog name — the business's own name. */
     name: string;
+    /**
+     * Business phone number id — passed through to business resolution so
+     * client-scoped embedded-signup tokens can resolve the owning business
+     * via the phone number's health_status `BUSINESS` entity. When omitted,
+     * the WABA's first phone number is looked up automatically.
+     */
+    phoneNumberId?: string;
   }
 ): Promise<EnsureCatalogResult> {
-  const { wabaId, accessToken, name } = options;
+  const { wabaId, accessToken, name, phoneNumberId } = options;
   const cleanName = (name || '').trim().substring(0, 100) || 'WhatsApp Catalog';
 
   // 1. Already connected?
@@ -238,8 +287,9 @@ export async function ensureCatalog(
     return { catalogId: existing, created: false, connected: false, needsManualCreation: false };
   }
 
-  // 2. Resolve the business that owns this WABA.
-  const owning = await resolveOwningBusiness({ wabaId, accessToken });
+  // 2. Resolve the business that owns this WABA (owner field → phone number
+  //    health_status BUSINESS entity → me/businesses scan).
+  const owning = await resolveOwningBusiness({ wabaId, accessToken, phoneNumberId });
   if (!owning.businessId) {
     return {
       catalogId: null,

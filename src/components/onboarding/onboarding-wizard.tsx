@@ -617,11 +617,10 @@ export default function OnboardingWizard() {
                       config_id: META_CONFIG_ID,
                       response_type: 'code',
                       override_default_response_type: true,
-                      extras: {
-                        setup: { solutionID: META_CONFIG_ID },
-                        featureType: '',
-                        sessionInfoVersion: 2,
-                      },
+                      // Tech Provider standalone: NO solutionID (that's only for
+                      // Multi-Partner Solutions — the config id is not one).
+                      // v4 session format; ES v2 deprecated 2026-10-15.
+                      extras: { setup: {}, version: 'v4' },
                     }
                   );
                 }}
