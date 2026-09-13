@@ -23,17 +23,31 @@ export async function GET(req: Request) {
   try {
     const now = new Date().toISOString();
 
-    // Find all restaurants with expired plans
-    const { data: expired, error: fetchError } = await supabase
-      .from('restaurants')
-      .select('id, name, plan, plan_expires_at, owner_id')
-      .neq('plan', 'free')
-      .not('plan_expires_at', 'is', null)
-      .lt('plan_expires_at', now);
+    // Find all restaurants with expired plans — with retry (Supabase REST
+    // intermittently gateway-times-out, which cron-job.org then surfaces as
+    // its own timeout; a single retry clears the transient)
+    let expired: Array<Record<string, unknown>> | null = null;
+    let fetchError: string | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await supabase
+        .from('restaurants')
+        .select('id, name, plan, plan_expires_at, owner_id')
+        .neq('plan', 'free')
+        .not('plan_expires_at', 'is', null)
+        .lt('plan_expires_at', now);
+      if (!result.error) {
+        expired = result.data as Array<Record<string, unknown>>;
+        fetchError = null;
+        break;
+      }
+      fetchError = result.error.message;
+      console.warn(`[Cron:PlanExpiry] Fetch attempt ${attempt + 1} failed: ${fetchError} — retrying`);
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+    }
 
     if (fetchError) {
-      console.error('[Cron:PlanExpiry] Fetch error:', fetchError.message);
-      return NextResponse.json({ error: fetchError.message }, { status: 200 });
+      console.error('[Cron:PlanExpiry] Fetch error after retries:', fetchError);
+      return NextResponse.json({ error: fetchError }, { status: 200 });
     }
 
     if (!expired || expired.length === 0) {

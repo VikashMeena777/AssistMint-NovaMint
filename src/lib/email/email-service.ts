@@ -15,7 +15,15 @@ const FROM_EMAIL = process.env.DEFAULT_FROM_EMAIL || 'AssistMint <notifications@
 
 // Escape dynamic values interpolated into HTML email templates
 // (prevents HTML injection via customer names, addresses, item names, etc.)
-function escapeHtml(s: string): string {
+// Coerces ANY input safely — live logs caught addresses arriving as objects
+// (location captures) and numbers crashing the old string-only version.
+function escapeHtml(value: unknown): string {
+  const s =
+    value == null
+      ? ''
+      : typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value);
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
