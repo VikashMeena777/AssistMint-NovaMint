@@ -113,10 +113,10 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
         <div>
           <h3 className="text-base font-semibold">Message credits</h3>
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-            Your message balance works like a prepaid talktime — every promotion costs
-            {" "}{formatPaise(MESSAGE_COSTS_PAISE.marketing)} and every reminder costs{" "}
-            {formatPaise(MESSAGE_COSTS_PAISE.utility)} (Meta&apos;s rates). Customer replies in the
-            24-hour window are always free.
+            Works like prepaid talktime. Meta&apos;s rates, shown honestly:
+            promotions {" "}{formatPaise(MESSAGE_COSTS_PAISE.marketing)}/msg · reminders &amp; updates{" "}
+            {formatPaise(MESSAGE_COSTS_PAISE.utility)}/msg · customer replies in the 24-hour window{" "}
+            <span className="font-medium text-success">FREE</span>.
           </p>
         </div>
         <Coins className="h-5 w-5 shrink-0 text-primary" />
