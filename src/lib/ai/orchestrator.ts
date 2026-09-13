@@ -13,8 +13,9 @@ import { spendCredits } from '@/lib/services/credit-service';
 import { MESSAGE_COSTS_PAISE } from '@/lib/utils/credit-packs';
 
 // Meta India: service (AI-reply) messages become chargeable at this instant
-// (1 Oct 2026, 00:00 IST). Before it, replies are free; after it, each bot
-// reply deducts the utility rate from the owner's message balance.
+// (1 Oct 2026, 00:00 IST). Deduction is OPT-IN per business
+// (business_config.deduct_service_replies) — by default the platform absorbs
+// reply costs inside the subscription so "AI replies included" stays true.
 const SERVICE_CHARGE_START_MS = new Date('2026-10-01T00:00:00+05:30').getTime();
 import { getRestaurantByPhoneId, type Restaurant } from '@/lib/services/restaurant-service';
 import { createBotPaymentLink } from '@/lib/services/bot-payment';
@@ -2561,7 +2562,16 @@ async function sendBotReply(
     // needed. A zero balance NEVER blocks the reply (never strand a customer
     // mid-conversation); the wallet floors at 0 and low-balance state is
     // visible in Settings → WhatsApp Health.
-    if (Date.now() >= SERVICE_CHARGE_START_MS) {
+    // OPT-IN (business_config.deduct_service_replies === true): deduct the
+    // utility rate per AI reply from the owner's message balance. Default is
+    // OFF — the platform absorbs reply costs inside the subscription, because
+    // "AI replies are included" is the adoption hook (Meta starts billing
+    // service messages 1 Oct 2026; the owner decides whether to pass that
+    // through per business). A zero balance never blocks the reply.
+    if (
+      Date.now() >= SERVICE_CHARGE_START_MS &&
+      (restaurant.business_config as Record<string, unknown> | undefined)?.deduct_service_replies === true
+    ) {
       spendCredits(
         restaurant.id,
         MESSAGE_COSTS_PAISE.service,

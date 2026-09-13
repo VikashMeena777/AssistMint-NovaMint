@@ -114,10 +114,10 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
           <h3 className="text-base font-semibold">Message credits</h3>
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
             Works like prepaid talktime. Meta&apos;s rates, shown honestly:
-            promotions {" "}{formatPaise(MESSAGE_COSTS_PAISE.marketing)}/msg · reminders &amp; updates{" "}
-            {formatPaise(MESSAGE_COSTS_PAISE.utility)}/msg. Customer replies are free until{" "}
-            <span className="font-medium">1 Oct 2026</span>, then{" "}
-            {formatPaise(MESSAGE_COSTS_PAISE.service)}/msg (Meta&apos;s change).
+            AI replies to your customers are <span className="font-medium text-success">included in your
+            plan</span> — promotions cost {formatPaise(MESSAGE_COSTS_PAISE.marketing)}/msg and reminders{" "}
+            {formatPaise(MESSAGE_COSTS_PAISE.utility)}/msg from this balance. Note: from 1 Oct 2026 Meta
+            also bills message costs directly to your WhatsApp account.
           </p>
         </div>
         <Coins className="h-5 w-5 shrink-0 text-primary" />
