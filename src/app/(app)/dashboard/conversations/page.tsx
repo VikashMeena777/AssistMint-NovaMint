@@ -277,10 +277,13 @@ export default function ConversationsPage() {
         </button>
       </div>
 
-      {/* Conversation Layout */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3" style={{ height: "calc(100vh - 220px)" }}>
-        {/* Conversation List */}
-        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden lg:col-span-1 flex flex-col">
+      {/* Conversation Layout — fixed app-style height only at lg; on mobile
+          the panes stack naturally (the old inline calc(100vh-220px) clipped
+          both panes into one short box on phones). */}
+      <div className="grid grid-cols-1 gap-4 lg:h-[calc(100vh-220px)] lg:grid-cols-3">
+        {/* Conversation List — capped on mobile so it can't push the chat
+            pane below several screens of scroll */}
+        <div className="flex max-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border/50 bg-card lg:col-span-1 lg:max-h-none">
           <div className="border-b border-border p-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

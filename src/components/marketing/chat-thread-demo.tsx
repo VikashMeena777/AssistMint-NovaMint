@@ -214,7 +214,10 @@ export function ChatThreadDemo({ className = "" }: { className?: string }) {
             )}
           </AnimatePresence>
 
-          {/* Outcome chip — chat → result in one beat */}
+          {/* Outcome chip — chat → result in one beat. Capped to the
+              transcript width so it can never spill past the card edge on
+              narrow phones (it sits over blank transcript space, below the
+              header — never collides with it). */}
           <AnimatePresence>
             {orderChip && (
               <motion.div
@@ -222,10 +225,10 @@ export function ChatThreadDemo({ className = "" }: { className?: string }) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.9, transition: { duration: 0.2 } }}
                 transition={spring.snappy}
-                className="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground shadow-md"
+                className="absolute right-4 top-4 z-10 inline-flex max-w-[calc(100%-2rem)] items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground shadow-md"
               >
-                <CheckCheck className="size-3" strokeWidth={2.5} />
-                Order #1207 · ₹448 · confirmed
+                <CheckCheck className="size-3 shrink-0" strokeWidth={2.5} />
+                <span className="truncate">Order #1207 · ₹448 · confirmed</span>
               </motion.div>
             )}
           </AnimatePresence>

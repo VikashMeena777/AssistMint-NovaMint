@@ -99,7 +99,9 @@ export function VerticalSwitcherSection() {
           </div>
         </SectionReveal>
 
-        {/* P4 — the active pill is ONE element that slides between tabs */}
+        {/* P4 — the active pill is ONE element that slides between tabs.
+            The row scrolls horizontally on phones (6 pills, no wrap);
+            each pill is a ≥44px touch target on mobile. */}
         <SectionReveal delay={0.05}>
           <div
             role="tablist"
@@ -114,7 +116,7 @@ export function VerticalSwitcherSection() {
                   role="tab"
                   aria-selected={on}
                   onClick={() => setActive(v.id)}
-                  className={`relative shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-sm transition-colors ${
+                  className={`relative shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm transition-colors sm:py-1.5 ${
                     on ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >

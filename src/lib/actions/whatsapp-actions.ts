@@ -28,12 +28,18 @@ import {
   updateQrCode,
 } from '@/lib/whatsapp/links';
 import { getBusinessProfile, updateBusinessProfile } from '@/lib/whatsapp/business-profile';
+import { getFlowHealth } from '@/lib/whatsapp/flows';
+import type { FlowsProvisionReport } from '@/lib/flows/auto-setup';
+// Type-only re-export for the dashboard card (erased at compile time —
+// 'use server' files may only export async functions at runtime).
+export type { FlowsProvisionReport } from '@/lib/flows/auto-setup';
 import {
   getObaStatus as fetchObaStatus,
   obaEligibilityCheck,
   requestOba as submitObaToMeta,
 } from '@/lib/whatsapp/obd';
 import {
+  ensureCatalog,
   getCatalogId,
   setCommerceSettings,
   upsertCatalogItem,
@@ -55,7 +61,7 @@ async function requireOwner(restaurantId: string): Promise<OwnerResult> {
 
   const { data: restaurant } = await supabase
     .from('restaurants')
-    .select('id, owner_id, phone, business_config, created_at, whatsapp_phone_id, whatsapp_waba_id, whatsapp_access_token')
+    .select('id, owner_id, name, phone, business_config, created_at, whatsapp_phone_id, whatsapp_waba_id, whatsapp_access_token')
     .eq('id', restaurantId)
     .single();
 
@@ -76,6 +82,8 @@ type ConnectedResult =
       accessToken: string;
       businessConfig: Record<string, unknown>;
       createdAt: string | null;
+      /** Restaurant/business display name (used to name auto-created catalogs). */
+      restaurantName: string;
     }
   | { ok: false; error: string; notConnected?: boolean };
 
@@ -107,6 +115,7 @@ async function requireConnected(restaurantId: string): Promise<ConnectedResult> 
         ? (rawConfig as Record<string, unknown>)
         : {},
     createdAt: owner.row.created_at ? String(owner.row.created_at) : null,
+    restaurantName: owner.row.name ? String(owner.row.name) : '',
   };
 }
 
@@ -299,6 +308,8 @@ export interface CatalogSyncResult {
   commerceSettings: boolean;
   catalogId: string | null;
   lastSyncedAt: string;
+  /** True when a catalog was auto-created on Meta during this sync. */
+  catalogCreated?: boolean;
 }
 
 // ═══════════════════════════════════════════
@@ -1007,7 +1018,13 @@ interface SyncMenuItem {
 
 export async function syncCatalogToMeta(
   restaurantId: string
-): Promise<{ data: CatalogSyncResult | null; error: string | null; notConnected?: boolean }> {
+): Promise<{
+  data: CatalogSyncResult | null;
+  error: string | null;
+  notConnected?: boolean;
+  /** True when no catalog exists and Meta blocked auto-creation — the owner is guided through Commerce Manager. */
+  needsCatalogSetup?: boolean;
+}> {
   const owned = await requireConnected(restaurantId);
   if (!owned.ok) return { data: null, error: owned.error, notConnected: owned.notConnected };
   if (!owned.wabaId) {
@@ -1043,7 +1060,8 @@ export async function syncCatalogToMeta(
     };
   }
 
-  // Locate the WABA's catalog (returns null when none is connected)
+  // Locate the WABA's catalog (returns null when none is connected) —
+  // auto-create one on the WABA's owning business when missing.
   let catalogId: string | null = null;
   try {
     catalogId = await getCatalogId({
@@ -1056,11 +1074,39 @@ export async function syncCatalogToMeta(
       error: `Could not find a WhatsApp catalog for your account: ${errorMessage(err)}`,
     };
   }
+
+  let catalogCreated = false;
   if (!catalogId) {
-    return {
-      data: null,
-      error: 'No WhatsApp catalog found for your account. Create one in Meta Commerce Manager, then sync again.',
-    };
+    let ensured: Awaited<ReturnType<typeof ensureCatalog>> | null = null;
+    try {
+      ensured = await ensureCatalog({
+        wabaId: owned.wabaId,
+        accessToken: owned.accessToken,
+        name: owned.restaurantName || 'Our Business',
+      });
+    } catch (err) {
+      ensured = null;
+      console.warn('[syncCatalogToMeta] ensureCatalog threw:', err);
+    }
+    if (ensured?.error) {
+      console.warn('[syncCatalogToMeta] ensureCatalog reported:', ensured.error);
+    }
+    catalogId = ensured?.catalogId ?? null;
+    catalogCreated = ensured?.created ?? false;
+
+    if (!catalogId) {
+      // Remember that setup is pending so the dashboard can show the
+      // step-by-step Commerce Manager guide until a sync succeeds.
+      await updateRestaurantSettings(restaurantId, {
+        business_config: { ...owned.businessConfig, catalog_setup_needed: true },
+      });
+      const verbatim = ensured?.error ? ` (Meta said: ${ensured.error})` : '';
+      return {
+        data: null,
+        error: `Your WhatsApp catalog needs to be created once on Meta's website before we can sync your menu.${verbatim}`,
+        needsCatalogSetup: true,
+      };
+    }
   }
 
   const results: CatalogSyncItemResult[] = [];
@@ -1116,9 +1162,13 @@ export async function syncCatalogToMeta(
   const failedCount = results.length - syncedCount;
   const lastSyncedAt = new Date().toISOString();
 
-  // Persist last-sync time + summary into business_config (merge, not replace)
+  // Persist catalog id + last-sync time + summary into business_config
+  // (merge, not replace) and clear the manual-setup flag — the catalog now
+  // exists and is connected.
   const mergedConfig: Record<string, unknown> = {
     ...owned.businessConfig,
+    catalog_id: catalogId,
+    catalog_setup_needed: false,
     last_catalog_sync_at: lastSyncedAt,
     last_catalog_sync_summary: { total: results.length, synced: syncedCount, failed: failedCount },
   };
@@ -1129,7 +1179,7 @@ export async function syncCatalogToMeta(
     actorType: 'owner',
     actorId: owned.userId,
     action: 'whatsapp.catalog_synced',
-    details: { synced: syncedCount, failed: failedCount, catalogId },
+    details: { synced: syncedCount, failed: failedCount, catalogId, catalogCreated },
   });
   revalidatePath('/dashboard/settings');
 
@@ -1142,7 +1192,124 @@ export async function syncCatalogToMeta(
       commerceSettings,
       catalogId,
       lastSyncedAt,
+      catalogCreated,
     },
     error: null,
   };
+}
+
+// ═══════════════════════════════════════════
+// WHATSAPP FLOWS (zero-manual provisioning)
+// ═══════════════════════════════════════════
+
+export interface FlowsStatusData {
+  /** business_config.flow_appointment_id — null when never provisioned. */
+  flowId: string | null;
+  /** Coarse pill state for the health card. */
+  status: 'provisioned' | 'publishing' | 'not_set' | 'unknown';
+  /** Flow name on the WABA ('AssistMint Booking' when a flow id exists). */
+  flowName: string | null;
+  /** Raw Meta publish status (PUBLISHED / PUBLISHING / DRAFT / BLOCKED / …). */
+  publishStatus: string | null;
+  /** Meta endpoint health (GREEN / YELLOW / RED), when readable. */
+  healthStatus: string | null;
+  healthDescription: string | null;
+  /** business_config.flows_provisioned_at (ISO). */
+  provisionedAt: string | null;
+}
+
+/** Read the restaurant's WhatsApp Flows state (ownership-checked). */
+export async function getFlowsStatus(
+  restaurantId: string
+): Promise<{ data: FlowsStatusData | null; error: string | null; notConnected?: boolean }> {
+  const owned = await requireConnected(restaurantId);
+  if (!owned.ok) return { data: null, error: owned.error, notConnected: owned.notConnected };
+
+  const flowIdRaw = owned.businessConfig.flow_appointment_id;
+  const flowId = typeof flowIdRaw === 'string' && flowIdRaw.trim() ? flowIdRaw.trim() : null;
+  const provisionedAtRaw = owned.businessConfig.flows_provisioned_at;
+  const provisionedAt = typeof provisionedAtRaw === 'string' ? provisionedAtRaw : null;
+
+  if (!flowId) {
+    return {
+      data: {
+        flowId: null,
+        status: 'not_set',
+        flowName: null,
+        publishStatus: null,
+        healthStatus: null,
+        healthDescription: null,
+        provisionedAt,
+      },
+      error: null,
+    };
+  }
+
+  // Publish status + endpoint health — each best-effort so one failing Graph
+  // call (e.g. App Review pending) doesn't blank the whole card.
+  let publishStatus: string | null = null;
+  let healthStatus: string | null = null;
+  let healthDescription: string | null = null;
+  const partialErrors: string[] = [];
+
+  try {
+    const { getFlowStatus } = await import('@/lib/flows/publish');
+    publishStatus = await getFlowStatus(flowId, owned.accessToken);
+  } catch (err) {
+    partialErrors.push(`Could not read the flow's publish status: ${errorMessage(err)}`);
+  }
+
+  try {
+    const health = await getFlowHealth({ flowId, accessToken: owned.accessToken });
+    healthStatus = health.healthStatus;
+    healthDescription = health.healthStatusDescription;
+  } catch (err) {
+    partialErrors.push(`Could not read the flow's endpoint health: ${errorMessage(err)}`);
+  }
+
+  let status: FlowsStatusData['status'];
+  if (publishStatus === 'PUBLISHED') status = 'provisioned';
+  else if (publishStatus === 'PUBLISHING' || publishStatus === 'DRAFT') status = 'publishing';
+  else if (publishStatus === null) status = 'unknown';
+  else status = 'unknown'; // BLOCKED / THROTTLED / DEPRECATED / … — show raw below
+
+  return {
+    data: {
+      flowId,
+      status,
+      flowName: 'AssistMint Booking',
+      publishStatus,
+      healthStatus,
+      healthDescription,
+      provisionedAt,
+    },
+    error: partialErrors.length > 0 ? partialErrors.join(' · ') : null,
+  };
+}
+
+/**
+ * Run the zero-manual Flows provisioning now (keypair → public key →
+ * appointment flow → publish → persist). Returns the per-step report;
+ * ensureFlowsProvisioned never throws and logs 'whatsapp.flows_provisioned'.
+ */
+export async function provisionFlows(
+  restaurantId: string
+): Promise<{ data: FlowsProvisionReport | null; error: string | null; notConnected?: boolean }> {
+  const owned = await requireConnected(restaurantId);
+  if (!owned.ok) return { data: null, error: owned.error, notConnected: owned.notConnected };
+  if (!owned.wabaId) {
+    return {
+      data: null,
+      error: 'Your WhatsApp Business Account (WABA) ID is missing. Reconnect WhatsApp in Settings → WhatsApp first.',
+    };
+  }
+
+  try {
+    const { ensureFlowsProvisioned } = await import('@/lib/flows/auto-setup');
+    const report = await ensureFlowsProvisioned(restaurantId);
+    revalidatePath('/dashboard/settings');
+    return { data: report, error: null };
+  } catch (err) {
+    return { data: null, error: `Provisioning failed: ${errorMessage(err)}` };
+  }
 }

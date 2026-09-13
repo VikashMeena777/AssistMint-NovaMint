@@ -17,7 +17,11 @@
 //   - never returns 500: failures become encrypted {"error": "..."} payloads
 //     or the documented 421 / 427 / 432 codes
 //   - must respond within 10 seconds (Meta's endpoint timeout)
-//   - FLOWS_PRIVATE_KEY missing → 503 with a clear log (config error)
+//   - no usable private key → 503 with a clear log (config error)
+//
+// The RSA keypair self-provisions on the first Meta call (getOrCreateFlowKeys:
+// one keypair per app, stored in the service-role-only `app_config` table).
+// FLOWS_PRIVATE_KEY remains an OPTIONAL env override — when set, it wins.
 //
 // Spec: https://developers.facebook.com/documentation/business-messaging/whatsapp/flows/guides/implementingyourflowendpoint
 // ============================================
@@ -30,6 +34,7 @@ import {
   FlowCryptoError,
   type DecryptedFlowRequest,
 } from '@/lib/flows/encryption';
+import { getOrCreateFlowKeys } from '@/lib/flows/keys';
 import { verifyFlowToken } from '@/lib/flows/token';
 import { handleFlowRequest } from '@/lib/flows/handle-flow-response';
 
@@ -126,23 +131,28 @@ function encryptedResponse(decrypted: DecryptedFlowRequest, payload: unknown): N
 // ─── GET: health check ──────────────────────
 
 export async function GET(): Promise<NextResponse> {
-  const privateKeyConfigured = Boolean(process.env.FLOWS_PRIVATE_KEY);
-  if (!privateKeyConfigured) {
-    console.error(
-      '[FlowsEndpoint] GET health check: FLOWS_PRIVATE_KEY is not set — the endpoint cannot decrypt data exchanges. Generate a key pair (see src/lib/flows/README.md) and set the env var.'
-    );
+  // Self-provision on the first health check: getOrCreateFlowKeys generates
+  // and stores the app-wide keypair when absent (env override wins when set).
+  let keysReady = true;
+  let reason: string | undefined;
+  try {
+    await getOrCreateFlowKeys();
+  } catch (error) {
+    keysReady = false;
+    reason = (error as Error).message;
+    console.error('[FlowsEndpoint] GET health check: key provisioning failed —', reason);
   }
 
   return NextResponse.json({
     data: [
       {
-        status: privateKeyConfigured ? 'ready' : 'not_ready',
+        status: keysReady ? 'ready' : 'not_ready',
         endpoint_health_data: {
           data: {
             service: 'assistmint-flows-endpoint',
             data_api_version: DATA_API_VERSION,
-            private_key_configured: privateKeyConfigured,
-            ...(privateKeyConfigured ? {} : { reason: 'FLOWS_PRIVATE_KEY not configured' }),
+            private_key_configured: keysReady,
+            ...(keysReady ? {} : { reason: reason ?? 'Flow keypair unavailable' }),
           },
         },
       },
@@ -173,11 +183,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'missing_fields' }, { status: 400 });
     }
 
-    // 3. Private key (single-tenant env; rotation notes in src/lib/flows/README.md).
-    const privateKeyPem = process.env.FLOWS_PRIVATE_KEY;
-    if (!privateKeyPem) {
+    // 3. Private key — self-provisioned app-wide keypair (src/lib/flows/keys.ts);
+    //    FLOWS_PRIVATE_KEY env var, when set, overrides it. 503 (not 500) when
+    //    no key can be obtained — a config error, never a handler crash.
+    let privateKeyPem: string;
+    try {
+      privateKeyPem = (await getOrCreateFlowKeys()).privateKeyPem;
+    } catch (error) {
       console.error(
-        '[FlowsEndpoint] FLOWS_PRIVATE_KEY is not set — returning 503. Generate a key pair and register the public key with Meta (see src/lib/flows/README.md).'
+        '[FlowsEndpoint] Flow key unavailable — returning 503:',
+        (error as Error).message
       );
       return NextResponse.json({ error: 'endpoint_not_configured' }, { status: 503 });
     }

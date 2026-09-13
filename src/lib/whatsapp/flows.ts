@@ -140,15 +140,17 @@ export async function createFlow(options: CreateFlowOptions): Promise<{ id: stri
  * Publish a Flow (DRAFT → PUBLISHED) so `mode: "published"` messages render
  * it. Only healthy, endpoint-verified flows can be published.
  *
+ * Documented path (verified live 2026-09-13): POST /{flow_id}/publish — the
+ * older /start_publishing edge is gone (code 2500 "Unknown path components").
+ *
  * Docs: https://developers.facebook.com/documentation/business-messaging/whatsapp/flows/guides/flowsapi
  */
 export async function publishFlow(options: { flowId: string; accessToken: string }): Promise<GraphSuccess> {
   const { flowId, accessToken } = options;
-  // Documented path: POST /{flow_id}/start_publishing (asset must be uploaded first)
   return graphRequest<GraphSuccess>({
-    path: `${flowId}/start_publishing`,
+    path: `${flowId}/publish`,
     accessToken,
-    method: 'POST',
+    method: "POST",
   });
 }
 

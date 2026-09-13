@@ -38,6 +38,7 @@ import { PLANS, PLAN_ORDER, formatLimit, getAnnualSavings, type PlanSlug, type B
 import { WhatsAppHealthSection } from "@/components/dashboard/whatsapp-health-section";
 import { WhatsAppShareCard } from "@/components/dashboard/whatsapp-share-card";
 import { CatalogSyncCard } from "@/components/dashboard/catalog-sync-card";
+import { UpiSetupCard } from "@/components/dashboard/upi-setup-card";
 
 const SETTINGS_TABS = [
   { id: "billing", label: "Billing", icon: Crown },
@@ -320,7 +321,20 @@ export default function SettingsPage() {
           {activeTab === "delivery" && (
             <DeliverySettings data={formData} onChange={handleChange} />
           )}
-          {activeTab === "payments" && restaurant?.id && <PaymentSettings restaurantId={restaurant.id} />}
+          {activeTab === "payments" && restaurant?.id && (
+            <>
+              {/* Dead-simple in-chat UPI setup — the one-input path to taking payments */}
+              <UpiSetupCard
+                restaurantId={restaurant.id}
+                initialUpiVpa={
+                  typeof restaurant.business_config?.upi_vpa === "string"
+                    ? restaurant.business_config.upi_vpa
+                    : null
+                }
+              />
+              <PaymentSettings restaurantId={restaurant.id} />
+            </>
+          )}
           {activeTab === "language" && (
             <LanguageSettings data={formData} onChange={handleChange} />
           )}
@@ -1407,6 +1421,7 @@ function WhatsAppSettings({
               ? data.business_config.last_catalog_sync_at
               : null
           }
+          initialSetupNeeded={data.business_config?.catalog_setup_needed === true}
         />
       )}
     </div>

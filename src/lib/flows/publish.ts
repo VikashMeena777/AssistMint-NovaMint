@@ -5,11 +5,11 @@
 // business public key registration required
 // before any endpoint-powered Flow can be sent.
 //
-// Documented paths (Flows API guide):
+// Documented paths (Flows API guide, verified live 2026-09-13):
 //   POST /{WABA_ID}/flows                — create (accepts flow_json + publish in one call)
 //   POST /{FLOW_ID}                      — update metadata (name/categories/endpoint_uri/application_id)
 //   POST /{FLOW_ID}/assets               — upload/replace the Flow JSON (multipart, asset_type=FLOW_JSON)
-//   POST /{FLOW_ID}/start_publishing     — publish a draft
+//   POST /{FLOW_ID}/publish              — publish a draft
 //   GET  /{WABA_ID}/flows                — list
 //   GET  /{FLOW_ID}?fields=...           — details/status
 //   POST /{PHONE_NUMBER_ID}/whatsapp_business_encryption — register the RSA public key
@@ -17,10 +17,8 @@
 // Coordination: reuses createFlow from the WhatsApp API client
 // (src/lib/whatsapp/flows.ts) for the metadata-only create. The single-call
 // create+publish, Flow JSON asset upload, listing, status polling, public
-// key registration and the documented /start_publishing publish call are
-// implemented here with plain fetch because the API client does not cover
-// them (its publishFlow targets /{flowId}/publish; the documented publish
-// path is /{flowId}/start_publishing, used below).
+// key registration and the /publish call are implemented here with plain
+// fetch because the API client does not cover them.
 // ============================================
 
 import { createFlow as createFlowViaApiClient } from '@/lib/whatsapp/flows';
@@ -293,9 +291,14 @@ export async function uploadFlowJson(
   await graphFetch(`/${flowId}/assets`, accessToken, { method: 'POST', body: form });
 }
 
-/** Publish a draft Flow (async on Meta's side — poll with waitForFlowStatus). */
+/**
+ * Publish a draft Flow (async on Meta's side — poll with waitForFlowStatus).
+ * POST /{FLOW_ID}/publish — the CURRENT documented path (verified live
+ * 2026-09-13: the older /start_publishing edge is gone and answers
+ * code 2500 "Unknown path components").
+ */
 export async function startPublishing(flowId: string, accessToken: string): Promise<void> {
-  await graphFetch(`/${flowId}/start_publishing`, accessToken, {
+  await graphFetch(`/${flowId}/publish`, accessToken, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
@@ -344,7 +347,7 @@ export function defaultCategoriesForFlow(kind: FlowKind | 'other'): FlowCategory
  *      - Any other status (BLOCKED / THROTTLED / DEPRECATED / FAILED) → throws;
  *        pick a new flow name or fix the endpoint health first.
  *   2. Otherwise create it — single call with flow_json + publish when the
- *      API accepts it, falling back to create → upload asset → start_publishing.
+ *      API accepts it, falling back to create → upload asset → publish.
  *
  * Prerequisites enforced by Meta at publish time (see README for the checklist):
  *   - endpoint_uri live and answering the GET health check with status "ready"
@@ -426,14 +429,29 @@ export async function ensureFlow(options: {
   // 3. Fallback: create via the WhatsApp API client (metadata only, no
   //    flow_json support there) → upload JSON → connect app → publish.
   if (!flowId) {
-    const created = await createFlowViaApiClient({
-      wabaId: options.wabaId,
-      accessToken,
-      name: options.name,
-      categories,
-      endpointUri: options.endpointUri,
-    });
-    flowId = created.id;
+    try {
+      const created = await createFlowViaApiClient({
+        wabaId: options.wabaId,
+        accessToken,
+        name: options.name,
+        categories,
+        endpointUri: options.endpointUri,
+      });
+      flowId = created.id;
+    } catch (error) {
+      // The single-call create above can CREATE the flow but still 400 on its
+      // publish step (e.g. code 139002 "Publishing attempt failed" while the
+      // endpoint is not yet live) — in that case this create hits a
+      // name-uniqueness conflict. Adopt the existing draft instead of failing.
+      const existing = (await listFlows(options.wabaId, accessToken)).find(
+        (f) => f.name === options.name
+      );
+      if (!existing) throw error;
+      console.warn(
+        `[FlowsPublish] Adopting existing flow "${options.name}" (${existing.id}, status ${existing.status ?? 'UNKNOWN'}) after create conflict`
+      );
+      flowId = existing.id;
+    }
     await uploadFlowJson(flowId, accessToken, options.flowJson);
     if (options.applicationId) {
       await updateFlowMetadata(flowId, accessToken, { applicationId: options.applicationId });

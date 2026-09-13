@@ -118,6 +118,227 @@ export async function getCatalogId(options: WabaCredential): Promise<string | nu
   return field.catalogs?.data?.[0]?.id ?? null;
 }
 
+// ─── Catalog auto-creation ──────────────
+
+/** Result of {@link ensureCatalog}. */
+export interface EnsureCatalogResult {
+  /** Catalog id connected to the WABA (existing, reused or newly created). */
+  catalogId: string | null;
+  /** True when a brand-new catalog was created by this call. */
+  created: boolean;
+  /** True when a catalog was connected to the WABA by this call. */
+  connected: boolean;
+  /**
+   * True when Meta blocked the API path (missing `catalog_management`
+   * permission, Commerce Terms not accepted, …) and the catalog must be
+   * created once by hand in Commerce Manager.
+   */
+  needsManualCreation: boolean;
+  /** Verbatim Meta error, when a step failed. */
+  error?: string;
+}
+
+function graphErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Resolve the Meta Business that owns a WABA. Tries the WABA node's `owner`
+ * field first, then falls back to scanning the token user's businesses via
+ * the documented `/{business_id}/owned_whatsapp_business_accounts` edge.
+ * Returns the verbatim Graph error alongside a null id so callers can relay
+ * the exact permission gate (e.g. `(#100) Missing Permission`).
+ */
+async function resolveOwningBusiness(
+  options: WabaCredential
+): Promise<{ businessId: string | null; error?: string }> {
+  const { wabaId, accessToken } = options;
+
+  // Fast path — the WABA node's `owner` field (not exposed for every token
+  // type, so any failure falls through to the documented scan below).
+  try {
+    const data = await graphRequest<{ owner?: { id?: string } | string }>({
+      path: wabaId,
+      accessToken,
+      query: { fields: 'owner' },
+    });
+    const owner = data.owner;
+    const id = typeof owner === 'string' ? owner : owner?.id;
+    if (id) return { businessId: id };
+  } catch {
+    // fall through to the businesses scan
+  }
+
+  // Documented path — businesses the token can access, narrowed to the one
+  // that owns this WABA.
+  try {
+    const businesses = await graphRequest<GraphPaged<{ id: string }>>({
+      path: 'me/businesses',
+      accessToken,
+    });
+    for (const business of businesses.data ?? []) {
+      try {
+        const wabas = await graphRequest<GraphPaged<{ id: string }>>({
+          path: `${business.id}/owned_whatsapp_business_accounts`,
+          accessToken,
+          query: { fields: 'id' },
+        });
+        if ((wabas.data ?? []).some((waba) => waba.id === wabaId)) return { businessId: business.id };
+      } catch {
+        // Token cannot list this business's WABAs — skip it
+      }
+    }
+    return { businessId: null, error: 'No business in the token\u2019s list owns this WhatsApp account.' };
+  } catch (err) {
+    return { businessId: null, error: graphErrorMessage(err) };
+  }
+}
+
+/**
+ * Make sure the WABA has a connected catalog, creating one when needed:
+ *
+ * 1. `GET /{wabaId}?fields=catalogs` — already connected? Done.
+ * 2. Resolve the owning business, reuse a same-named catalog when one
+ *    already exists (keeps re-runs idempotent), otherwise create one with
+ *    `POST /{business_id}/owned_product_catalogs` (Marketing API; requires
+ *    the `catalog_management` permission).
+ * 3. Connect it with `POST /{wabaId}/product_catalogs` (`catalog_id`).
+ *
+ * When Meta rejects the API path (unapproved permission, Commerce Terms not
+ * accepted — a common App Review gate), `needsManualCreation` is true and
+ * the caller should guide the owner through Commerce Manager.
+ *
+ * Docs:
+ * - https://developers.facebook.com/docs/graph-api/reference/business/owned_product_catalogs/
+ * - https://developers.facebook.com/docs/graph-api/reference/whats-app-business-account/product_catalogs/
+ */
+export async function ensureCatalog(
+  options: WabaCredential & {
+    /** Catalog name — the business's own name. */
+    name: string;
+  }
+): Promise<EnsureCatalogResult> {
+  const { wabaId, accessToken, name } = options;
+  const cleanName = (name || '').trim().substring(0, 100) || 'WhatsApp Catalog';
+
+  // 1. Already connected?
+  let existing: string | null = null;
+  try {
+    existing = await getCatalogId({ wabaId, accessToken });
+  } catch (err) {
+    return {
+      catalogId: null,
+      created: false,
+      connected: false,
+      needsManualCreation: true,
+      error: graphErrorMessage(err),
+    };
+  }
+  if (existing) {
+    return { catalogId: existing, created: false, connected: false, needsManualCreation: false };
+  }
+
+  // 2. Resolve the business that owns this WABA.
+  const owning = await resolveOwningBusiness({ wabaId, accessToken });
+  if (!owning.businessId) {
+    return {
+      catalogId: null,
+      created: false,
+      connected: false,
+      needsManualCreation: true,
+      error: `Could not determine which Meta Business owns this WhatsApp account${owning.error ? `: ${owning.error}` : '.'}`,
+    };
+  }
+  const businessId = owning.businessId;
+
+  // Reuse an existing same-named catalog when present (avoids duplicates).
+  let catalogId: string | null = null;
+  try {
+    const owned = await graphRequest<GraphPaged<{ id: string; name?: string }>>({
+      path: `${businessId}/owned_product_catalogs`,
+      accessToken,
+      query: { fields: 'id,name' },
+    });
+    const match = (owned.data ?? []).find(
+      (catalog) => (catalog.name ?? '').trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    catalogId = match?.id ?? null;
+  } catch {
+    // Listing needs catalog_management too — continue to creation, which
+    // surfaces the verbatim permission error when that is the gate.
+  }
+
+  // 3. Create the catalog on the owning business.
+  let created = false;
+  if (!catalogId) {
+    try {
+      const data = await graphRequest<{ id?: string }>({
+        path: `${businessId}/owned_product_catalogs`,
+        accessToken,
+        method: 'POST',
+        body: { name: cleanName, vertical: 'commerce' },
+      });
+      catalogId = data.id ?? null;
+      created = Boolean(catalogId);
+    } catch (err) {
+      return {
+        catalogId: null,
+        created: false,
+        connected: false,
+        needsManualCreation: true,
+        error: graphErrorMessage(err),
+      };
+    }
+  }
+  if (!catalogId) {
+    return {
+      catalogId: null,
+      created: false,
+      connected: false,
+      needsManualCreation: true,
+      error: 'Meta did not return a catalog id.',
+    };
+  }
+
+  // 4. Connect the catalog to the WABA.
+  try {
+    const connected = await graphRequest<GraphSuccess>({
+      path: `${wabaId}/product_catalogs`,
+      accessToken,
+      method: 'POST',
+      body: { catalog_id: catalogId },
+    });
+    if (connected.success === false) {
+      return {
+        catalogId,
+        created,
+        connected: false,
+        needsManualCreation: false,
+        error: 'Meta declined to connect the catalog to this WhatsApp account.',
+      };
+    }
+  } catch (err) {
+    return {
+      catalogId,
+      created,
+      connected: false,
+      needsManualCreation: false,
+      error: `Catalog created but connecting it to WhatsApp failed: ${graphErrorMessage(err)}`,
+    };
+  }
+
+  // 5. Verify the connection is now visible on the WABA.
+  try {
+    const verified = await getCatalogId({ wabaId, accessToken });
+    if (verified) {
+      return { catalogId: verified, created, connected: true, needsManualCreation: false };
+    }
+  } catch {
+    // The connect call above succeeded — treat as connected
+  }
+  return { catalogId, created, connected: true, needsManualCreation: false };
+}
+
 // ─── Catalog item CRUD (Commerce API) ──────────────
 
 /**

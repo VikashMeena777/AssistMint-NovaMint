@@ -88,10 +88,13 @@ export function HeroSection() {
           </div>
 
           {/* RIGHT — the live thread card (no bezel, no notch), floating on a
-              paper-stack offset shadow card (transform only) */}
+              paper-stack offset shadow card (transform only).
+              Mobile: capped at 340px and centered so it reads as a phone
+              thread instead of a full-bleed slab (no edge collision with the
+              8px offset shadow either — it stays inside the px-4 gutter). */}
           <div id="demo" className="flex scroll-mt-24 justify-center">
             <FadeIn direction="up" delay={0.2} className="w-full">
-              <div className="relative mx-auto w-full max-w-md">
+              <div className="relative mx-auto w-full max-w-[340px] sm:max-w-md">
                 <div
                   aria-hidden
                   className="absolute inset-0 translate-x-2 translate-y-2 rounded-2xl border bg-secondary"

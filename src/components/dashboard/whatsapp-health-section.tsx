@@ -14,6 +14,7 @@ import {
   Globe,
   HeartPulse,
   HelpCircle,
+  ListChecks,
   Loader2,
   Minus,
   Plus,
@@ -25,10 +26,17 @@ import { toast } from "sonner";
 import {
   checkObaEligibility,
   getAccountHealth,
+  getFlowsStatus,
   getObaStatus,
+  provisionFlows,
   requestOba,
 } from "@/lib/actions/whatsapp-actions";
-import type { ChecklistItem, PhoneHealthData } from "@/lib/actions/whatsapp-actions";
+import type {
+  ChecklistItem,
+  FlowsProvisionReport,
+  FlowsStatusData,
+  PhoneHealthData,
+} from "@/lib/actions/whatsapp-actions";
 import { StatusPill } from "./status-pill";
 import type { StatusTone } from "./status-pill";
 import { EmptyState } from "./empty-state";
@@ -435,6 +443,218 @@ export function WhatsAppHealthSection({ restaurantId, onGoConnect }: WhatsAppHea
 
         <ObaRequestForm restaurantId={restaurantId} />
       </div>
+
+      {/* WhatsApp Flows — zero-manual provisioning status */}
+      <FlowsCard restaurantId={restaurantId} />
+    </div>
+  );
+}
+
+// ─── WhatsApp Flows card (zero-manual provisioning) ──────────
+
+function flowsStatusMeta(
+  status: FlowsStatusData["status"],
+  publishStatus: string | null
+): { tone: StatusTone; label: string } {
+  switch (status) {
+    case "provisioned":
+      return { tone: "success", label: "Provisioned" };
+    case "publishing":
+      return { tone: "primary", label: "Publishing" };
+    case "not_set":
+      return { tone: "muted", label: "Not set up" };
+    default:
+      // BLOCKED / THROTTLED / DEPRECATED / unreadable — show the raw status.
+      return { tone: "warning", label: publishStatus || "Unknown" };
+  }
+}
+
+function formatFlowDate(iso: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+}
+
+function FlowsCard({ restaurantId }: { restaurantId: string }) {
+  const [status, setStatus] = useState<FlowsStatusData | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [provisioning, setProvisioning] = useState(false);
+  const [report, setReport] = useState<FlowsProvisionReport | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await getFlowsStatus(restaurantId);
+      setStatus(res.data);
+      setStatusError(res.error);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load WhatsApp Flows status:", err);
+      setStatusError("Could not load. Please retry.");
+      setLoading(false);
+    }
+  }, [restaurantId]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void load();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
+
+  const provision = async () => {
+    if (provisioning) return;
+    setProvisioning(true);
+    setReport(null);
+    setReportError(null);
+    const res = await provisionFlows(restaurantId);
+    setProvisioning(false);
+    if (!res.data) {
+      setReportError(res.error ?? "Provisioning failed.");
+      return;
+    }
+    setReport(res.data);
+    if (res.data.errors.length > 0) {
+      toast.warning("Flows provisioned with warnings — see details below.");
+    } else {
+      toast.success("WhatsApp Flows provisioned");
+    }
+    void load();
+  };
+
+  const meta = flowsStatusMeta(status?.status ?? "not_set", status?.publishStatus ?? null);
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="flex items-center gap-2 text-base font-semibold">
+            <ListChecks className="h-4 w-4 text-primary" />
+            WhatsApp Flows
+          </h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            In-chat booking forms for your customers — provisioned automatically. No keys or
+            Meta dashboard needed.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          ) : (
+            <StatusPill tone={meta.tone}>{meta.label}</StatusPill>
+          )}
+          <button
+            onClick={provision}
+            disabled={provisioning || loading}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {provisioning ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            Provision now
+          </button>
+        </div>
+      </div>
+
+      {statusError && !status && !loading && (
+        <p className="mt-3 text-xs leading-relaxed text-destructive">{statusError}</p>
+      )}
+
+      {status && (
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-border/40 bg-muted/10 p-4">
+            <p className="text-xs font-medium text-muted-foreground">Booking flow</p>
+            <p className="mt-1.5 text-sm font-semibold">
+              {status.flowName ?? "AssistMint Booking (not created yet)"}
+            </p>
+            <p className="mt-1 break-all text-xs text-muted-foreground">
+              Flow ID: {status.flowId ?? "—"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border/40 bg-muted/10 p-4">
+            <p className="text-xs font-medium text-muted-foreground">Last provisioned</p>
+            <p className="mt-1.5 text-sm font-semibold">{formatFlowDate(status.provisionedAt)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Meta publish status: {status.publishStatus ?? "unknown"}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {status?.healthStatus && (
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Endpoint health:{" "}
+          <span className="font-medium text-foreground">{status.healthStatus}</span>
+          {status.healthDescription ? ` — ${status.healthDescription}` : ""}
+        </p>
+      )}
+
+      {statusError && status && (
+        <p className="mt-2 text-xs leading-relaxed text-warning">{statusError}</p>
+      )}
+
+      {report && (
+        <div
+          className={`mt-4 rounded-xl border p-4 ${
+            report.errors.length === 0
+              ? "border-success/25 bg-success/5"
+              : "border-warning/25 bg-warning/5"
+          }`}
+        >
+          <p className="text-sm font-medium">Provisioning result</p>
+          <ul className="mt-2 space-y-1 text-sm">
+            <li className="flex items-center gap-2">
+              {report.keysReady ? (
+                <Check className="h-4 w-4 shrink-0 text-success" />
+              ) : (
+                <X className="h-4 w-4 shrink-0 text-destructive" />
+              )}
+              Encryption keypair ready
+            </li>
+            <li className="flex items-center gap-2">
+              {report.publicKey ? (
+                <Check className="h-4 w-4 shrink-0 text-success" />
+              ) : (
+                <X className="h-4 w-4 shrink-0 text-destructive" />
+              )}
+              Public key registered on your number
+            </li>
+            <li className="flex items-center gap-2">
+              {report.flowId ? (
+                <Check className="h-4 w-4 shrink-0 text-success" />
+              ) : (
+                <X className="h-4 w-4 shrink-0 text-destructive" />
+              )}
+              Booking flow {report.flowCreated ? "created" : report.flowId ? "reused" : "not created"}
+            </li>
+            <li className="flex items-center gap-2">
+              {report.published ? (
+                <Check className="h-4 w-4 shrink-0 text-success" />
+              ) : (
+                <X className="h-4 w-4 shrink-0 text-destructive" />
+              )}
+              Published {report.published ? `(${report.flowStatus ?? "PUBLISHING"})` : "(pending)"}
+            </li>
+          </ul>
+          {report.flowId && (
+            <p className="mt-2 break-all text-xs text-muted-foreground">Flow ID: {report.flowId}</p>
+          )}
+          {report.errors.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {report.errors.map((err, i) => (
+                <p key={i} className="text-xs leading-relaxed text-warning">
+                  • {err}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {reportError && <p className="mt-3 text-xs leading-relaxed text-destructive">{reportError}</p>}
     </div>
   );
 }

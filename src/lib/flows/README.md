@@ -21,12 +21,14 @@ Spec (verified 2026-09-13 against the live docs):
 | File | Purpose |
 |---|---|
 | `encryption.ts` | RSA-OAEP-SHA256 + AES-GCM request decryption, AES-GCM response encryption (bit-flipped IV), key pair generation. Pure functions, unit-testable. |
+| `keys.ts` | **Zero-manual key management**: `getOrCreateFlowKeys()` returns the app-wide RSA keypair — `FLOWS_PRIVATE_KEY` env override when set, else the self-provisioned keypair stored in the service-role-only `app_config` table (migration `010_app_config.sql`). Race-safe (on-conflict-do-nothing + re-read). |
 | `token.ts` | Stateless, HMAC-SHA256-signed flow tokens (`{rid, flow, phone, iat, exp, oid?, cid?, name?}`) passed as `flow_token` at send time and verified on every endpoint hit. |
 | `definitions.ts` | Flow JSON v5.0 builders: `buildAppointmentFlow`, `buildFeedbackFlow`, `buildAddressFlow` + screen id constants. |
 | `handle-flow-response.ts` | Routes decrypted requests to the next screen and persists outcomes (appointments, ratings/feedback, addresses) via the service layer. Exports `handleFlowRequest` (endpoint path) and `handleFlowResponse` (webhook path, idempotent). |
+| `auto-setup.ts` | **Zero-manual lifecycle**: `ensureFlowsProvisioned(restaurantId)` — keypair → public-key registration → "AssistMint Booking" flow create/reuse (Flow JSON from the restaurant's menu) → publish → persist `flow_appointment_id` in `business_config`. Idempotent, never throws, returns a per-step report. Fired automatically by the WhatsApp connect route. |
 | `publish.ts` | Flows API helpers: `ensureFlow`, `createFlow` (single-call create+publish), `uploadFlowJson`, `startPublishing`, `listFlows`, `waitForFlowStatus`, `setBusinessPublicKey`. |
 | `webhook-bridge.ts` | Bridge for the `flow_response` message webhook (owned by the webhook route agent) → verifies the token → calls `handleFlowResponse`. |
-| `../app/api/whatsapp/flows-endpoint/route.ts` | The public HTTPS endpoint: GET health check + POST encrypted data exchange. |
+| `../app/api/whatsapp/flows-endpoint/route.ts` | The public HTTPS endpoint: GET health check + POST encrypted data exchange. Self-provisions the keypair on the first Meta call. |
 
 Sending flows (interactive `type: "flow"` messages) lives in the API client:
 `src/lib/whatsapp/flows.ts` → `sendFlowMessage` (pass our `createFlowToken()`
@@ -73,39 +75,63 @@ and, inside the encrypted channel, a `ping` action (answered with
 `{"data":{"status":"active"}}`). Endpoints must respond within **10 seconds**
 or flows get THROTTLED (10 msgs/hour) / BLOCKED.
 
-## Environment variables
+## The zero-manual architecture (no setup required)
+
+Nothing below needs a technical operator. On the first WhatsApp connect (and on
+every "Provision now" press in Settings → WhatsApp Health), the system
+self-provisions everything:
+
+1. **Keypair** (`keys.ts` → `getOrCreateFlowKeys`): ONE 2048-bit RSA keypair
+   per Meta app (the encrypted data-exchange request does not identify the
+   restaurant before decryption, so it cannot be per-tenant). Stored in the
+   Supabase `app_config` table (`flows_private_key` / `flows_public_key`,
+   PEM strings) — RLS enabled with **no policies**, so only the service role
+   can touch it. Generated on first use; concurrent callers converge on the
+   first stored key. The flows endpoint self-provisions the same way on the
+   first Meta call.
+2. **Public key registration** (`publish.ts` → `setBusinessPublicKey` on
+   `POST /{PHONE_NUMBER_ID}/whatsapp_business_encryption`): registered for the
+   connected phone number automatically.
+3. **Appointment flow** (`auto-setup.ts` → `ensureFlow`): the "AssistMint
+   Booking" flow (Flow JSON v5 built by `buildAppointmentFlow` from the
+   restaurant's available menu items — 3 generic services when the menu is
+   empty) is created with `endpoint_uri = ${APP_URL}/api/whatsapp/flows-endpoint`
+   and published. Idempotent by flow name.
+4. **Persistence**: the flow id lands in `restaurants.business_config.flow_appointment_id`
+   (read-then-write merge — other keys are never clobbered) plus
+   `flows_provisioned_at`, and an activity `whatsapp.flows_provisioned` is
+   logged. Every step is individually guarded; the function never throws and
+   returns a per-step report `{keysReady, publicKey, flowCreated, published,
+   flowId, flowStatus, errors[]}` (Meta permission errors from unapproved App
+   Review are reported verbatim — a known external gate).
+
+The dashboard surfaces all of this in Settings → WhatsApp Health ("WhatsApp
+Flows" card: status pill, flow name + id, last provisioned time, endpoint
+health, "Provision now" with the inline report).
+
+### Optional environment overrides
 
 ```bash
-# 2048-bit RSA private key (PKCS#1 or PKCS#8 PEM). Multi-line PEMs in env
-# vars should have literal \n escapes — normalizePrivateKeyPem handles both.
+# OPTIONAL — pin a specific RSA private key (PKCS#1/PKCS#8 PEM, literal \n
+# escapes accepted). When set it WINS over the auto-managed app_config
+# keypair and the public key is derived from it. Only needed for
+# single-tenant deployments that must reuse an existing key.
 FLOWS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----"
 
-# HMAC secret for signing flow tokens (falls back to WHATSAPP_APP_SECRET).
+# OPTIONAL — HMAC secret for signing flow tokens (falls back to
+# WHATSAPP_APP_SECRET, which is already configured).
 FLOWS_TOKEN_SECRET="some-long-random-string"
 ```
 
-Generate the key pair:
+Everything works without either: the keypair self-provisions and the token
+secret falls back. To force a fresh keypair, clear the `flows_private_key` /
+`flows_public_key` rows in `app_config` (service-role only) and hit
+"Provision now" — or set the env override above.
 
-```bash
-openssl genrsa -out flows_private.pem 2048
-openssl rsa -in flows_private.pem -pubout -out flows_public.pem
-# Optional: convert to unencrypted PKCS#8 (Java-style tooling prefers it)
-openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt \
-  -in flows_private.pem -out flows_private_pkcs8.pem
-```
+## Public key registration (automatic, per phone number)
 
-`FLOWS_PRIVATE_KEY` is the single-tenant key this endpoint decrypts with.
-(The Supabase `restaurants.business_config.flow_private_key` column can hold
-a per-tenant backup copy — the endpoint itself cannot use per-restaurant
-keys because the encrypted request does not identify the restaurant before
-decryption.)
-
-Or generate programmatically: `generateFlowKeyPair()` from `encryption.ts`.
-
-## Public key registration (one-time, per phone number)
-
-The public key must be registered for **each phone number** before any
-endpoint-powered flow can be sent:
+Handled automatically by `ensureFlowsProvisioned` (step 2 above). For
+reference, the underlying call:
 
 ```ts
 import { setBusinessPublicKey } from '@/lib/flows/publish';
@@ -128,21 +154,24 @@ curl -X POST "https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/whatsapp_busin
 Verify with `GET` on the same path — `business_public_key_signature_status`
 should be `VALID`.
 
-## Key rotation
+## Key rotation (automatic path)
 
-1. Generate a new key pair (`openssl genrsa` or `generateFlowKeyPair()`).
-2. Register the new **public** key via `setBusinessPublicKey` (or the app
-   dashboard). The WhatsApp client re-fetches the public key on the next
-   data exchange; if it holds a stale key we return 421 and it retries with
-   the fresh key — so rotation is near-zero-downtime.
-3. Update `FLOWS_PRIVATE_KEY` in the environment and redeploy.
-4. Keep both private keys deployed briefly? Not needed — one env var per
-   deployment. To be extra safe during the switch, deploy the new key
-   immediately after registering the new public key.
-5. Store the retired key offline (decrypting old captured traffic) and
-   delete it once no longer required.
+1. Clear the `flows_private_key` / `flows_public_key` rows in `app_config`
+   (service-role only) — or set `FLOWS_PRIVATE_KEY` to the new key (it wins).
+2. Press "Provision now" (Settings → WhatsApp Health) or reconnect the number —
+   `ensureFlowsProvisioned` registers the new **public** key via
+   `setBusinessPublicKey`. The WhatsApp client re-fetches the public key on
+   the next data exchange; if it holds a stale key we return 421 and it
+   retries with the fresh key — so rotation is near-zero-downtime.
+3. The endpoint picks the new key up immediately (env override) or from the
+   fresh `app_config` rows.
+4. Store the retired key offline (decrypting old captured traffic) and delete
+   it once no longer required.
 
-## Publishing flows
+## Publishing flows (automatic)
+
+`ensureFlowsProvisioned` (fired by the connect route and the "Provision now"
+button) wraps `ensureFlow` for the appointment flow:
 
 ```ts
 import { ensureFlow } from '@/lib/flows/publish';
@@ -211,19 +240,20 @@ Two delivery paths for submitted data, both idempotent:
 
 ## Deployment checklist
 
+- [ ] `010_app_config.sql` applied (the keypair store; RLS-locked, service-role only)
 - [ ] App Review: Advanced Access for `whatsapp_business_management` +
       `whatsapp_business_messaging` (currently the platform blocker — see
-      `_audit/research-whatsapp-features.md` §1)
-- [ ] `FLOWS_PRIVATE_KEY` + `FLOWS_TOKEN_SECRET` set in the environment
-- [ ] Public key registered for every sending phone number
-      (`setBusinessPublicKey`)
+      `_audit/research-whatsapp-features.md` §1; until approved, flow
+      creation returns Meta permission errors, reported verbatim by the
+      provisioning report)
 - [ ] Endpoint live at a public HTTPS URL:
       `GET /api/whatsapp/flows-endpoint` returns `{"data":[{"status":"ready"}],"version":"3.0"}`
+      (the keypair self-provisions on this call — no env var needed)
 - [ ] WABA subscribed to Flows webhooks (`flow_response` etc. — webhook
       route owner; the bridge is `src/lib/flows/webhook-bridge.ts`)
-- [ ] Meta app (1991613461489665) connected to each flow
-      (`applicationId` in `ensureFlow`)
-- [ ] Flows created + published via `ensureFlow` (check `validationErrors`)
+- [ ] Connect a number — `ensureFlowsProvisioned` runs automatically and
+      logs `whatsapp.flows_provisioned`; verify the "WhatsApp Flows" card in
+      Settings → WhatsApp Health (or press "Provision now")
 - [ ] Monitor `GET /{FLOW_ID}?fields=health_status` — endpoints that are
       slow (>10s) or error-prone get THROTTLED (10 msgs/h) then BLOCKED
 
@@ -238,6 +268,7 @@ Two delivery paths for submitted data, both idempotent:
 - **Form data accumulation**: later screens read fields submitted on earlier
   screens (standard client behavior, same assumption as Meta's own booking
   examples). Missing values produce a friendly error screen, never a crash.
-- **`src/lib/whatsapp/flows.ts` publishFlow** targets `/{flowId}/publish`;
-  the documented publish path is `/{flowId}/start_publishing`, which is what
-  `publish.ts` uses. Flagged for the API client owner to reconcile.
+- **Publish path**: `POST /{FLOW_ID}/publish` (verified live 2026-09-13 —
+  the older `/{flowId}/start_publishing` edge is gone and answers code 2500
+  "Unknown path components"). Both `publish.ts` (`startPublishing`) and the
+  API client (`src/lib/whatsapp/flows.ts` → `publishFlow`) now use it.

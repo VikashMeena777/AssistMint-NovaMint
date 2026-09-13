@@ -68,13 +68,13 @@ export function Footer() {
               <h4 className="mb-4 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
                 {col.title}
               </h4>
-              <ul className="space-y-3">
+              <ul className="space-y-1.5">
                 {col.links.map((link) => (
                   <li key={link.label}>
                     <Link
                       href={link.href}
                       onClick={(e) => handleNavClick(e, link.href)}
-                      className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                      className="inline-block py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
                     >
                       {link.label}
                     </Link>

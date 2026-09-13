@@ -2,11 +2,19 @@
 
 // ─── Catalog sync card (Bahikhata) ───────────────────────────
 // Pushes active menu items to the WhatsApp catalog on Meta and
-// enables the in-chat cart. Shows per-item results and the last
-// synced time (persisted in business_config).
+// enables the in-chat cart. Auto-creates the catalog when Meta
+// allows it; otherwise walks the owner through creating it once
+// in Commerce Manager (plain language, numbered steps).
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShoppingBag } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ExternalLink,
+  Loader2,
+  RefreshCw,
+  ShoppingBag,
+} from "lucide-react";
 import { toast } from "sonner";
 import { syncCatalogToMeta } from "@/lib/actions/whatsapp-actions";
 import type { CatalogSyncResult } from "@/lib/actions/whatsapp-actions";
@@ -14,6 +22,8 @@ import type { CatalogSyncResult } from "@/lib/actions/whatsapp-actions";
 interface CatalogSyncCardProps {
   restaurantId: string;
   initialLastSyncedAt: string | null;
+  /** True when a previous sync could not create the catalog automatically. */
+  initialSetupNeeded?: boolean;
 }
 
 function formatSyncTime(iso: string | null): string {
@@ -29,23 +39,33 @@ function formatSyncTime(iso: string | null): string {
   })}`;
 }
 
-export function CatalogSyncCard({ restaurantId, initialLastSyncedAt }: CatalogSyncCardProps) {
+export function CatalogSyncCard({
+  restaurantId,
+  initialLastSyncedAt,
+  initialSetupNeeded = false,
+}: CatalogSyncCardProps) {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<CatalogSyncResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(initialLastSyncedAt);
+  const [needsSetup, setNeedsSetup] = useState(initialSetupNeeded);
 
   const sync = async () => {
     setSyncing(true);
     setError(null);
+    setNeedsSetup(false);
     try {
       const res = await syncCatalogToMeta(restaurantId);
       if (res.error) {
         setError(res.error);
-        toast.error(res.error);
+        setNeedsSetup(Boolean(res.needsCatalogSetup));
+        toast.error(res.needsCatalogSetup ? "One small step needed — see below." : res.error);
       } else if (res.data) {
         setResult(res.data);
         setLastSyncedAt(res.data.lastSyncedAt);
+        if (res.data.catalogCreated) {
+          toast.success("Catalog created on WhatsApp 🎉 Your menu is now syncing…");
+        }
         if (res.data.total === 0) {
           toast.info("No available menu items to sync yet.");
         } else if (res.data.failed > 0) {
@@ -88,7 +108,50 @@ export function CatalogSyncCard({ restaurantId, initialLastSyncedAt }: CatalogSy
         <span className="text-xs text-muted-foreground tabular-nums">{formatSyncTime(lastSyncedAt)}</span>
       </div>
 
-      {error ? (
+      {needsSetup ? (
+        <div className="mt-4 rounded-xl border border-warning/30 bg-warning/5 p-4">
+          <p className="text-xs font-semibold">One-time setup — create your catalog on Meta&apos;s website</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            WhatsApp needs a &quot;catalog&quot; (a product list) before your menu can appear in chat. Creating it
+            takes about a minute:
+          </p>
+          <ol className="mt-3 space-y-1.5 text-xs leading-relaxed">
+            <li>
+              <span className="font-semibold">1.</span>{" "}
+                <a
+                  href="https://business.facebook.com/commerce/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                >
+                  Open Meta Commerce Manager
+                  <ExternalLink className="h-3 w-3" />
+                </a>{" "}
+                (log in with the same Facebook account you used to connect WhatsApp)
+              </li>
+            <li>
+              <span className="font-semibold">2.</span> Click <span className="font-medium">Create catalog</span>{" "}
+              → give it your business name → create it
+            </li>
+            <li>
+              <span className="font-semibold">3.</span> Open the catalog →{" "}
+              <span className="font-medium">Settings</span> → <span className="font-medium">Connected assets</span>{" "}
+              → connect your WhatsApp business account (this is what lets your menu show up in chat)
+            </li>
+            <li>
+              <span className="font-semibold">4.</span> Come back here and press{" "}
+              <span className="font-medium">Sync your catalog to WhatsApp</span> again — we&apos;ll fill in your
+              whole menu automatically
+            </li>
+          </ol>
+          {error ? (
+            <p className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : error ? (
         <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3.5">
           <p className="flex items-start gap-2 text-xs leading-relaxed text-destructive">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />

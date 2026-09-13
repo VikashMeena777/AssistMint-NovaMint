@@ -450,3 +450,59 @@ export async function getRestaurantPaymentConfig(restaurantId: string) {
     cashfree_webhook_secret: r.cashfree_webhook_secret ? '••••••••••••••••••••••••••••••••' : '',
   };
 }
+
+// ─── In-Chat UPI (business_config.upi_vpa) ─────────
+
+/** Shape of a UPI ID (virtual payment address), e.g. vikash@okhdfcbank. */
+const UPI_ID_PATTERN = /^[\w.\-]{2,256}@[a-zA-Z]{2,64}$/;
+
+/**
+ * Save (or clear) the business's UPI ID — the one setting behind the
+ * in-chat "Pay Online" invoices the bot sends (see the orchestrator's
+ * handleOnlinePayOrder). Stored in business_config.upi_vpa via the
+ * allowlisted updateRestaurantSettings, always as a merge so the rest of
+ * business_config is never clobbered. Passing an empty string clears it.
+ */
+export async function saveUpiVpa(
+  restaurantId: string,
+  upiVpa: string
+): Promise<{ success: boolean; error: string | null }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Unauthorized' };
+
+  // Verify ownership + read the CURRENT business_config (fresh, so we merge
+  // against what is actually in the DB rather than a stale client copy)
+  const { data: restaurant } = await supabase
+    .from('restaurants')
+    .select('owner_id, business_config')
+    .eq('id', restaurantId)
+    .single();
+
+  if (!restaurant || (restaurant as Record<string, unknown>).owner_id !== user.id) {
+    return { success: false, error: 'Not authorized to update this restaurant' };
+  }
+
+  const r = restaurant as { business_config: Record<string, unknown> | null };
+  const current =
+    r.business_config && typeof r.business_config === 'object' && !Array.isArray(r.business_config)
+      ? r.business_config
+      : {};
+
+  const clean = (upiVpa || '').trim();
+  if (clean && !UPI_ID_PATTERN.test(clean)) {
+    return {
+      success: false,
+      error: 'That doesn\u2019t look like a UPI ID — it should look like yourname@bank (e.g. vikash@okhdfcbank).',
+    };
+  }
+
+  // Merge — never clobber the rest of business_config
+  const result = await updateRestaurantSettings(restaurantId, {
+    business_config: { ...current, upi_vpa: clean || null },
+  });
+  if (result && 'error' in result && result.error) {
+    return { success: false, error: result.error };
+  }
+  return { success: true, error: null };
+}

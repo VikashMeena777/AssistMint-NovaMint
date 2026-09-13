@@ -206,6 +206,144 @@ export async function POST(req: NextRequest) {
       }
     })();
 
+    // 6.6 Auto-provision WhatsApp Flows (app-wide keypair, public key
+    // registration, "AssistMint Booking" flow create + publish). Same
+    // fire-and-forget pattern as the profile autofill — never blocks or
+    // fails the connect. The owner never touches keys or Meta dashboards.
+    void (async () => {
+      try {
+        const { ensureFlowsProvisioned } = await import('@/lib/flows/auto-setup');
+        const report = await ensureFlowsProvisioned(restaurant.id);
+        if (report.errors.length > 0) {
+          console.warn('[WhatsApp Connect] Flows auto-provisioning report:', JSON.stringify(report));
+        } else {
+          console.log('[WhatsApp Connect] Flows auto-provisioning report:', JSON.stringify(report));
+        }
+      } catch (err) {
+        console.warn('[WhatsApp Connect] Flows auto-provisioning skipped:', err);
+      }
+    })();
+
+    // 6.7 Auto-create the WhatsApp catalog + sync the menu (fire-and-forget —
+    // never blocks or fails the connect). Tries the Commerce API
+    // (ensureCatalog); when Meta requires manual creation the dashboard's
+    // catalog sync card guides the owner through Commerce Manager.
+    void (async () => {
+      try {
+        const { ensureCatalog, upsertCatalogItem, setCommerceSettings } = await import(
+          '@/lib/whatsapp/catalog'
+        );
+
+        const { data: r } = await supabaseAdmin
+          .from('restaurants')
+          .select('name, business_config')
+          .eq('id', restaurant.id)
+          .single();
+        const rec = (r ?? {}) as { name?: string | null; business_config?: Record<string, unknown> | null };
+        const currentConfig =
+          rec.business_config && typeof rec.business_config === 'object' && !Array.isArray(rec.business_config)
+            ? rec.business_config
+            : {};
+        const catalogName = (rec.name || 'Our Business').trim();
+
+        const ensured = await ensureCatalog({
+          wabaId: waba_id,
+          accessToken,
+          name: catalogName,
+        });
+        if (ensured.error) {
+          console.warn('[WhatsApp Connect] Catalog auto-creation issue:', ensured.error);
+        }
+        if (!ensured.catalogId) {
+          // Flag it so the dashboard shows the step-by-step guide immediately.
+          await supabaseAdmin
+            .from('restaurants')
+            .update({
+              business_config: { ...currentConfig, catalog_setup_needed: true },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', restaurant.id);
+          console.log('[WhatsApp Connect] Catalog needs manual creation — dashboard will guide the owner');
+          return;
+        }
+        if (ensured.created) {
+          console.log(`[WhatsApp Connect] Catalog auto-created: ${ensured.catalogId}`);
+        }
+
+        // Sync the active menu into the catalog (prices are stored in paise —
+        // exactly what Meta wants for INR).
+        const { data: items } = await supabaseAdmin
+          .from('menu_items')
+          .select('id, name, description, price, image_url')
+          .eq('restaurant_id', restaurant.id)
+          .eq('is_available', true)
+          .order('display_order', { ascending: true });
+
+        let synced = 0;
+        let failed = 0;
+        for (const raw of (items || []) as unknown[]) {
+          const item =
+            raw && typeof raw === 'object' && !Array.isArray(raw)
+              ? (raw as Record<string, unknown>)
+              : {};
+          const id = typeof item.id === 'string' ? item.id : '';
+          const name = typeof item.name === 'string' ? item.name : '';
+          if (!id || !name) continue;
+          try {
+            await upsertCatalogItem({
+              catalogId: ensured.catalogId,
+              accessToken,
+              item: {
+                retailerId: id,
+                name,
+                description: (typeof item.description === 'string' && item.description) || name,
+                price: Math.round(Number(item.price || 0)),
+                currency: 'INR',
+                imageUrl: typeof item.image_url === 'string' && item.image_url ? item.image_url : undefined,
+                availability: 'IN_STOCK',
+              },
+            });
+            synced++;
+          } catch {
+            failed++;
+          }
+        }
+
+        // Best-effort: enable the in-chat cart + catalog visibility.
+        try {
+          await setCommerceSettings({
+            phoneNumberId: phone_number_id,
+            accessToken,
+            cartEnabled: true,
+            catalogVisible: true,
+          });
+        } catch {
+          // Not fatal
+        }
+
+        // Store catalog id + last sync in business_config (merge, never clobber).
+        await supabaseAdmin
+          .from('restaurants')
+          .update({
+            business_config: {
+              ...currentConfig,
+              catalog_id: ensured.catalogId,
+              catalog_setup_needed: false,
+              last_catalog_sync_at: new Date().toISOString(),
+              last_catalog_sync_summary: { total: synced + failed, synced, failed },
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', restaurant.id);
+
+        console.log(
+          `[WhatsApp Connect] Auto-catalog sync done — ${synced} synced, ${failed} failed (catalog ${ensured.catalogId})`
+        );
+      } catch (err) {
+        console.warn('[WhatsApp Connect] Auto-catalog sync skipped:', err);
+      }
+    })();
+
     // 7. Log activity (fire-and-forget)
     void (async () => {
       try {

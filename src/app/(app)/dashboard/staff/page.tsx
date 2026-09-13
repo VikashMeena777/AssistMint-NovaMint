@@ -282,7 +282,7 @@ function StaffFormModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold">
             {isEditing ? 'Edit Staff' : 'Add Staff Member'}

@@ -28,7 +28,7 @@ function BillingToggle({
               role="tab"
               aria-selected={on}
               onClick={() => onChange(v)}
-              className={`relative rounded-full px-5 py-2 text-xs font-bold transition-colors ${
+              className={`relative rounded-full px-5 py-2.5 text-xs font-bold transition-colors ${
                 on ? "text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >

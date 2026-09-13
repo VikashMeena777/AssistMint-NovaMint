@@ -225,18 +225,11 @@ export function Navbar() {
               )}
             </div>
 
-            {/* Mobile: search + toggle */}
+            {/* Mobile: menu toggle only — the ⌘K palette is keyboard-driven,
+                so its trigger stays on desktop (hidden md:flex above). */}
             <div className="flex items-center gap-1 md:hidden">
               <button
-                type="button"
-                onClick={openPalette}
-                aria-label="Open command menu"
-                className="p-2 text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <Search className="h-5 w-5" />
-              </button>
-              <button
-                className="-mr-2 p-2 text-muted-foreground transition-colors hover:text-foreground"
+                className="-mr-2 p-3 text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => setMobileOpen(!mobileOpen)}
                 aria-label="Toggle menu"
                 aria-expanded={mobileOpen}
