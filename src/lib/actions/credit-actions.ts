@@ -9,7 +9,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { getCreditPack, formatPaise } from '@/lib/utils/credit-packs';
+import { getCreditPack } from '@/lib/utils/credit-packs';
 import {
   getBalance,
   getCreditHistory,
@@ -57,12 +57,12 @@ async function getOwnedRestaurant(
   };
 }
 
-// ─── Buy Credits ─────────────────────────────
+// ─── Buy Credits ──────────────────────
 
 export async function buyCredits(
   restaurantId: string,
   packId: string
-): Promise<{ link: string; cfOrderId: string } | { error: string }> {
+): Promise<{ paymentSessionId: string; cfOrderId: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'Unauthorized' };
@@ -80,7 +80,6 @@ export async function buyCredits(
 
   const cfOrderId = `CR_${restaurantId.substring(0, 8)}_${Date.now().toString(36)}`;
   const amountRupees = pack.pricePaise / 100;
-      // formatPaise for display
   const cleanName = restaurant.name.replace(/[^\p{L}\p{N}\s.-]/gu, '').trim() || 'AssistMint Business';
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://assistmint.novamint.in';
 
@@ -92,79 +91,49 @@ export async function buyCredits(
   };
 
   try {
-    // 1) Payment Links API — shareable URL (primary path)
-    let link: string | null = null;
-    const linkRes = await fetch(`${CASHFREE_API_URL}/links`, {
+    // PG Orders API — returns the payment_session_id the Cashfree JS SDK
+    // checkout modal needs. An in-page modal can't be popup-blocked; a
+    // window.open after the async action round-trip WAS being blocked.
+    const orderRes = await fetch(`${CASHFREE_API_URL}/orders`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        link_id: cfOrderId,
-        link_amount: amountRupees,
-        link_currency: 'INR',
-        link_purpose: `AssistMint message balance — ${pack.name} (${formatPaise(pack.balancePaise)})`,
-        link_notify: { send_sms: false, send_email: false },
+        order_id: cfOrderId,
+        order_amount: amountRupees,
+        order_currency: 'INR',
+        order_note: `AssistMint message balance — ${pack.name}`,
         customer_details: {
+          customer_id: user.id.substring(0, 50),
           customer_name: cleanName,
+          customer_email: user.email || 'owner@assistmint.com',
           customer_phone: '9999999999',
         },
-        link_meta: {
-          notify_url: `${appUrl}/api/webhooks/cashfree`,
+        order_meta: {
           return_url: `${appUrl}/api/payments/return?order_id=${cfOrderId}`,
+          notify_url: `${appUrl}/api/webhooks/cashfree`,
         },
-        link_expiry_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       }),
     });
 
-    if (linkRes.ok) {
-      const linkData = await linkRes.json();
-      link = (linkData.link_url as string) || null;
-    } else {
-      const err = await linkRes.json().catch(() => null);
-      console.error('[CreditActions] Cashfree link creation failed:', JSON.stringify(err));
+    if (!orderRes.ok) {
+      const err = await orderRes.json().catch(() => null);
+      console.error('[CreditActions] Cashfree order creation failed:', JSON.stringify(err));
+      return { error: 'Payment initialization failed. Please try again.' };
     }
 
-    // 2) Fallback: PG Orders API + hosted checkout URL
-    if (!link) {
-      const orderRes = await fetch(`${CASHFREE_API_URL}/orders`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          order_id: cfOrderId,
-          order_amount: amountRupees,
-          order_currency: 'INR',
-          order_note: `AssistMint message credits — ${pack.name}`,
-          customer_details: {
-            customer_id: user.id.substring(0, 50),
-            customer_name: cleanName,
-            customer_email: user.email || 'owner@assistmint.com',
-            customer_phone: '9999999999',
-          },
-          order_meta: {
-            return_url: `${appUrl}/api/payments/return?order_id=${cfOrderId}`,
-            notify_url: `${appUrl}/api/webhooks/cashfree`,
-          },
-        }),
-      });
-
-      if (!orderRes.ok) {
-        const err = await orderRes.json().catch(() => null);
-        console.error('[CreditActions] Cashfree order fallback failed:', JSON.stringify(err));
-        return { error: 'Payment initialization failed. Please try again.' };
-      }
-
-      const orderData = await orderRes.json();
-      const sessionId = orderData.payment_session_id as string;
-      const env = process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production' ? '' : 'sandbox.';
-      link = `https://${env}cashfree.com/pg/view/order/${cfOrderId}?payment_session_id=${sessionId}`;
+    const orderData = await orderRes.json();
+    const paymentSessionId = orderData.payment_session_id as string;
+    if (!paymentSessionId) {
+      console.error('[CreditActions] No payment_session_id in Cashfree response');
+      return { error: 'Payment initialization failed. Please try again.' };
     }
 
-    // 3) Record the pending purchase
+    // Record the pending purchase
     const { error: insertError } = await supabase.from('payments').insert({
       restaurant_id: restaurantId,
       cashfree_order_id: cfOrderId,
       amount: pack.pricePaise,
       status: 'pending',
-      payment_link: link,
       metadata: {
         type: 'credits',
         pack_id: pack.id,
@@ -177,8 +146,8 @@ export async function buyCredits(
       return { error: 'Could not start the purchase. Please try again.' };
     }
 
-    console.log(`[CreditActions] Created credits purchase link: ${cfOrderId}`);
-    return { link, cfOrderId };
+    console.log(`[CreditActions] Created credits checkout session: ${cfOrderId}`);
+    return { paymentSessionId, cfOrderId };
   } catch (error) {
     console.error('[CreditActions] Checkout error:', error);
     return { error: 'Something went wrong. Please try again.' };

@@ -6,7 +6,7 @@
 // the 24h window stay free. Shows the wallet balance, three
 // top-up packs, and the recent transaction ledger.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Coins, ExternalLink, Loader2, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { buyCredits, verifyCreditsPayment, getCreditsOverview } from "@/lib/actions/credit-actions";
@@ -25,9 +25,6 @@ const REASON_LABELS: Record<string, string> = {
   bonus: "Bonus",
 };
 
-const POLL_INTERVAL_MS = 3000;
-const POLL_MAX_ATTEMPTS = 40; // 3s × 40 = 2 minutes
-
 interface CreditsCardProps {
   restaurantId: string;
 }
@@ -38,15 +35,6 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
   const [loading, setLoading] = useState(true);
   const [buyingPack, setBuyingPack] = useState<CreditPackId | null>(null);
   const [awaitingOrder, setAwaitingOrder] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
   const loadOverview = useCallback(async () => {
     try {
       const result = await getCreditsOverview(restaurantId);
@@ -65,11 +53,8 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
 
   useEffect(() => {
     const t = setTimeout(() => void loadOverview(), 0);
-    return () => {
-      clearTimeout(t);
-      stopPolling();
-    };
-  }, [loadOverview, stopPolling]);
+    return () => clearTimeout(t);
+  }, [loadOverview]);
 
   const handleBuy = async (packId: CreditPackId) => {
     if (awaitingOrder) {
@@ -84,48 +69,39 @@ export function CreditsCard({ restaurantId }: CreditsCardProps) {
         setBuyingPack(null);
         return;
       }
-
-      // Open the Cashfree payment link in a new tab…
-      window.open(result.link, "_blank", "noopener,noreferrer");
       setAwaitingOrder(result.cfOrderId);
       setBuyingPack(null);
 
-      // …and poll verification while the owner pays
-      let attempts = 0;
-      pollRef.current = setInterval(async () => {
-        attempts++;
-        try {
-          const verify = await verifyCreditsPayment(restaurantId, result.cfOrderId);
-          if (verify.success) {
-            stopPolling();
-            setAwaitingOrder(null);
-            toast.success("Credits added to your balance 🎉");
-            await loadOverview();
-            return;
-          }
-          if (verify.error && !verify.pending) {
-            stopPolling();
-            setAwaitingOrder(null);
-            toast.error(verify.error);
-            return;
-          }
-          if (attempts >= POLL_MAX_ATTEMPTS) {
-            stopPolling();
-            setAwaitingOrder(null);
-            toast.info("Still waiting on the payment — your credits will appear automatically once it completes.");
-          }
-        } catch {
-          // Transient poll failure — keep trying until the deadline
-          if (attempts >= POLL_MAX_ATTEMPTS) {
-            stopPolling();
-            setAwaitingOrder(null);
-            toast.info("Still waiting on the payment — your credits will appear automatically once it completes.");
-          }
-        }
-      }, POLL_INTERVAL_MS);
+      // Cashfree JS SDK checkout — an IN-PAGE modal. (The old flow opened a
+      // new tab via window.open after an async round-trip, which browsers
+      // popup-block; the modal can't be blocked.)
+      const { load } = await import("@cashfreepayments/cashfree-js");
+      const cashfree = await load({
+        mode: process.env.NEXT_PUBLIC_CASHFREE_ENV === "production" ? "production" : "sandbox",
+      });
+      await cashfree.checkout({
+        paymentSessionId: result.paymentSessionId,
+        redirectTarget: "_modal",
+      });
+
+      // Modal closed — check whether the payment actually went through
+      // (success AND user-close land here; the webhook may already have
+      // fulfilled it).
+      const verify = await verifyCreditsPayment(restaurantId, result.cfOrderId);
+      if (verify.success) {
+        toast.success("Message balance added 🎉");
+      } else if (verify.error && !verify.pending) {
+        toast.error(verify.error);
+      } else {
+        toast.info(
+          "Payment not finished — if you already paid, the balance appears here within a minute."
+        );
+      }
+      await loadOverview();
     } catch {
       toast.error("Could not start the purchase. Please try again.");
       setBuyingPack(null);
+      setAwaitingOrder(null);
     }
   };
 
