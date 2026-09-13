@@ -12,7 +12,11 @@ export function CookieConsent() {
   useEffect(() => {
     const consent = getCookie("cookie_consent");
     if (!consent) {
-      const timer = setTimeout(() => setShow(true), 2000);
+      // 8s on mobile (a 2s banner covered the hero chat demo + trust
+      // checkmarks on phones — the visitor saw a wall of cookie before the
+      // product); 2s on larger screens where it sits in the corner.
+      const isMobile = window.matchMedia("(max-width: 639px)").matches;
+      const timer = setTimeout(() => setShow(true), isMobile ? 8000 : 2000);
       return () => clearTimeout(timer);
     }
   }, []);

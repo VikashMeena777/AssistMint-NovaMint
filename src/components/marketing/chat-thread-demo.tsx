@@ -153,7 +153,11 @@ export function ChatThreadDemo({ className = "" }: { className?: string }) {
   }, [step, visible]);
 
   return (
-    <div className={`w-full max-w-md select-none ${className}`}>
+    <div className={`relative w-full max-w-md select-none ${className}`}>
+      {/* relative: keeps the card's paint order ABOVE the hero's absolute
+          backdrop slab — without it the card sinks behind the decorative
+          offset panel once the entrance animation settles (no stacking
+          context at rest). */}
       <div className="flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
         {/* ── Header: business identity + presence (P12) ── */}
         <div className="flex items-center gap-3 border-b bg-secondary/40 px-4 py-3">

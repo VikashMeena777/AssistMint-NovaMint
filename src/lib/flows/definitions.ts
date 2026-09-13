@@ -68,8 +68,8 @@ export interface FlowTextComponent extends FlowComponentBase {
   text: string;
 }
 
-export interface FlowRadioGroupComponent extends FlowComponentBase {
-  type: 'RadioGroup';
+export interface FlowRadioButtonsGroupComponent extends FlowComponentBase {
+  type: 'RadioButtonsGroup';
   name: string;
   label: string;
   /** Static item array, or a dynamic expression like "${data.services}". */
@@ -96,7 +96,7 @@ export interface FlowTextInputComponent extends FlowComponentBase {
   required?: boolean;
   'init-value'?: string;
   'helper-text'?: string;
-  'max-characters'?: number;
+  'max-length'?: number;
 }
 
 export interface FlowTextAreaComponent extends FlowComponentBase {
@@ -124,7 +124,7 @@ export type FlowAction =
 
 export type FlowComponent =
   | FlowTextComponent
-  | FlowRadioGroupComponent
+  | FlowRadioButtonsGroupComponent
   | FlowDatePickerComponent
   | FlowTextInputComponent
   | FlowTextAreaComponent
@@ -173,6 +173,19 @@ function dataExchangeFooter(label: string): FlowFooterComponent {
     type: 'Footer',
     label,
     'on-click-action': { name: 'data_exchange', payload: {} },
+  };
+}
+
+/**
+ * Terminal footer — ends the flow. Meta's validator REQUIRES at least one
+ * terminal screen (MISSING_TERMINAL_SCREEN otherwise); the completion data
+ * arrives via the flow_response webhook / endpoint data_exchange protocol.
+ */
+function completeFooter(label: string): FlowFooterComponent {
+  return {
+    type: 'Footer',
+    label,
+    'on-click-action': { name: 'complete', payload: {} },
   };
 }
 
@@ -263,7 +276,7 @@ export function buildAppointmentFlow(
             { type: 'TextHeading', text: 'Book an appointment' },
             { type: 'TextBody', text: 'Pick a service to get started.' },
             {
-              type: 'RadioGroup',
+              type: 'RadioButtonsGroup',
               name: 'service_id',
               label: 'Service',
               required: true,
@@ -292,7 +305,7 @@ export function buildAppointmentFlow(
               'max-date': daysFromToday(180),
             },
             {
-              type: 'RadioGroup',
+              type: 'RadioButtonsGroup',
               name: 'time',
               label: 'Time slot',
               required: true,
@@ -305,6 +318,7 @@ export function buildAppointmentFlow(
       {
         id: APPOINTMENT_SCREENS.CONFIRM,
         title: 'Confirm',
+        terminal: true,
         data: {
           summary: { type: 'string', __example__: 'Haircut on 2026-09-14 at 10:00' },
         },
@@ -313,7 +327,7 @@ export function buildAppointmentFlow(
           children: [
             { type: 'TextHeading', text: 'Confirm your booking' },
             { type: 'TextBody', text: '${data.summary}' },
-            dataExchangeFooter('Confirm booking'),
+            completeFooter('Confirm booking'),
           ],
         },
       },
@@ -349,7 +363,7 @@ export function buildFeedbackFlow(): FlowJson {
             { type: 'TextHeading', text: 'How was your experience?' },
             { type: 'TextBody', text: 'Your feedback helps us improve.' },
             {
-              type: 'RadioGroup',
+              type: 'RadioButtonsGroup',
               name: 'rating',
               label: 'Rating',
               required: true,
@@ -362,6 +376,7 @@ export function buildFeedbackFlow(): FlowJson {
       {
         id: FEEDBACK_SCREENS.COMMENT,
         title: 'Anything else?',
+        terminal: true,
         data: {
           rating_summary: { type: 'string', __example__: '4/5' },
         },
@@ -374,7 +389,7 @@ export function buildFeedbackFlow(): FlowJson {
               name: 'feedback',
               label: 'Tell us more (optional)',
             },
-            dataExchangeFooter('Submit'),
+            completeFooter('Submit'),
           ],
         },
       },
@@ -398,7 +413,6 @@ export function buildAddressFlow(prefill: AddressFlowPrefill = {}): FlowJson {
     label: 'Full name',
     required: true,
     'input-type': 'text',
-    'max-characters': 80,
   };
   if (prefill.name) nameInput['init-value'] = clampText(prefill.name, 80);
 
@@ -409,7 +423,6 @@ export function buildAddressFlow(prefill: AddressFlowPrefill = {}): FlowJson {
     required: true,
     'input-type': 'phone',
     'helper-text': 'For delivery updates',
-    'max-characters': 15,
   };
   if (prefill.phone) phoneInput['init-value'] = clampText(prefill.phone, 15);
 
@@ -423,6 +436,7 @@ export function buildAddressFlow(prefill: AddressFlowPrefill = {}): FlowJson {
       {
         id: ADDRESS_SCREENS.ADDRESS,
         title: 'Delivery address',
+        terminal: true,
         data: {},
         layout: {
           type: 'SingleColumnLayout',
@@ -442,9 +456,8 @@ export function buildAddressFlow(prefill: AddressFlowPrefill = {}): FlowJson {
               name: 'landmark',
               label: 'Landmark (optional)',
               'input-type': 'text',
-              'max-characters': 80,
             },
-            dataExchangeFooter('Save address'),
+            completeFooter('Save address'),
           ],
         },
       },
