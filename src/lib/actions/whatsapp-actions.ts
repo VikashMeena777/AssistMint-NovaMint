@@ -281,6 +281,8 @@ export interface ShareLinksData {
   phone: string;
   chatLink: string;
   catalogLink: string;
+  /** 'whatsapp' = the live connected number; 'restaurant' = the site phone field */
+  phoneSource?: 'whatsapp' | 'restaurant';
 }
 
 export interface CatalogSyncItemResult {
@@ -932,27 +934,55 @@ export async function getShareLinks(
   const owned = await requireOwner(restaurantId);
   if (!owned.ok) return { data: null, error: owned.error };
 
-  const rawPhone = String(owned.row.phone || '').trim();
-  if (!rawPhone) {
-    return {
-      data: null,
-      error: 'Add your business phone number (with country code) in Settings → Restaurant first.',
-    };
+  // Prefer the CONNECTED WhatsApp number (what Meta actually answers on) —
+  // the site's phone field can differ from the number linked via embedded
+  // signup, and wa.me links must open the chat the bot is watching.
+  let digits = '';
+  let phoneSource: 'whatsapp' | 'restaurant' = 'restaurant';
+
+  const waPhoneId = String(owned.row.whatsapp_phone_id || '');
+  const waToken = String(owned.row.whatsapp_access_token || '');
+  if (waPhoneId && waToken) {
+    try {
+      const { fetchPhoneNumberHealth } = await import('@/lib/whatsapp/analytics');
+      const health = await fetchPhoneNumberHealth({
+        phoneNumberId: waPhoneId,
+        accessToken: waToken,
+      });
+      const rec = unwrapGraph(health) as Record<string, unknown>;
+      const connected = String(rec.display_phone_number || '').replace(/\D/g, '');
+      if (connected.length >= 11) {
+        digits = connected;
+        phoneSource = 'whatsapp';
+      }
+    } catch {
+      // Fall back to the restaurant phone below
+    }
   }
 
-  let digits = rawPhone.replace(/\D/g, '');
-  if (digits.length === 10) digits = `91${digits}`; // default to India
-  if (digits.length < 11) {
-    return {
-      data: null,
-      error: 'That phone number looks too short — include the country code (e.g. +91…).',
-    };
+  if (!digits) {
+    const rawPhone = String(owned.row.phone || '').trim();
+    if (!rawPhone) {
+      return {
+        data: null,
+        error: 'Add your business phone number (with country code) in Settings → Restaurant first.',
+      };
+    }
+    digits = rawPhone.replace(/\D/g, '');
+    if (digits.length === 10) digits = `91${digits}`; // default to India
+    if (digits.length < 11) {
+      return {
+        data: null,
+        error: 'That phone number looks too short — include the country code (e.g. +91…).',
+      };
+    }
   }
 
   try {
     return {
       data: {
         phone: digits,
+        phoneSource,
         chatLink: buildChatLink(digits, 'Hi'),
         catalogLink: buildCatalogLink(digits),
       },
