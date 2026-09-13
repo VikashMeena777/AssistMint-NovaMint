@@ -13,8 +13,11 @@
 //     the screen's data model
 // ============================================
 
-/** Flow JSON version — 5.0 is frozen (Sep 2025) and still the version used in Meta's own doc examples. */
-export const FLOW_JSON_VERSION = '5.0';
+/** Flow JSON version — 5.0 FROZE Sep 2025 (publishing frozen-version flows is
+ *  PROHIBITED — the live flow health reported `valid_versions` errors); 7.x
+ *  reverted the 6.0 on-select-action breaking change, so our grammar targets
+ *  7.3 (current) directly. */
+export const FLOW_JSON_VERSION = '7.3';
 /** Data API version our endpoint implements (request/response protocol version). */
 export const FLOW_DATA_API_VERSION = '3.0';
 

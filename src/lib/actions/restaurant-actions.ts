@@ -472,21 +472,36 @@ export async function saveUpiVpa(
   if (!user) return { success: false, error: 'Unauthorized' };
 
   // Verify ownership + read the CURRENT business_config (fresh, so we merge
-  // against what is actually in the DB rather than a stale client copy)
-  const { data: restaurant } = await supabase
-    .from('restaurants')
-    .select('owner_id, business_config')
-    .eq('id', restaurantId)
-    .single();
+  // against what is actually in the DB rather than a stale client copy).
+  // Retry: Supabase REST intermittently gateway-times-out (seen live) — a
+  // single retry clears the transient instead of failing the save.
+  let restaurant: { owner_id: string; business_config: Record<string, unknown> | null } | null = null;
+  let readError: string | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = await supabase
+      .from('restaurants')
+      .select('owner_id, business_config')
+      .eq('id', restaurantId)
+      .single();
+    if (!result.error) {
+      restaurant = result.data as { owner_id: string; business_config: Record<string, unknown> | null };
+      readError = null;
+      break;
+    }
+    readError = result.error.message;
+    await new Promise((resolve) => setTimeout(resolve, 1200 * (attempt + 1)));
+  }
+  if (readError) {
+    return { success: false, error: `Could not reach the database — please try again. (${readError})` };
+  }
 
-  if (!restaurant || (restaurant as Record<string, unknown>).owner_id !== user.id) {
+  if (!restaurant || restaurant.owner_id !== user.id) {
     return { success: false, error: 'Not authorized to update this restaurant' };
   }
 
-  const r = restaurant as { business_config: Record<string, unknown> | null };
   const current =
-    r.business_config && typeof r.business_config === 'object' && !Array.isArray(r.business_config)
-      ? r.business_config
+    restaurant.business_config && typeof restaurant.business_config === 'object' && !Array.isArray(restaurant.business_config)
+      ? restaurant.business_config
       : {};
 
   const clean = (upiVpa || '').trim();

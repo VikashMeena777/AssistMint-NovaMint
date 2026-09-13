@@ -346,6 +346,10 @@ export async function getAccountHealth(
       canSend = messaging.can_send_message;
       for (const entity of messaging.entities || []) {
         for (const err of entity.errors || []) {
+          // SIP/calling errors do NOT affect messaging (WhatsApp Calling is a
+          // separate feature this business doesn't use) — keep them out so
+          // owners only see what actually blocks their chats.
+          if (/SIP|calling/i.test(err.error_description)) continue;
           blockers.push({
             level: entity.entity_type,
             status: entity.can_send_message,
@@ -354,6 +358,7 @@ export async function getAccountHealth(
           });
         }
         for (const info of entity.additional_info || []) {
+          if (/SIP|calling/i.test(info)) continue;
           additionalInfo.push(`${entity.entity_type}: ${info}`);
         }
       }

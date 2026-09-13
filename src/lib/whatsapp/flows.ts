@@ -204,23 +204,37 @@ export interface FlowHealth {
 }
 
 /**
- * Get a Flow's health status. Flows whose endpoints are unreliable or slow
- * get THROTTLED (10 messages/hour) or BLOCKED — monitor this and alert.
+ * Get a Flow's health. Flows whose endpoints are unreliable or slow get
+ * THROTTLED (10 messages/hour) or BLOCKED — monitor this and alert.
+ * `health_status` is a nested object with per-entity blockers (verified live:
+ * health_status_description is NOT a field and errors with code 100).
  *
- * Docs: https://developers.facebook.com/documentation/business-messaging/whatsapp/flows/guides/flowsapi
+ * Docs: https://developers.facebook.com/documentation/business-messaging/whatsapp/flows/guides/flow-health-monitoring
  */
 export async function getFlowHealth(options: { flowId: string; accessToken: string }): Promise<FlowHealth> {
   const { flowId, accessToken } = options;
   const data = await graphRequest<{
-    health_status?: string;
-    health_status_description?: string;
+    health_status?: {
+      can_send_message?: string;
+      entities?: Array<{
+        entity_type?: string;
+        can_send_message?: string;
+        errors?: Array<{ error_code?: number; error_description?: string; possible_solution?: string }>;
+        additional_info?: string[];
+      }>;
+    };
   }>({
     path: flowId,
     accessToken,
-    query: { fields: 'health_status,health_status_description' },
+    query: { fields: 'health_status' },
   });
+
+  const flowEntity = data.health_status?.entities?.find((e) => e.entity_type === 'FLOW');
+  const errorTexts = (flowEntity?.errors ?? []).map((e) => e.error_description ?? '').filter(Boolean);
+  const infoTexts = flowEntity?.additional_info ?? [];
   return {
-    healthStatus: data.health_status ?? null,
-    healthStatusDescription: data.health_status_description ?? null,
+    healthStatus: data.health_status?.can_send_message ?? null,
+    healthStatusDescription:
+      [...errorTexts, ...infoTexts].join(' · ') || null,
   };
 }

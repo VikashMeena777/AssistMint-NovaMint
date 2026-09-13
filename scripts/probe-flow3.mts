@@ -1,0 +1,10 @@
+import { createClient } from "@supabase/supabase-js";
+import * as dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
+const { data } = await sb.from("restaurants").select("whatsapp_access_token, business_config").not("whatsapp_phone_id","is",null).limit(1).single();
+const r = data as Record<string, any>;
+const flowId = r.business_config?.flow_appointment_id;
+const res = await fetch(`https://graph.facebook.com/v25.0/${flowId}?fields=health_status`, { headers: { Authorization: `Bearer ${r.whatsapp_access_token}` } });
+const j = await res.json();
+console.log(JSON.stringify(j.health_status, null, 2).slice(0, 1200));

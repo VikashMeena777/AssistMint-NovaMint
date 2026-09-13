@@ -110,40 +110,70 @@ export function CatalogSyncCard({
 
       {needsSetup ? (
         <div className="mt-4 rounded-xl border border-warning/30 bg-warning/5 p-4">
-          <p className="text-xs font-semibold">One-time setup — create your catalog on Meta&apos;s website</p>
+          <p className="text-xs font-semibold">One-time setup — connect your catalog to WhatsApp</p>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            WhatsApp needs a &quot;catalog&quot; (a product list) before your menu can appear in chat. Creating it
-            takes about a minute:
+            You&apos;ve created the catalog — now WhatsApp needs it <span className="font-medium text-foreground">connected</span>{" "}
+            to your WhatsApp business account. Try the easy way first:
           </p>
           <ol className="mt-3 space-y-1.5 text-xs leading-relaxed">
             <li>
               <span className="font-semibold">1.</span>{" "}
+              <a
+                href="https://business.facebook.com/latest/whatsapp_manager/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+              >
+                Open WhatsApp Manager
+                <ExternalLink className="h-3 w-3" />
+              </a>{" "}
+              (same Facebook login you used to connect WhatsApp)
+            </li>
+            <li>
+              <span className="font-semibold">2.</span> In the top-left, make sure{" "}
+              <span className="font-medium">your business is selected</span> → look for{" "}
+              <span className="font-medium">Catalog</span> in the left menu (under your account tools) → click it
+            </li>
+            <li>
+              <span className="font-semibold">3.</span> You&apos;ll see a{" "}
+              <span className="font-medium">catalog picker</span> — choose the catalog you created → it connects
+              to WhatsApp immediately
+            </li>
+            <li>
+              <span className="font-semibold">4.</span> Come back here and press{" "}
+              <span className="font-medium">Sync your catalog to WhatsApp</span> — we&apos;ll fill in your whole
+              menu automatically
+            </li>
+          </ol>
+          <details className="mt-3">
+            <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground">
+              Don&apos;t see a Catalog option in WhatsApp Manager? Try this instead
+            </summary>
+            <ol className="mt-2 space-y-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              <li>
+                <span className="font-semibold">1.</span>{" "}
                 <a
                   href="https://business.facebook.com/commerce/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                  className="font-medium text-primary hover:underline"
                 >
-                  Open Meta Commerce Manager
-                  <ExternalLink className="h-3 w-3" />
+                  Open Commerce Manager
                 </a>{" "}
-                (log in with the same Facebook account you used to connect WhatsApp)
+                → click <span className="font-medium">Data sources</span> in the left menu → click your catalog&apos;s
+                name
               </li>
-            <li>
-              <span className="font-semibold">2.</span> Click <span className="font-medium">Create catalog</span>{" "}
-              → give it your business name → create it
-            </li>
-            <li>
-              <span className="font-semibold">3.</span> Open the catalog →{" "}
-              <span className="font-medium">Settings</span> → <span className="font-medium">Connected assets</span>{" "}
-              → connect your WhatsApp business account (this is what lets your menu show up in chat)
-            </li>
-            <li>
-              <span className="font-semibold">4.</span> Come back here and press{" "}
-              <span className="font-medium">Sync your catalog to WhatsApp</span> again — we&apos;ll fill in your
-              whole menu automatically
-            </li>
-          </ol>
+              <li>
+                <span className="font-semibold">2.</span> Click <span className="font-medium">Settings</span> (gear
+                icon, top-right) → scroll to <span className="font-medium">Connected assets</span> →{" "}
+                <span className="font-medium">Connect assets</span> → choose{" "}
+                <span className="font-medium">WhatsApp account</span> → select your business
+              </li>
+              <li>
+                <span className="font-semibold">3.</span> Then press <span className="font-medium">Sync</span> here
+              </li>
+            </ol>
+          </details>
           {error ? (
             <p className="mt-3 flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
               <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />

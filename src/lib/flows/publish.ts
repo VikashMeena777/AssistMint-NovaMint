@@ -325,6 +325,54 @@ export async function waitForFlowStatus(
 
 // ─── ensureFlow: the one-call orchestrator ──
 
+/** Delete a draft flow (published flows must be deprecated, not deleted). */
+async function deleteDraftFlow(flowId: string, accessToken: string): Promise<void> {
+  try {
+    await graphFetch(`/${flowId}`, accessToken, { method: 'DELETE' });
+  } catch {
+    // Best effort — if the delete fails, the fresh-create below will surface
+    // the name conflict with the real error.
+  }
+}
+
+/**
+ * Upload the Flow JSON to a flow, deleting-and-recreating the flow when the
+ * draft is STUCK (code 139001 "Updating attempt failed" — happens to drafts
+ * created by a failed create+publish single call; they accept no updates).
+ * Returns the flowId to use (may be a NEW flow).
+ */
+async function uploadOrRecreate(
+  flowId: string,
+  accessToken: string,
+  options: { wabaId: string; name: string; endpointUri: string; categories: FlowCategory[]; flowJson: FlowJson | string; applicationId?: string }
+): Promise<string> {
+  try {
+    await uploadFlowJson(flowId, accessToken, options.flowJson);
+    return flowId;
+  } catch (error) {
+    const msg = (error as Error).message || '';
+    if (!msg.includes('139001')) throw error;
+    console.warn(
+      `[FlowsPublish] Draft ${flowId} is stuck (139001, cannot update) — deleting and recreating "${options.name}"`
+    );
+    await deleteDraftFlow(flowId, accessToken);
+    const created = await createFlow({
+      wabaId: options.wabaId,
+      accessToken,
+      name: options.name,
+      categories: options.categories,
+      endpointUri: options.endpointUri,
+      flowJson: options.flowJson,
+      publish: false,
+      applicationId: options.applicationId,
+    });
+    if (!created.flowId) {
+      throw new Error(`Recreating stuck flow "${options.name}" returned no flow id`);
+    }
+    return created.flowId;
+  }
+}
+
 /** Sensible default categories per vertical flow. */
 export function defaultCategoriesForFlow(kind: FlowKind | 'other'): FlowCategory[] {
   switch (kind) {
@@ -379,19 +427,26 @@ export async function ensureFlow(options: {
       return { flowId: existing.id, status: 'PUBLISHED', created: false, validationErrors: [] };
     }
     if (existing.status === 'DRAFT') {
-      await uploadFlowJson(existing.id, accessToken, options.flowJson);
+      const usableId = await uploadOrRecreate(existing.id, accessToken, {
+        wabaId: options.wabaId,
+        name: options.name,
+        endpointUri: options.endpointUri,
+        categories,
+        flowJson: options.flowJson,
+        applicationId: options.applicationId,
+      });
       if (options.applicationId) {
-        await updateFlowMetadata(existing.id, accessToken, {
+        await updateFlowMetadata(usableId, accessToken, {
           endpointUri: options.endpointUri,
           applicationId: options.applicationId,
         });
       }
-      await startPublishing(existing.id, accessToken);
+      await startPublishing(usableId, accessToken);
       const status = options.waitForPublish === false
-        ? await getFlowStatus(existing.id, accessToken)
-        : await waitForFlowStatus(existing.id, accessToken);
+        ? await getFlowStatus(usableId, accessToken)
+        : await waitForFlowStatus(usableId, accessToken);
       return {
-        flowId: existing.id,
+        flowId: usableId,
         status: status ?? 'PUBLISHING',
         created: false,
         validationErrors: [],
