@@ -165,6 +165,51 @@ export async function updateRestaurantSettings(
 
   if (error) return { error: error.message };
 
+  // Keep the Meta display name in sync with the restaurant name: when the
+  // owner renames the business AND WhatsApp is connected, request the display
+  // name change (Meta verifies it; the phone_number_name_update webhook then
+  // auto-re-registers the number once approved). Fire-and-forget — the save
+  // never blocks or fails on this.
+  if (typeof safeUpdates.name === 'string' && safeUpdates.name.trim()) {
+    void (async () => {
+      try {
+        const { data: full } = await supabase
+          .from('restaurants')
+          .select('name, whatsapp_phone_id, whatsapp_access_token')
+          .eq('id', restaurantId)
+          .single();
+        const r = full as Record<string, string> | null;
+        if (!r?.whatsapp_phone_id || !r?.whatsapp_access_token) return; // not connected
+
+        const { getDisplayNameStatus, requestDisplayNameChange } = await import(
+          '@/lib/whatsapp/display-name'
+        );
+        const status = await getDisplayNameStatus({
+          phoneNumberId: r.whatsapp_phone_id,
+          accessToken: r.whatsapp_access_token,
+        });
+        // Only request when actually different from the current (and pending) name
+        const target = r.name.trim();
+        if (status.verified_name !== target && status.new_display_name !== target) {
+          await requestDisplayNameChange({
+            phoneNumberId: r.whatsapp_phone_id,
+            accessToken: r.whatsapp_access_token,
+            newName: target,
+          });
+          logActivity({
+            restaurantId,
+            actorType: 'owner',
+            actorId: user.id,
+            action: 'whatsapp.display_name_change_requested',
+            details: { new_name: target },
+          });
+        }
+      } catch (err) {
+        console.warn('[RestaurantActions] Display name sync skipped:', err);
+      }
+    })();
+  }
+
   logActivity({
     restaurantId,
     actorType: 'owner',

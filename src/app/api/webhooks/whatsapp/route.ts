@@ -139,8 +139,14 @@ export async function POST(req: NextRequest) {
       const changes = entry.changes || [];
       for (const change of changes) {
         // 'messages' = normal messaging; 'orders' = catalog cart orders;
-        // 'payments' = India in-chat UPI payment status
-        if (change.field !== 'messages' && change.field !== 'orders' && change.field !== 'payments') continue;
+        // 'payments' = India in-chat UPI payment status;
+        // 'phone_number_name_update' = display name approval outcomes
+        if (
+          change.field !== 'messages' &&
+          change.field !== 'orders' &&
+          change.field !== 'payments' &&
+          change.field !== 'phone_number_name_update'
+        ) continue;
 
         const value = change.value;
         const metadata = value.metadata;
@@ -250,6 +256,54 @@ export async function POST(req: NextRequest) {
             } catch (err) {
               console.error('[WhatsApp Webhook] Payment status handling failed:', err);
             }
+          }
+        }
+
+        // ── Display name approval (phone_number_name_update) ──
+        // When Meta approves a display name change (requested from the
+        // dashboard's name edit or WhatsApp Manager), the number MUST be
+        // re-registered to apply it — do it automatically here.
+        // NOTE: this webhook field has no metadata.phone_number_id; resolve
+        // the restaurant via the WABA id (entry.id) instead.
+        if (change.field === 'phone_number_name_update') {
+          try {
+            const nameValue = change.value as Record<string, unknown>;
+            const decision = String(nameValue.decision || '');
+            const requestedName = String(nameValue.requested_verified_name || '');
+            if (decision === 'APPROVED') {
+              const { createClient: createAdmin } = await import('@supabase/supabase-js');
+              const supabaseAdmin = createAdmin(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+                { auth: { persistSession: false } }
+              );
+              const { data: restaurant } = await supabaseAdmin
+                .from('restaurants')
+                .select('id, whatsapp_phone_id, whatsapp_access_token')
+                .eq('whatsapp_waba_id', String(entry.id))
+                .limit(1)
+                .maybeSingle();
+              const r = restaurant as Record<string, string> | null;
+              if (r?.whatsapp_phone_id && r?.whatsapp_access_token) {
+                const { reRegisterPhoneNumber } = await import('@/lib/whatsapp/display-name');
+                await reRegisterPhoneNumber({
+                  phoneNumberId: r.whatsapp_phone_id,
+                  accessToken: r.whatsapp_access_token,
+                });
+                await supabaseAdmin.from('activity_log').insert({
+                  restaurant_id: r.id,
+                  actor_type: 'system',
+                  actor_id: 'webhook:phone_number_name_update',
+                  action: 'whatsapp.display_name_applied',
+                  details: { new_name: requestedName, re_registered: true },
+                });
+                console.log(`[WhatsApp Webhook] Display name "${requestedName}" approved + number re-registered`);
+              }
+            } else {
+              console.log(`[WhatsApp Webhook] Display name update decision: ${decision} (${requestedName})`);
+            }
+          } catch (err) {
+            console.error('[WhatsApp Webhook] Display name update handling failed:', err);
           }
         }
       }

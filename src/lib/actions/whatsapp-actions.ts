@@ -190,6 +190,18 @@ export interface PhoneHealthData {
   verified_name: string;
   name_status: string;
   code_verification_status: string;
+  /** Pending display-name change (requested via the site's name edit) */
+  new_display_name?: string;
+  new_name_status?: string;
+  /** REAL send blockers from Meta's Health Status API (per-level) */
+  can_send_message?: string;
+  blockers?: Array<{
+    level: string;
+    status: string;
+    error_description: string;
+    possible_solution: string;
+  }>;
+  additional_info?: string[];
 }
 
 export interface QrCodeItem {
@@ -303,6 +315,55 @@ export async function getAccountHealth(
       accessToken: owned.accessToken,
     });
     const rec = unwrapGraph(health);
+
+    // Real send blockers + pending display name — the Health Status API is
+    // the source of truth when sends fail mysteriously (e.g. 131037 can
+    // mask a WABA payment-method block).
+    let canSend: string | undefined;
+    const blockers: PhoneHealthData['blockers'] = [];
+    const additionalInfo: string[] = [];
+    try {
+      const { getMessagingHealth, getDisplayNameStatus } = await import(
+        '@/lib/whatsapp/display-name'
+      );
+      const [messaging, displayName] = await Promise.all([
+        getMessagingHealth({ phoneNumberId: owned.phoneNumberId, accessToken: owned.accessToken }),
+        getDisplayNameStatus({ phoneNumberId: owned.phoneNumberId, accessToken: owned.accessToken }),
+      ]);
+      canSend = messaging.can_send_message;
+      for (const entity of messaging.entities || []) {
+        for (const err of entity.errors || []) {
+          blockers.push({
+            level: entity.entity_type,
+            status: entity.can_send_message,
+            error_description: err.error_description,
+            possible_solution: err.possible_solution || '',
+          });
+        }
+        for (const info of entity.additional_info || []) {
+          additionalInfo.push(`${entity.entity_type}: ${info}`);
+        }
+      }
+      return {
+        data: {
+          quality_rating: str(rec, 'quality_rating', 'qualityRating') || 'UNKNOWN',
+          messaging_limit_tier: str(rec, 'messaging_limit_tier', 'messagingLimitTier') || 'UNKNOWN',
+          verified_name: str(rec, 'verified_name', 'verifiedName'),
+          name_status: str(rec, 'name_status', 'nameStatus') || 'UNKNOWN',
+          code_verification_status:
+            str(rec, 'code_verification_status', 'codeVerificationStatus') || 'UNKNOWN',
+          new_display_name: displayName.new_display_name,
+          new_name_status: displayName.new_name_status,
+          can_send_message: canSend,
+          blockers,
+          additional_info: additionalInfo.length > 0 ? additionalInfo : undefined,
+        },
+        error: null,
+      };
+    } catch {
+      // Health Status API unavailable — fall through to the basic read below
+    }
+
     return {
       data: {
         quality_rating: str(rec, 'quality_rating', 'qualityRating') || 'UNKNOWN',

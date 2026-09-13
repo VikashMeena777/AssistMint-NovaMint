@@ -209,6 +209,71 @@ export function WhatsAppHealthSection({ restaurantId, onGoConnect }: WhatsAppHea
 
   return (
     <div className="space-y-6">
+      {/* REAL send blockers — from Meta's Health Status API */}
+      {(health?.can_send_message === "BLOCKED" ||
+        health?.can_send_message === "LIMITED" ||
+        (health?.blockers && health.blockers.length > 0)) && (
+        <div
+          className={`rounded-2xl border p-6 ${
+            health?.can_send_message === "BLOCKED"
+              ? "border-destructive/40 bg-destructive/5"
+              : "border-warning/40 bg-warning/5"
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle
+              className={`size-5 ${
+                health?.can_send_message === "BLOCKED" ? "text-destructive" : "text-warning"
+              }`}
+            />
+            <div>
+              <h3 className="text-base font-semibold">
+                {health?.can_send_message === "BLOCKED"
+                  ? "WhatsApp messaging is BLOCKED"
+                  : "WhatsApp messaging is limited"}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Meta reports these exact issues — fix them in Meta Business Manager to restore
+                full messaging.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 space-y-2.5">
+            {(health?.blockers || []).map((b, i) => (
+              <div key={i} className="rounded-xl border border-border/40 bg-card p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {b.level}
+                  </span>
+                  <StatusPill
+                    tone={
+                      b.status === "BLOCKED"
+                        ? "destructive"
+                        : b.status === "LIMITED"
+                          ? "warning"
+                          : "success"
+                    }
+                  >
+                    {b.status}
+                  </StatusPill>
+                </div>
+                <p className="mt-1.5 text-sm">{b.error_description}</p>
+                {b.possible_solution && (
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    <span className="font-medium text-foreground">Fix:</span> {b.possible_solution}
+                  </p>
+                )}
+              </div>
+            ))}
+            {(health?.additional_info || []).map((info, i) => (
+              <p key={i} className="text-xs leading-relaxed text-muted-foreground">
+                • {info}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Account health */}
       <div className="rounded-2xl border border-border/50 bg-card p-6">
         <div className="flex items-start justify-between gap-4">
@@ -271,6 +336,15 @@ export function WhatsAppHealthSection({ restaurantId, onGoConnect }: WhatsAppHea
                 {(health?.name_status || "UNKNOWN").replace(/_/g, " ")}
               </StatusPill>
             </div>
+            {health?.new_display_name && health.new_name_status !== "NONE" && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Pending change to{" "}
+                <span className="font-medium text-foreground">{health.new_display_name}</span> (
+                {(health.new_name_status || "PENDING").replace(/_/g, " ").toLowerCase()}) — the
+                number re-registers automatically once Meta approves it. Editing your business
+                name in settings keeps this in sync.
+              </p>
+            )}
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               The name customers see above the chat. Approval is required before messaging at scale.
             </p>

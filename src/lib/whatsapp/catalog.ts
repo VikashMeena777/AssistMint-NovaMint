@@ -107,26 +107,15 @@ export async function setCommerceSettings(
 export async function getCatalogId(options: WabaCredential): Promise<string | null> {
   const { wabaId, accessToken } = options;
 
-  try {
-    const edge = await graphRequest<GraphPaged<{ id: string; name?: string }>>({
-      path: `${wabaId}/catalogs`,
-      accessToken,
-    });
-    const first = edge.data?.[0];
-    return first?.id ?? null;
-  } catch (edgeError) {
-    // Fall back to the field form for API versions/tenants where the edge is unavailable.
-    try {
-      const field = await graphRequest<{ catalogs?: GraphPaged<{ id: string }> }>({
-        path: wabaId,
-        accessToken,
-        query: { fields: 'catalogs' },
-      });
-      return field.catalogs?.data?.[0]?.id ?? null;
-    } catch {
-      throw edgeError;
-    }
-  }
+  // The documented form is the `catalogs` FIELD on the WABA node — the
+  // `/{wabaId}/catalogs` edge does not exist and returns error 2500
+  // "Unknown path components" (observed live).
+  const field = await graphRequest<{ catalogs?: GraphPaged<{ id: string }> }>({
+    path: wabaId,
+    accessToken,
+    query: { fields: 'catalogs' },
+  });
+  return field.catalogs?.data?.[0]?.id ?? null;
 }
 
 // ─── Catalog item CRUD (Commerce API) ──────────────
