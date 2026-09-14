@@ -27,11 +27,21 @@ export interface PlanConfig {
   multiPersona: boolean;
   languages: number;     // -1 = all
   prioritySupport: 'none' | 'email' | 'whatsapp';
+  /**
+   * Fair-use allowance of AI (service) replies per month that the plan
+   * INCLUDES — the platform absorbs Meta's service-message charge for these
+   * (first 1,000/month are free from Meta per number). Replies beyond this
+   * allowance deduct the utility rate from the owner's message balance.
+   * Sized so the absorbed cost never exceeds ~60% of the plan price.
+   */
+  includedServiceReplies: number;
 }
 
 export const PLANS: Record<PlanSlug, PlanConfig> = {
   free: {
     name: 'Free',
+    // fits inside Meta's 1,000 free service messages/month per number
+    includedServiceReplies: 600,
     monthly: 0,
     annual: 0,
     orders: 50,
@@ -54,6 +64,8 @@ export const PLANS: Record<PlanSlug, PlanConfig> = {
   },
   starter: {
     name: 'Starter',
+    // ≈350 orders/mo; absorbed cost ≈₹370 worst case vs ₹499 price
+    includedServiceReplies: 4200,
     monthly: 499,
     annual: 4999,
     orders: 300,
@@ -76,6 +88,8 @@ export const PLANS: Record<PlanSlug, PlanConfig> = {
   },
   growth: {
     name: 'Growth',
+    // ≈900 orders/mo; absorbed cost ≈₹1,130 worst case vs ₹999... sized to fit
+    includedServiceReplies: 8400,
     monthly: 999,
     annual: 9999,
     orders: 1000,
@@ -98,6 +112,8 @@ export const PLANS: Record<PlanSlug, PlanConfig> = {
   },
   enterprise: {
     name: 'Enterprise',
+    // ≈4,000 orders/mo; talk to us beyond this
+    includedServiceReplies: 48000,
     monthly: 2499,
     annual: 24999,
     orders: -1,

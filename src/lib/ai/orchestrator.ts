@@ -11,6 +11,7 @@ import { getOrCreateCustomer, updateCustomerOrderStats, getSavedAddresses, addSa
 import { getOrCreateConversation, getRecentMessages, saveMessage, setBotActive } from '@/lib/services/conversation-manager';
 import { spendCredits } from '@/lib/services/credit-service';
 import { MESSAGE_COSTS_PAISE } from '@/lib/utils/credit-packs';
+import { getPlanConfig } from '@/lib/utils/plan-limits';
 
 // Meta India: service (AI-reply) messages become chargeable at this instant
 // (1 Oct 2026, 00:00 IST). Deduction is OPT-IN per business
@@ -2542,6 +2543,45 @@ async function executeAction(
 
 // ─── Utility: Send Bot Text Reply ───────────
 
+// ─── Service-reply fair-use metering ─────────
+// Counts this calendar month's bot replies (from conversations, role
+// assistant) and compares against the plan's included allowance. True =
+// over allowance → deduct per reply. Cheap query: one indexed count on the
+// restaurant's messages for the current month, cached in-process for 60s.
+const serviceAllowanceCache = new Map<string, { over: boolean; at: number }>();
+const ALLOWANCE_CACHE_MS = 60_000;
+
+async function isOverServiceAllowance(
+  restaurantId: string,
+  planSlug: string | undefined,
+): Promise<boolean> {
+  const cacheKey = `${restaurantId}:${planSlug ?? 'free'}`;
+  const cached = serviceAllowanceCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < ALLOWANCE_CACHE_MS) return cached.over;
+
+  const allowance = getPlanConfig(planSlug ?? 'free').includedServiceReplies;
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const { createClient: createAdmin } = await import('@supabase/supabase-js');
+  const supabaseAdmin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+  const { count } = await supabaseAdmin
+    .from('conversations')
+    .select('id', { count: 'exact', head: true })
+    .eq('restaurant_id', restaurantId)
+    .eq('role', 'assistant')
+    .gte('created_at', monthStart.toISOString());
+
+  const over = (count ?? 0) >= allowance;
+  serviceAllowanceCache.set(cacheKey, { over, at: Date.now() });
+  return over;
+}
+
 async function sendBotReply(
   restaurant: Restaurant,
   customer: { id: string; phone: string },
@@ -2562,22 +2602,27 @@ async function sendBotReply(
     // needed. A zero balance NEVER blocks the reply (never strand a customer
     // mid-conversation); the wallet floors at 0 and low-balance state is
     // visible in Settings → WhatsApp Health.
-    // OPT-IN (business_config.deduct_service_replies === true): deduct the
-    // utility rate per AI reply from the owner's message balance. Default is
-    // OFF — the platform absorbs reply costs inside the subscription, because
-    // "AI replies are included" is the adoption hook (Meta starts billing
-    // service messages 1 Oct 2026; the owner decides whether to pass that
-    // through per business). A zero balance never blocks the reply.
-    if (
-      Date.now() >= SERVICE_CHARGE_START_MS &&
-      (restaurant.business_config as Record<string, unknown> | undefined)?.deduct_service_replies === true
-    ) {
-      spendCredits(
-        restaurant.id,
-        MESSAGE_COSTS_PAISE.service,
-        'service',
-        `reply:${Date.now()}`,
-      ).catch(() => { /* balance absence must not break the customer's reply */ });
+    // FAIR-USE MODEL (loss-proof "replies included"): from 1 Oct 2026 Meta
+    // bills service messages (utility rate; first 1,000/month per number are
+    // free). The plan INCLUDES a monthly reply allowance
+    // (includedServiceReplies — platform absorbs the cost); replies beyond the
+    // allowance deduct the utility rate from the owner's message balance.
+    // A zero balance NEVER blocks the reply — the wallet floors at 0 and the
+    // Health tab shows the overage.
+    if (Date.now() >= SERVICE_CHARGE_START_MS) {
+      void (async () => {
+        try {
+          const overAllowance = await isOverServiceAllowance(restaurant.id, restaurant.plan);
+          if (overAllowance) {
+            await spendCredits(
+              restaurant.id,
+              MESSAGE_COSTS_PAISE.service,
+              'service',
+              `reply:${Date.now()}`,
+            );
+          }
+        } catch { /* metering must never break the customer's reply */ }
+      })();
     }
   }
   await saveMessage(conversation.id, restaurant.id, 'bot', text, undefined, { phone: customer.phone });
